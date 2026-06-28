@@ -5,27 +5,27 @@
 - [x] 1.1 Crear estructura base del proyecto con Electron + React + TypeScript usando electron-vite
 - [x] 1.2 Configurar Node.js con nvm (entorno virtual) y fijar version en .nvmrc
 - [x] 1.3 Instalar dependencias core: electron, react, react-dom, typescript, electron-vite, tailwindcss
-- [ ] 1.4 Instalar dependencias de datos: better-sqlite3, zustand
-- [ ] 1.5 Instalar dependencias de UI: @radix-ui (shadcn), class-variance-authority, clsx, tailwind-merge
-- [ ] 1.6 Instalar dependencias de desarrollo: vitest, @testing-library/react, eslint, prettier
-- [ ] 1.7 Configurar tsconfig.json para main, preload y renderer
-- [ ] 1.8 Configurar electron.vite.config.ts con entradas para main, preload y renderer
-- [ ] 1.9 Configurar Tailwind CSS (tailwind.config.js + globals.css)
-- [ ] 1.10 Crear entry points basicos: src/main/index.ts, src/preload/index.ts, src/renderer/src/main.tsx
-- [ ] 1.11 Verificar que la app arranca con `npm run dev` mostrando una ventana vacia
+- [x] 1.4 Instalar dependencias de datos: better-sqlite3, zustand
+- [x] 1.5 Instalar dependencias de UI: @radix-ui (shadcn), class-variance-authority, clsx, tailwind-merge
+- [x] 1.6 Instalar dependencias de desarrollo: vitest, @testing-library/react, eslint, prettier
+- [x] 1.7 Configurar tsconfig.json para main, preload y renderer
+- [x] 1.8 Configurar electron.vite.config.ts con entradas para main, preload y renderer
+- [x] 1.9 Configurar Tailwind CSS (tailwind.config.js + globals.css)
+- [x] 1.10 Crear entry points basicos: src/main/index.ts, src/preload/index.ts, src/renderer/src/main.tsx
+- [x] 1.11 Verificar que la app arranca con `npm run dev` mostrando una ventana vacia
 
 ## Task 2: Base de Datos SQLite y Migraciones
 
-- [ ] 2.1 Crear src/main/database/connection.ts con inicializacion de better-sqlite3
-- [ ] 2.2 Crear migracion 001_initial.sql con tablas: config, orders, images, print_queue, sync_log
-- [ ] 2.3 Implementar sistema de migraciones automatico al arrancar la app
-- [ ] 2.4 Crear src/main/database/repositories/config.repository.ts con CRUD de configuracion (JSON)
-- [ ] 2.5 Crear src/main/database/repositories/orders.repository.ts con insert y export CSV
-- [ ] 2.6 Crear src/main/database/repositories/images.repository.ts con upload/remove/getByName
-- [ ] 2.7 Crear src/main/database/repositories/print-queue.repository.ts
-- [ ] 2.8 Implementar initConfig() que inserta la configuracion inicial por defecto (replica del legacy)
-- [ ] 2.9 Escribir tests unitarios para cada repository (vitest)
-- [ ] 2.10 Verificar que al arrancar la app se crea la BD y se ejecutan migraciones
+- [x] 2.1 Crear src/main/database/connection.ts con inicializacion de better-sqlite3
+- [x] 2.2 Crear migracion 001_initial.sql con tablas: config, orders, images, print_queue, sync_log
+- [x] 2.3 Implementar sistema de migraciones automatico al arrancar la app
+- [x] 2.4 Crear src/main/database/repositories/config.repository.ts con CRUD de configuracion (JSON)
+- [x] 2.5 Crear src/main/database/repositories/orders.repository.ts con insert y export CSV
+- [x] 2.6 Crear src/main/database/repositories/images.repository.ts con upload/remove/getByName
+- [x] 2.7 Crear src/main/database/repositories/print-queue.repository.ts
+- [x] 2.8 Implementar initConfig() que inserta la configuracion inicial por defecto (replica del legacy)
+- [x] 2.9 Escribir tests unitarios para cada repository (vitest)
+- [x] 2.10 Verificar que al arrancar la app se crea la BD y se ejecutan migraciones
 
 ## Task 3: IPC Layer (Comunicacion Main <-> Renderer)
 
