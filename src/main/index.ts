@@ -3,6 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { initDatabase, closeDatabase } from './database/connection'
 import { ConfigRepository } from './database/repositories/config.repository'
+import { registerAllHandlers } from './ipc/handlers'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -11,7 +12,7 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
+      preload: join(__dirname, '../preload/index.js'),
       sandbox: false
     }
   })
@@ -41,6 +42,9 @@ app.whenReady().then(() => {
   // Seed default configuration if not present
   const configRepo = new ConfigRepository()
   configRepo.initConfig()
+
+  // Register all IPC handlers for renderer communication
+  registerAllHandlers()
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)

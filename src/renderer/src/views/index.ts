@@ -1,0 +1,5 @@
+export { default as HomeView } from './HomeView'
+export { default as KioskoView } from './KioskoView'
+export { default as MaquinaView } from './MaquinaView'
+export { default as ImprimirView } from './ImprimirView'
+export { default as SubirImagenView } from './SubirImagenView'

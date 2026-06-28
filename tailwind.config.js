@@ -42,6 +42,15 @@ module.exports = {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)'
+      },
+      keyframes: {
+        fadeIn: {
+          from: { opacity: '0' },
+          to: { opacity: '1' }
+        }
+      },
+      animation: {
+        fadeIn: 'fadeIn 0.3s ease-in'
       }
     }
   },

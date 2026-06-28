@@ -29,45 +29,45 @@
 
 ## Task 3: IPC Layer (Comunicacion Main <-> Renderer)
 
-- [ ] 3.1 Crear src/preload/index.ts con contextBridge exponiendo ElectronAPI tipada
-- [ ] 3.2 Crear src/main/ipc/handlers.ts con registro centralizado de handlers
-- [ ] 3.3 Implementar src/main/ipc/config.handlers.ts (get, updateMaquina, updateImprimir, updateSesion, updateRollos, initConfig)
-- [ ] 3.4 Implementar src/main/ipc/orders.handlers.ts (insert, downloadCSV)
-- [ ] 3.5 Implementar src/main/ipc/images.handlers.ts (upload, remove, getByName)
-- [ ] 3.6 Implementar src/main/ipc/printer.handlers.ts (getStatus, print, pause, resume, getQueue)
-- [ ] 3.7 Crear src/renderer/src/lib/ipc-client.ts como wrapper tipado del API
-- [ ] 3.8 Escribir tests para los handlers IPC (mock de repositories)
-- [ ] 3.9 Verificar comunicacion IPC end-to-end (renderer llama -> main responde)
+- [x] 3.1 Crear src/preload/index.ts con contextBridge exponiendo ElectronAPI tipada
+- [x] 3.2 Crear src/main/ipc/handlers.ts con registro centralizado de handlers
+- [x] 3.3 Implementar src/main/ipc/config.handlers.ts (get, updateMaquina, updateImprimir, updateSesion, updateRollos, initConfig)
+- [x] 3.4 Implementar src/main/ipc/orders.handlers.ts (insert, downloadCSV)
+- [x] 3.5 Implementar src/main/ipc/images.handlers.ts (upload, remove, getByName)
+- [x] 3.6 Implementar src/main/ipc/printer.handlers.ts (getStatus, print, pause, resume, getQueue)
+- [x] 3.7 Crear src/renderer/src/lib/ipc-client.ts como wrapper tipado del API
+- [x] 3.8 Escribir tests para los handlers IPC (mock de repositories)
+- [x] 3.9 Verificar comunicacion IPC end-to-end (renderer llama -> main responde)
 
 ## Task 4: Stores y Estado del Frontend
 
-- [ ] 4.1 Crear src/renderer/src/types/config.ts con interfaces AppConfig, TicketConfig, CodigoConfig, SelloConfig, PreciosConfig
-- [ ] 4.2 Crear src/renderer/src/types/order.ts con interface OrderLine
-- [ ] 4.3 Crear src/renderer/src/types/printer.ts con interfaces PrinterInfo, PrintJob
-- [ ] 4.4 Implementar src/renderer/src/stores/config.store.ts (carga config, métodos de update)
-- [ ] 4.5 Implementar src/renderer/src/stores/kiosko.store.ts (cantidades, calculos de total y limites)
-- [ ] 4.6 Implementar src/renderer/src/stores/orders.store.ts
-- [ ] 4.7 Implementar src/renderer/src/stores/printer.store.ts
-- [ ] 4.8 Crear src/renderer/src/lib/tariff-calc.ts con funciones puras de calculo de limites
-- [ ] 4.9 Crear src/renderer/src/lib/code-formatter.ts con formateo de codigo de etiqueta
-- [ ] 4.10 Escribir property-based tests para tariff-calc.ts (Properties 1, 2, 14)
-- [ ] 4.11 Escribir property-based tests para code-formatter.ts (Property 3)
-- [ ] 4.12 Verificar que los stores cargan datos correctamente al iniciar la app
+- [x] 4.1 Crear src/renderer/src/types/config.ts con interfaces AppConfig, TicketConfig, CodigoConfig, SelloConfig, PreciosConfig
+- [x] 4.2 Crear src/renderer/src/types/order.ts con interface OrderLine
+- [x] 4.3 Crear src/renderer/src/types/printer.ts con interfaces PrinterInfo, PrintJob
+- [x] 4.4 Implementar src/renderer/src/stores/config.store.ts (carga config, métodos de update)
+- [x] 4.5 Implementar src/renderer/src/stores/kiosko.store.ts (cantidades, calculos de total y limites)
+- [x] 4.6 Implementar src/renderer/src/stores/orders.store.ts
+- [x] 4.7 Implementar src/renderer/src/stores/printer.store.ts
+- [x] 4.8 Crear src/renderer/src/lib/tariff-calc.ts con funciones puras de calculo de limites
+- [x] 4.9 Crear src/renderer/src/lib/code-formatter.ts con formateo de codigo de etiqueta
+- [x] 4.10 Escribir property-based tests para tariff-calc.ts (Properties 1, 2, 14)
+- [x] 4.11 Escribir property-based tests para code-formatter.ts (Property 3)
+- [x] 4.12 Verificar que los stores cargan datos correctamente al iniciar la app
 
 ## Task 5: Navegacion y Layout
 
-- [ ] 5.1 Instalar react-router-dom y configurar src/renderer/src/router.tsx con las 5 rutas
-- [ ] 5.2 Crear src/renderer/src/components/layout/MainLayout.tsx con estructura base
-- [ ] 5.3 Crear src/renderer/src/components/layout/NavComponent.tsx con navegacion entre vistas
-- [ ] 5.4 Crear placeholder views: HomeView, KioskoView, MaquinaView, ImprimirView, SubirImagenView
-- [ ] 5.5 Verificar navegacion funcional entre todas las vistas
+- [x] 5.1 Instalar react-router-dom y configurar src/renderer/src/router.tsx con las 5 rutas
+- [x] 5.2 Crear src/renderer/src/components/layout/MainLayout.tsx con estructura base
+- [x] 5.3 Crear src/renderer/src/components/layout/NavComponent.tsx con navegacion entre vistas
+- [x] 5.4 Crear placeholder views: HomeView, KioskoView, MaquinaView, ImprimirView, SubirImagenView
+- [x] 5.5 Verificar navegacion funcional entre todas las vistas
 
 ## Task 6: Vista Home (Menu Principal)
 
-- [ ] 6.1 Implementar HomeView con botones de navegacion a Configuracion (Imprimir) y Maquina
-- [ ] 6.2 Añadir boton de exportar XLS/CSV que llama a orders.downloadCSV()
-- [ ] 6.3 Añadir tooltips informativos (replicando el legacy)
-- [ ] 6.4 Verificar que la navegacion y exportacion funcionan
+- [x] 6.1 Implementar HomeView con botones de navegacion a Configuracion (Imprimir) y Maquina
+- [x] 6.2 Añadir boton de exportar XLS/CSV que llama a orders.downloadCSV()
+- [x] 6.3 Añadir tooltips informativos (replicando el legacy)
+- [x] 6.4 Verificar que la navegacion y exportacion funcionan
 
 ## Task 7: Vista Kiosko (Venta Principal)
 
