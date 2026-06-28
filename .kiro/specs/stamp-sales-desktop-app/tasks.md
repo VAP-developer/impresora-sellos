@@ -3,8 +3,8 @@
 ## Task 1: Scaffolding del Proyecto y Entorno Virtual
 
 - [x] 1.1 Crear estructura base del proyecto con Electron + React + TypeScript usando electron-vite
-- [ ] 1.2 Configurar Node.js con nvm (entorno virtual) y fijar version en .nvmrc
-- [ ] 1.3 Instalar dependencias core: electron, react, react-dom, typescript, electron-vite, tailwindcss
+- [x] 1.2 Configurar Node.js con nvm (entorno virtual) y fijar version en .nvmrc
+- [x] 1.3 Instalar dependencias core: electron, react, react-dom, typescript, electron-vite, tailwindcss
 - [ ] 1.4 Instalar dependencias de datos: better-sqlite3, zustand
 - [ ] 1.5 Instalar dependencias de UI: @radix-ui (shadcn), class-variance-authority, clsx, tailwind-merge
 - [ ] 1.6 Instalar dependencias de desarrollo: vitest, @testing-library/react, eslint, prettier
