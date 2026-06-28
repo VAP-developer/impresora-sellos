@@ -1,0 +1,52 @@
+# =============================================================
+# Dockerfile multi-stage para Meteor 3.0
+# Stage 1: Build con geoffreybooth/meteor-base (Meteor + Node 20)
+# Stage 2: Runtime ligero con Node 20 Alpine
+# =============================================================
+
+# --- Stage 1: Build ---
+FROM geoffreybooth/meteor-base:3.1
+
+# Copiar package.json para instalar dependencias npm
+COPY correos-webapp/package*.json $APP_SOURCE_FOLDER/
+
+RUN bash $SCRIPTS_FOLDER/build-app-npm-dependencies.sh
+
+# Copiar código fuente de la app
+COPY correos-webapp/ $APP_SOURCE_FOLDER/
+
+RUN bash $SCRIPTS_FOLDER/build-meteor-bundle.sh
+
+
+# --- Stage 2: Runtime ---
+FROM node:20-alpine
+
+ENV APP_BUNDLE_FOLDER=/opt/bundle
+ENV SCRIPTS_FOLDER=/docker
+ENV PORT=3000
+ENV ROOT_URL=http://localhost:9090
+ENV MONGO_URL=mongodb://mongo:27017/correos
+
+# Dependencias de runtime
+RUN apk --no-cache add \
+    bash \
+    ca-certificates
+
+# Copiar scripts de entrypoint desde el stage de build
+COPY --from=0 $SCRIPTS_FOLDER $SCRIPTS_FOLDER/
+
+# Copiar bundle de la app
+COPY --from=0 $APP_BUNDLE_FOLDER/bundle $APP_BUNDLE_FOLDER/bundle/
+
+# Instalar dependencias npm del bundle (fibers, etc.)
+RUN bash $SCRIPTS_FOLDER/build-meteor-npm-dependencies.sh
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=15s --timeout=10s --start-period=60s --retries=5 \
+    CMD node -e "require('http').get('http://localhost:3000', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
+
+# Entrypoint del meteor-base (configura WORKDIR, etc.)
+ENTRYPOINT ["/docker/entrypoint.sh"]
+
+CMD ["node", "main.js"]

@@ -1,0 +1,9 @@
+# Dependencias del servidor demonio (Python 3.12)
+# Servidor WebSocket asyncio (reemplaza SimpleWebSocketServer)
+websockets==14.1
+
+# Servidor HTTP asyncio para endpoints /pausar y /reanudar
+aiohttp==3.11.11
+
+# Generación de PDFs de sellos y tickets
+reportlab==4.2.5

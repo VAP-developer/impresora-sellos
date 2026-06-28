@@ -1,0 +1,20 @@
+{
+  "name": "correos-webapp-vue-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Unit tests for Vue 3 components and composables (Task 5.9)",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.0",
+    "@vue/test-utils": "^2.4.0",
+    "jsdom": "^24.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0",
+    "vue": "^3.4.0",
+    "vue-router": "^4.3.0"
+  }
+}

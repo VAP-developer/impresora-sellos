@@ -1,0 +1,277 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile.meteor
+#1 transferring dockerfile: 1.55kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/geoffreybooth/meteor-base:1.12.1
+#2 ...
+
+#3 [auth] geoffreybooth/meteor-base:pull token for registry-1.docker.io
+#3 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/geoffreybooth/meteor-base:1.12.1
+#2 DONE 1.1s
+
+#4 [internal] load .dockerignore
+#4 transferring context:
+#4 transferring context: 170B 0.0s done
+#4 DONE 0.1s
+
+#5 [1/8] FROM docker.io/geoffreybooth/meteor-base:1.12.1@sha256:dc827e60aa6ea710065daa49677994e75062323596ce78d2ad64e30b18e62583
+#5 resolve docker.io/geoffreybooth/meteor-base:1.12.1@sha256:dc827e60aa6ea710065daa49677994e75062323596ce78d2ad64e30b18e62583 0.0s done
+#5 DONE 0.0s
+
+#6 [internal] load build context
+#6 transferring context: 23.44kB 0.0s done
+#6 DONE 0.0s
+
+#7 [2/8] WORKDIR /app
+#7 CACHED
+
+#8 [3/8] COPY correos-webapp/package.json correos-webapp/package-lock.json* ./
+#8 CACHED
+
+#9 [4/8] RUN echo "==> [1/4] Instalando dependencias npm..." &&     meteor npm install --production &&     echo "==> OK"
+#9 CACHED
+
+#10 [5/8] COPY correos-webapp/ ./
+#10 CACHED
+
+#11 [6/8] RUN echo "==> [2/4] Construyendo bundle de Meteor..." &&     meteor build --allow-superuser --directory /bundle &&     echo "==> OK"
+#11 CACHED
+
+#12 [7/8] RUN echo "==> [3/4] Instalando dependencias del bundle..." &&     cd /bundle/bundle/programs/server &&     meteor npm install --allow-superuser &&     echo "==> OK"
+#12 0.262 ==> [3/4] Instalando dependencias del bundle...
+#12 1.494 npm WARN deprecated node-pre-gyp@0.14.0: Please upgrade to @mapbox/node-pre-gyp: the non-scoped node-pre-gyp package is deprecated and only the @mapbox scoped package will recieve updates in the future
+#12 1.814 npm WARN deprecated npmlog@4.1.2: This package is no longer supported.
+#12 1.952 npm WARN deprecated rimraf@2.7.1: Rimraf versions prior to v4 are no longer supported
+#12 1.957 npm WARN deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+#12 1.993 npm WARN deprecated tar@4.4.19: Old versions of tar are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+#12 2.157 npm WARN deprecated request@2.88.2: request has been deprecated, see https://github.com/request/request/issues/3142
+#12 2.209 npm WARN deprecated gauge@2.7.4: This package is no longer supported.
+#12 2.252 npm WARN deprecated are-we-there-yet@1.1.7: This package is no longer supported.
+#12 2.706 npm WARN deprecated osenv@0.1.5: This package is no longer supported.
+#12 2.720 npm WARN deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+#12 3.091 npm WARN deprecated uuid@3.4.0: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
+#12 3.319 npm WARN deprecated har-validator@5.1.5: this library is no longer supported
+#12 4.951 npm notice This endpoint is being retired. Use the bulk advisory endpoint instead. See the following docs for more info: https://api-docs.npmjs.com/#tag/Audit
+#12 6.080 
+#12 6.080 > fibers@4.0.3 install /bundle/bundle/programs/server/node_modules/fibers
+#12 6.080 > node build.js || nodejs build.js
+#12 6.080 
+#12 6.153 `linux-x64-72-glibc` exists; testing
+#12 6.228 Binary is fine; exiting
+#12 6.272 
+#12 6.272 > meteor-dev-bundle@ install /bundle/bundle/programs/server
+#12 6.272 > node npm-rebuild.js
+#12 6.272 
+#12 6.584 
+#12 6.584 > core-js@3.6.5 postinstall /bundle/bundle/programs/server/npm/node_modules/meteor/ecmascript-runtime-client/node_modules/core-js
+#12 6.584 > node -e "try{require('./postinstall')}catch(e){}"
+#12 6.584 
+#12 6.647 [96mThank you for using core-js ([94m https://github.com/zloirock/core-js [96m) for polyfilling JavaScript standard library![0m
+#12 6.647 
+#12 6.647 [96mThe project needs your help! Please consider supporting of core-js on Open Collective or Patreon: [0m
+#12 6.647 [96m>[94m https://opencollective.com/core-js [0m
+#12 6.647 [96m>[94m https://www.patreon.com/zloirock [0m
+#12 6.647 
+#12 6.647 [96mAlso, the author of core-js ([94m https://github.com/zloirock [96m) is looking for a good job -)[0m
+#12 6.647 
+#12 6.653 core-js@3.6.5 /bundle/bundle/programs/server/npm/node_modules/meteor/ecmascript-runtime-client/node_modules/core-js
+#12 6.867 
+#12 6.867 > core-js@3.6.5 postinstall /bundle/bundle/programs/server/npm/node_modules/meteor/ecmascript-runtime-server/node_modules/core-js
+#12 6.867 > node -e "try{require('./postinstall')}catch(e){}"
+#12 6.867 
+#12 6.935 core-js@3.6.5 /bundle/bundle/programs/server/npm/node_modules/meteor/ecmascript-runtime-server/node_modules/core-js
+#12 7.298 
+#12 7.298 > ws@0.4.31 install /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/ws
+#12 7.298 > (node-gyp rebuild 2> builderror.log) || (exit 0)
+#12 7.298 
+#12 7.759 socket.io-client@1.2.0 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client
+#12 7.759 debug@0.7.4 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/debug
+#12 7.759 engine.io-client@1.4.2 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/engine.io-client
+#12 7.759 has-cors@1.0.3 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/has-cors
+#12 7.759 global@2.0.1 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/has-cors/node_modules/global
+#12 7.759 ws@0.4.31 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/ws
+#12 7.759 commander@0.6.1 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/ws/node_modules/commander
+#12 7.759 nan@0.3.2 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/ws/node_modules/nan
+#12 7.759 tinycolor@0.0.1 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/ws/node_modules/tinycolor
+#12 7.759 options@0.0.6 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/ws/node_modules/options
+#12 7.759 xmlhttprequest@1.5.0 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/xmlhttprequest
+#12 7.759 component-emitter@1.1.2 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/component-emitter
+#12 7.759 indexof@0.0.1 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/indexof
+#12 7.759 engine.io-parser@1.1.0 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/engine.io-parser
+#12 7.759 base64-arraybuffer@0.1.2 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/engine.io-parser/node_modules/base64-arraybuffer
+#12 7.759 after@0.8.1 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/engine.io-parser/node_modules/after
+#12 7.759 arraybuffer.slice@0.0.6 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/engine.io-parser/node_modules/arraybuffer.slice
+#12 7.759 blob@0.0.2 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/engine.io-parser/node_modules/blob
+#12 7.759 utf8@2.0.0 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/engine.io-parser/node_modules/utf8
+#12 7.759 parseuri@0.0.4 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/parseuri
+#12 7.759 better-assert@1.0.1 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/parseuri/node_modules/better-assert
+#12 7.759 callsite@1.0.0 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/parseuri/node_modules/better-assert/node_modules/callsite
+#12 7.759 parsejson@0.0.1 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/parsejson
+#12 7.759 better-assert@1.0.1 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/parsejson/node_modules/better-assert
+#12 7.759 callsite@1.0.0 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/parsejson/node_modules/better-assert/node_modules/callsite
+#12 7.759 parseqs@0.0.2 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/parseqs
+#12 7.759 better-assert@1.0.1 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/parseqs/node_modules/better-assert
+#12 7.759 callsite@1.0.0 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/parseqs/node_modules/better-assert/node_modules/callsite
+#12 7.759 component-inherit@0.0.3 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/engine.io-client/node_modules/component-inherit
+#12 7.759 component-bind@1.0.0 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/component-bind
+#12 7.759 object-component@0.0.3 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/object-component
+#12 7.759 socket.io-parser@2.2.2 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/socket.io-parser
+#12 7.759 json3@3.2.6 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/socket.io-parser/node_modules/json3
+#12 7.759 isarray@0.0.1 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/socket.io-parser/node_modules/isarray
+#12 7.759 benchmark@1.0.0 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/socket.io-parser/node_modules/benchmark
+#12 7.759 has-binary@0.1.5 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/has-binary
+#12 7.759 isarray@0.0.1 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/has-binary/node_modules/isarray
+#12 7.759 parseuri@0.0.2 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/parseuri
+#12 7.759 better-assert@1.0.1 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/parseuri/node_modules/better-assert
+#12 7.759 callsite@1.0.0 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/parseuri/node_modules/better-assert/node_modules/callsite
+#12 7.759 to-array@0.1.3 /bundle/bundle/programs/server/npm/node_modules/meteor/joncursi_socket-io-client/node_modules/socket.io-client/node_modules/to-array
+#12 8.281 
+#12 8.281 > core-js@2.6.12 postinstall /bundle/bundle/programs/server/npm/node_modules/core-js
+#12 8.281 > node -e "try{require('./postinstall')}catch(e){}"
+#12 8.281 
+#12 8.732 angular@1.8.3 /bundle/bundle/programs/server/npm/node_modules/angular
+#12 8.732 angular-animate@1.8.3 /bundle/bundle/programs/server/npm/node_modules/angular-animate
+#12 8.732 angular-aria@1.8.3 /bundle/bundle/programs/server/npm/node_modules/angular-aria
+#12 8.732 angular-material@1.2.5 /bundle/bundle/programs/server/npm/node_modules/angular-material
+#12 8.732 angular-meteor@1.3.12 /bundle/bundle/programs/server/npm/node_modules/angular-meteor
+#12 8.732 jsondiffpatch@0.1.43 /bundle/bundle/programs/server/npm/node_modules/jsondiffpatch
+#12 8.732 chalk@0.5.1 /bundle/bundle/programs/server/npm/node_modules/chalk
+#12 8.732 ansi-styles@1.1.0 /bundle/bundle/programs/server/npm/node_modules/ansi-styles
+#12 8.732 escape-string-regexp@1.0.5 /bundle/bundle/programs/server/npm/node_modules/escape-string-regexp
+#12 8.732 has-ansi@0.1.0 /bundle/bundle/programs/server/npm/node_modules/has-ansi
+#12 8.732 ansi-regex@0.2.1 /bundle/bundle/programs/server/npm/node_modules/ansi-regex
+#12 8.732 strip-ansi@0.3.0 /bundle/bundle/programs/server/npm/node_modules/strip-ansi
+#12 8.732 supports-color@0.2.0 /bundle/bundle/programs/server/npm/node_modules/supports-color
+#12 8.732 underscore@1.13.8 /bundle/bundle/programs/server/npm/node_modules/underscore
+#12 8.732 angular-ui-router@0.3.2 /bundle/bundle/programs/server/npm/node_modules/angular-ui-router
+#12 8.732 array-parallel@0.1.3 /bundle/bundle/programs/server/npm/node_modules/array-parallel
+#12 8.732 array-series@0.1.5 /bundle/bundle/programs/server/npm/node_modules/array-series
+#12 8.732 babel-runtime@6.26.0 /bundle/bundle/programs/server/npm/node_modules/babel-runtime
+#12 8.732 core-js@2.6.12 /bundle/bundle/programs/server/npm/node_modules/core-js
+#12 8.732 regenerator-runtime@0.11.1 /bundle/bundle/programs/server/npm/node_modules/regenerator-runtime
+#12 8.732 cross-spawn@7.0.6 /bundle/bundle/programs/server/npm/node_modules/cross-spawn
+#12 8.732 path-key@3.1.1 /bundle/bundle/programs/server/npm/node_modules/path-key
+#12 8.732 shebang-command@2.0.0 /bundle/bundle/programs/server/npm/node_modules/shebang-command
+#12 8.732 shebang-regex@3.0.0 /bundle/bundle/programs/server/npm/node_modules/shebang-regex
+#12 8.732 which@2.0.2 /bundle/bundle/programs/server/npm/node_modules/which
+#12 8.732 isexe@2.0.0 /bundle/bundle/programs/server/npm/node_modules/isexe
+#12 8.732 debug@3.2.7 /bundle/bundle/programs/server/npm/node_modules/debug
+#12 8.732 ms@2.1.3 /bundle/bundle/programs/server/npm/node_modules/ms
+#12 8.732 gm@1.25.1 /bundle/bundle/programs/server/npm/node_modules/gm
+#12 8.732 meteor-node-stubs@0.2.11 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs
+#12 8.732 assert@1.4.1 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/assert
+#12 8.732 util@0.10.3 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/util
+#12 8.732 inherits@2.0.1 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/inherits
+#12 8.732 browserify-zlib@0.1.4 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/browserify-zlib
+#12 8.732 pako@0.2.9 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/pako
+#12 8.732 buffer@4.9.1 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/buffer
+#12 8.732 base64-js@1.2.0 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/base64-js
+#12 8.732 ieee754@1.1.8 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/ieee754
+#12 8.732 isarray@1.0.0 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/isarray
+#12 8.732 console-browserify@1.1.0 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/console-browserify
+#12 8.732 date-now@0.1.4 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/date-now
+#12 8.732 constants-browserify@1.0.0 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/constants-browserify
+#12 8.732 crypto-browserify@3.11.0 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/crypto-browserify
+#12 8.732 browserify-cipher@1.0.0 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/browserify-cipher
+#12 8.732 browserify-aes@1.0.6 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/browserify-aes
+#12 8.732 buffer-xor@1.0.3 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/buffer-xor
+#12 8.732 cipher-base@1.0.3 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/cipher-base
+#12 8.732 create-hash@1.1.2 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/create-hash
+#12 8.732 ripemd160@1.0.1 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/ripemd160
+#12 8.732 sha.js@2.4.8 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/sha.js
+#12 8.732 evp_bytestokey@1.0.0 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/evp_bytestokey
+#12 8.732 browserify-des@1.0.0 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/browserify-des
+#12 8.732 des.js@1.0.0 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/des.js
+#12 8.732 minimalistic-assert@1.0.0 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/minimalistic-assert
+#12 8.732 browserify-sign@4.0.0 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/browserify-sign
+#12 8.732 bn.js@4.11.6 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/bn.js
+#12 8.732 browserify-rsa@4.0.1 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/browserify-rsa
+#12 8.732 randombytes@2.0.3 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/randombytes
+#12 8.732 create-hmac@1.1.4 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/create-hmac
+#12 8.732 elliptic@6.3.2 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/elliptic
+#12 8.732 brorand@1.0.6 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/brorand
+#12 8.732 hash.js@1.0.3 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/hash.js
+#12 8.732 parse-asn1@5.0.0 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/parse-asn1
+#12 8.732 asn1.js@4.9.0 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/asn1.js
+#12 8.732 pbkdf2@3.0.9 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/pbkdf2
+#12 8.732 create-ecdh@4.0.0 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/create-ecdh
+#12 8.732 diffie-hellman@5.0.2 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/diffie-hellman
+#12 8.732 miller-rabin@4.0.0 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/miller-rabin
+#12 8.732 public-encrypt@4.0.0 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/public-encrypt
+#12 8.732 domain-browser@1.1.7 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/domain-browser
+#12 8.732 events@1.1.1 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/events
+#12 8.732 http-browserify@1.7.0 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/http-browserify
+#12 8.732 Base64@0.2.1 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/Base64
+#12 8.732 https-browserify@0.0.1 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/https-browserify
+#12 8.732 os-browserify@0.2.1 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/os-browserify
+#12 8.732 path-browserify@0.0.0 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/path-browserify
+#12 8.732 process@0.11.9 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/process
+#12 8.732 punycode@1.4.1 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/punycode
+#12 8.732 querystring-es3@0.2.1 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/querystring-es3
+#12 8.732 readable-stream@2.2.10 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/readable-stream
+#12 8.732 process-nextick-args@1.0.7 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/process-nextick-args
+#12 8.732 safe-buffer@5.0.1 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/safe-buffer
+#12 8.732 string_decoder@1.0.1 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/string_decoder
+#12 8.732 util-deprecate@1.0.2 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/util-deprecate
+#12 8.732 stream-browserify@2.0.1 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/stream-browserify
+#12 8.732 timers-browserify@1.4.2 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/timers-browserify
+#12 8.732 tty-browserify@0.0.0 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/tty-browserify
+#12 8.732 url@0.11.0 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/url
+#12 8.732 punycode@1.3.2 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/url/node_modules/punycode
+#12 8.732 querystring@0.2.0 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/querystring
+#12 8.732 vm-browserify@0.0.4 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/vm-browserify
+#12 8.732 indexof@0.0.1 /bundle/bundle/programs/server/npm/node_modules/meteor-node-stubs/node_modules/indexof
+#12 8.732 ng-file-upload@12.2.13 /bundle/bundle/programs/server/npm/node_modules/ng-file-upload
+#12 8.732 ng-img-crop@0.2.0 /bundle/bundle/programs/server/npm/node_modules/ng-img-crop
+#12 8.938 {
+#12 8.938   "npm": "6.14.8",
+#12 8.938   "ares": "1.16.1",
+#12 8.938   "brotli": "1.0.9",
+#12 8.938   "cldr": "37.0",
+#12 8.938   "http_parser": "2.9.4",
+#12 8.938   "icu": "67.1",
+#12 8.938   "llhttp": "2.1.3",
+#12 8.938   "modules": "72",
+#12 8.938   "napi": "7",
+#12 8.938   "nghttp2": "1.41.0",
+#12 8.938   "node": "12.20.1",
+#12 8.938   "openssl": "1.1.1i",
+#12 8.938   "tz": "2019c",
+#12 8.938   "unicode": "13.0",
+#12 8.938   "uv": "1.40.0",
+#12 8.938   "v8": "7.8.279.23-node.45",
+#12 8.938   "zlib": "1.2.11"
+#12 8.938 }
+#12 9.062 added 147 packages from 123 contributors and audited 148 packages in 8.05s
+#12 9.108 
+#12 9.108 5 packages are looking for funding
+#12 9.108   run `npm fund` for details
+#12 9.108 
+#12 9.108 found 16 vulnerabilities (5 moderate, 9 high, 2 critical)
+#12 9.108   run `npm audit fix` to fix them, or `npm audit` for details
+#12 9.139 ==> OK
+#12 DONE 9.3s
+
+#13 [8/8] RUN cp -r /bundle/bundle/* /app/ &&     rm -rf /bundle &&     echo "==> [4/4] Listo"
+#13 32.60 ==> [4/4] Listo
+#13 DONE 32.7s
+
+#14 exporting to image
+#14 exporting layers
+#14 exporting layers 15.5s done
+#14 exporting manifest sha256:f3875fbfec7f229155092b9ad4179b4c246ac7f85c59f0bc134bafd870ce66ae 0.0s done
+#14 exporting config sha256:2c184de32a654488b557ad4392d300852965f0e8c8ab17e74318ac200dcf2745 0.0s done
+#14 exporting attestation manifest sha256:56c34a60393bbb0b1aafd9cafd86ebadcc763f697ec311a230c71d1e09248901
+#14 exporting attestation manifest sha256:56c34a60393bbb0b1aafd9cafd86ebadcc763f697ec311a230c71d1e09248901 0.1s done
+#14 exporting manifest list sha256:9a50448448554a11c89d40e1fbd029a9d16616e303864b5aac037430bb8913c1 0.0s done
+#14 naming to docker.io/library/correos-meteor:latest
+#14 naming to docker.io/library/correos-meteor:latest done
+#14 unpacking to docker.io/library/correos-meteor:latest
+#14 unpacking to docker.io/library/correos-meteor:latest 8.9s done
+#14 DONE 24.8s
+
+View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/svk0easiscdrgdz83o0xghchl

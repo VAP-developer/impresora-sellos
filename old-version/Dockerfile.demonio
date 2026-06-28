@@ -1,0 +1,20 @@
+# Python 3.12 para el servidor WebSocket del demonio
+FROM python:3.12-slim-bookworm
+
+# Instalar CUPS client para poder usar lp, cupsenable, cupsdisable
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends cups-client && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copiar requirements e instalar dependencias Python
+COPY demonio/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiar los scripts Python y recursos
+COPY demonio/ /app/
+
+EXPOSE 8000 8001
+
+CMD ["python", "-u", "servidor_ws_nuevo.py"]

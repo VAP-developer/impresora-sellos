@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: OpenSansBold;
+  src: url(fonts/OpenSans-Bold.ttf);
+}
+
+@font-face {
+  font-family: OpenSansRegular;
+  src: url(fonts/OpenSans-Regular.ttf);
+}
+
+@font-face {
+  font-family: OpenSansSemibold;
+  src: url(fonts/OpenSans-Semibold.ttf);
+}
+
+@font-face {
+  font-family: OrmontLight;
+  src: url(fonts/Ormont_Light.otf);
+}
+
+h1 {
+  font-family: OpenSansRegular;
+  font-weight: normal;
+  color: #212F5D;
+}

@@ -1,0 +1,23 @@
+{
+  "name": "correos-webapp-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Property-based and unit tests for correos-webapp migration",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:mongodb": "vitest run test_mongodb_roundtrip.js",
+    "test:crud": "vitest run test_mongodb_crud.js",
+    "test:ws-frontend": "vitest run test_ws_protocol_frontend.ts",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.44.0",
+    "fast-check": "^3.15.0",
+    "mongodb": "^6.3.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0",
+    "ws": "^8.17.0",
+    "@types/ws": "^8.5.10"
+  }
+}

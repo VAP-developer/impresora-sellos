@@ -1,0 +1,19 @@
+# ─────────────────────────────────────────────────────────────
+# Override para Windows (Docker Desktop)
+# ─────────────────────────────────────────────────────────────
+# Uso:
+#   docker compose -f docker-compose.yml -f docker-compose.override.windows.yml up -d
+#
+# O renombrar a docker-compose.override.yml para que se aplique automáticamente.
+# ─────────────────────────────────────────────────────────────
+
+services:
+  demonio-python:
+    volumes:
+      - ./demonio:/app
+      # No montar /var/run/cups en Windows (no existe)
+    environment:
+      - PRINTER_BACKEND=ipp
+      - PRINTER_1=${PRINTER_1:-192.168.1.50}
+      - PRINTER_2=${PRINTER_2:-192.168.1.50}
+      - PRINTER_TICKET=${PRINTER_TICKET:-192.168.1.50}
