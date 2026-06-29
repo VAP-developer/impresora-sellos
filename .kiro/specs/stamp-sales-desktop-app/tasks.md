@@ -71,58 +71,58 @@
 
 ## Task 7: Vista Kiosko (Venta Principal)
 
-- [ ] 7.1 Crear componente StampModels.tsx (imagenes modelo1 y modelo2 con previsualizacion)
-- [ ] 7.2 Crear componente TariffRow.tsx (fila de tarifa con inputs cantidad, limite, subtotal para ambos modelos)
-- [ ] 7.3 Crear componente TariffTable.tsx (tabla completa: Tarifa A Tira 4, Tira 4 Tarifas, Tarifa A, A2, B, C)
-- [ ] 7.4 Crear componente CartControls.tsx (total cesta, presupuesto restante, modo impresion, botones accion)
-- [ ] 7.5 Crear componente RollCounters.tsx (contadores de rollo1, rollo2, tickets al pie)
-- [ ] 7.6 Implementar logica de boton "Imprimir Normal" (valida limites, dispara venta)
-- [ ] 7.7 Implementar logica de boton "Error Impresion" (anulacion de ultima venta)
-- [ ] 7.8 Implementar botones de perfil: Filatelia, Protocolo, SPDE
-- [ ] 7.9 Implementar boton Reset (limpia cantidades a 0)
-- [ ] 7.10 Implementar botones Pausar/Reanudar impresora
-- [ ] 7.11 Escribir tests de componente para TariffTable y CartControls
-- [ ] 7.12 Verificar flujo completo de venta en la UI (sin impresion real)
+- [x] 7.1 Crear componente StampModels.tsx (imagenes modelo1 y modelo2 con previsualizacion)
+- [x] 7.2 Crear componente TariffRow.tsx (fila de tarifa con inputs cantidad, limite, subtotal para ambos modelos)
+- [x] 7.3 Crear componente TariffTable.tsx (tabla completa: Tarifa A Tira 4, Tira 4 Tarifas, Tarifa A, A2, B, C)
+- [x] 7.4 Crear componente CartControls.tsx (total cesta, presupuesto restante, modo impresion, botones accion)
+- [x] 7.5 Crear componente RollCounters.tsx (contadores de rollo1, rollo2, tickets al pie)
+- [x] 7.6 Implementar logica de boton "Imprimir Normal" (valida limites, dispara venta)
+- [x] 7.7 Implementar logica de boton "Error Impresion" (anulacion de ultima venta)
+- [x] 7.8 Implementar botones de perfil: Filatelia, Protocolo, SPDE
+- [x] 7.9 Implementar boton Reset (limpia cantidades a 0)
+- [x] 7.10 Implementar botones Pausar/Reanudar impresora
+- [x] 7.11 Escribir tests de componente para TariffTable y CartControls
+- [x] 7.12 Verificar flujo completo de venta en la UI (sin impresion real)
 
 ## Task 8: Vista Maquina (Configuracion)
 
-- [ ] 8.1 Crear componente CodigoSection.tsx (modo, mes, pais, año, maquina, cliente, producto)
-- [ ] 8.2 Crear componente TicketSection.tsx (feria, lugar, empresa, CIF, textos legales, limites, fecha/hora)
-- [ ] 8.3 Crear componente RollosSection.tsx (existencias, quitar rollo, instalar rollo, bloqueado/desbloqueado)
-- [ ] 8.4 Crear componente TirasSection.tsx (precios tiras especiales, activar/desactivar por modelo)
-- [ ] 8.5 Implementar boton Guardar que persiste configuracion via IPC
-- [ ] 8.6 Implementar boton Exportar XLS
-- [ ] 8.7 Verificar que los cambios guardados se reflejan en la vista Kiosko
+- [x] 8.1 Crear componente CodigoSection.tsx (modo, mes, pais, año, maquina, cliente, producto)
+- [x] 8.2 Crear componente TicketSection.tsx (feria, lugar, empresa, CIF, textos legales, limites, fecha/hora)
+- [x] 8.3 Crear componente RollosSection.tsx (existencias, quitar rollo, instalar rollo, bloqueado/desbloqueado)
+- [x] 8.4 Crear componente TirasSection.tsx (precios tiras especiales, activar/desactivar por modelo)
+- [x] 8.5 Implementar boton Guardar que persiste configuracion via IPC
+- [x] 8.6 Implementar boton Exportar XLS
+- [x] 8.7 Verificar que los cambios guardados se reflejan en la vista Kiosko
 
 ## Task 9: Vista Imprimir (Perfiles y Eventos)
 
-- [ ] 9.1 Crear componente PerfilSection.tsx (selector de perfil activo 1-6)
-- [ ] 9.2 Crear componente EventoSection.tsx (selector de evento activo 0-7, previsualizacion de modelos)
-- [ ] 9.3 Crear componente EventoEditor.tsx (edicion de datos del evento seleccionado)
-- [ ] 9.4 Crear componente PerfilesSection.tsx (edicion de nombres de perfiles)
-- [ ] 9.5 Crear componente TarifaSection.tsx (edicion de precios por tarifa + plantillas estandar/america/andorra)
-- [ ] 9.6 Implementar boton Guardar + Activar que persiste y navega
-- [ ] 9.7 Verificar que cambios de evento/perfil se reflejan en Kiosko
+- [x] 9.1 Crear componente PerfilSection.tsx (selector de perfil activo 1-6)
+- [x] 9.2 Crear componente EventoSection.tsx (selector de evento activo 0-7, previsualizacion de modelos)
+- [x] 9.3 Crear componente EventoEditor.tsx (edicion de datos del evento seleccionado)
+- [x] 9.4 Crear componente PerfilesSection.tsx (edicion de nombres de perfiles)
+- [x] 9.5 Crear componente TarifaSection.tsx (edicion de precios por tarifa + plantillas estandar/america/andorra)
+- [x] 9.6 Implementar boton Guardar + Activar que persiste y navega
+- [x] 9.7 Verificar que cambios de evento/perfil se reflejan en Kiosko
 
 ## Task 10: Vista Subir Imagen
 
-- [ ] 10.1 Crear componente ImageUpload.tsx con drag&drop y recorte de imagen
-- [ ] 10.2 Implementar subida de imagen como base64 via IPC
-- [ ] 10.3 Implementar eliminacion de imagen
-- [ ] 10.4 Verificar que las imagenes subidas aparecen como fondo en la previsualizacion de Kiosko
+- [x] 10.1 Crear componente ImageUpload.tsx con drag&drop y recorte de imagen
+- [x] 10.2 Implementar subida de imagen como base64 via IPC
+- [x] 10.3 Implementar eliminacion de imagen
+- [x] 10.4 Verificar que las imagenes subidas aparecen como fondo en la previsualizacion de Kiosko
 
 ## Task 11: Generacion de PDFs
 
-- [ ] 11.1 Instalar pdfkit (o @pdfme/generator) como dependencia
-- [ ] 11.2 Copiar fuentes Franklin Gothic a resources/fonts/
-- [ ] 11.3 Crear src/main/printing/stamp-renderer.ts (genera PDF etiqueta 55x25mm)
-- [ ] 11.4 Implementar variantes de etiqueta: genStampI (con fondo), genStampD (con fondo), genStamp (sin fondo/mdcc)
-- [ ] 11.5 Implementar tiras especiales: genStampE1, genStampE2
-- [ ] 11.6 Crear src/main/printing/ticket-renderer.ts (genera PDF ticket 78xVARmm)
-- [ ] 11.7 Implementar variantes de ticket: genTicket (principal), genTicketCaja (copia), genTicketMaster (master set)
-- [ ] 11.8 Crear src/main/printing/pdf-generator.ts (orquesta generacion de todos los PDFs de una venta)
-- [ ] 11.9 Escribir tests que verifiquen que se generan los PDFs correctos segun cantidades (Property 7)
-- [ ] 11.10 Verificar visualmente que los PDFs generados tienen el layout correcto
+- [x] 11.1 Instalar pdfkit (o @pdfme/generator) como dependencia
+- [x] 11.2 Copiar fuentes Franklin Gothic a resources/fonts/
+- [x] 11.3 Crear src/main/printing/stamp-renderer.ts (genera PDF etiqueta 55x25mm)
+- [x] 11.4 Implementar variantes de etiqueta: genStampI (con fondo), genStampD (con fondo), genStamp (sin fondo/mdcc)
+- [x] 11.5 Implementar tiras especiales: genStampE1, genStampE2
+- [x] 11.6 Crear src/main/printing/ticket-renderer.ts (genera PDF ticket 78xVARmm)
+- [x] 11.7 Implementar variantes de ticket: genTicket (principal), genTicketCaja (copia), genTicketMaster (master set)
+- [x] 11.8 Crear src/main/printing/pdf-generator.ts (orquesta generacion de todos los PDFs de una venta)
+- [x] 11.9 Escribir tests que verifiquen que se generan los PDFs correctos segun cantidades (Property 7)
+- [x] 11.10 Verificar visualmente que los PDFs generados tienen el layout correcto
 
 ## Task 12: Modulo de Impresion
 

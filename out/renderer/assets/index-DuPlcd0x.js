@@ -13950,8 +13950,20 @@ async function initConfig() {
 function onConfigChange(callback) {
   return getAPI().config.onChange(callback);
 }
+async function insertOrders(orders) {
+  return getAPI().orders.insert(orders);
+}
 async function downloadCSV() {
   return getAPI().orders.downloadCSV();
+}
+async function uploadImage(name, dataUri, type, size2) {
+  return getAPI().images.upload(name, dataUri, type, size2);
+}
+async function removeImage(name) {
+  return getAPI().images.remove(name);
+}
+async function getImageByName(name) {
+  return getAPI().images.getByName(name);
 }
 async function getPrinterStatus() {
   return getAPI().printer.getStatus();
@@ -14484,10 +14496,10 @@ const mergeClassList = (classList, configUtils) => {
     postfixLookupClassGroupIds
   } = configUtils;
   const classGroupsInConflict = [];
-  const classNames = classList.trim().split(SPLIT_CLASSES_REGEX);
+  const classNames2 = classList.trim().split(SPLIT_CLASSES_REGEX);
   let result = "";
-  for (let index2 = classNames.length - 1; index2 >= 0; index2 -= 1) {
-    const originalClassName = classNames[index2];
+  for (let index2 = classNames2.length - 1; index2 >= 0; index2 -= 1) {
+    const originalClassName = classNames2[index2];
     const {
       isExternal,
       modifiers,
@@ -18281,7 +18293,7 @@ const oppositeSideMap = {
   bottom: "top",
   top: "bottom"
 };
-function clamp(start, value, end) {
+function clamp$1(start, value, end) {
   return max(start, min(value, end));
 }
 function evaluate(value, param) {
@@ -18638,7 +18650,7 @@ const arrow$3 = (options) => ({
     const min$1 = minPadding;
     const max2 = clientSize - arrowDimensions[length] - maxPadding;
     const center = clientSize / 2 - arrowDimensions[length] / 2 + centerToReference;
-    const offset2 = clamp(min$1, center, max2);
+    const offset2 = clamp$1(min$1, center, max2);
     const shouldAddOffset = !middlewareData.arrow && getAlignment(placement) != null && center !== offset2 && rects.reference[length] / 2 - (center < min$1 ? minPadding : maxPadding) - arrowDimensions[length] / 2 < 0;
     const alignmentOffset = shouldAddOffset ? center < min$1 ? center - min$1 : center - max2 : 0;
     return {
@@ -18937,14 +18949,14 @@ const shift$2 = function(options) {
         const maxSide = mainAxis === "y" ? "bottom" : "right";
         const min2 = mainAxisCoord + overflow[minSide];
         const max2 = mainAxisCoord - overflow[maxSide];
-        mainAxisCoord = clamp(min2, mainAxisCoord, max2);
+        mainAxisCoord = clamp$1(min2, mainAxisCoord, max2);
       }
       if (checkCrossAxis) {
         const minSide = crossAxis === "y" ? "top" : "left";
         const maxSide = crossAxis === "y" ? "bottom" : "right";
         const min2 = crossAxisCoord + overflow[minSide];
         const max2 = crossAxisCoord - overflow[maxSide];
-        crossAxisCoord = clamp(min2, crossAxisCoord, max2);
+        crossAxisCoord = clamp$1(min2, crossAxisCoord, max2);
       }
       const limitedCoords = limiter.fn({
         ...state,
@@ -21490,28 +21502,5040 @@ function MaquinaIcon() {
     }
   );
 }
+function formatMes(mesCfg, now) {
+  const month = mesCfg === 0 ? (/* @__PURE__ */ new Date()).getMonth() + 1 : mesCfg;
+  if (month === 10) return "O";
+  if (month === 11) return "N";
+  if (month === 12) return "D";
+  return month.toString();
+}
+function formatAnnio(annioCfg, now) {
+  if (annioCfg === "auto") {
+    return ((/* @__PURE__ */ new Date()).getFullYear() - 2e3).toString();
+  }
+  return annioCfg;
+}
+function formatCliente(cliente) {
+  if (cliente > 9999) return "HACER RESET";
+  return cliente.toString().padStart(4, "0");
+}
+function formatProducto(producto) {
+  return producto.toString().padStart(3, "0");
+}
+function formatLabelCode(codigo, now) {
+  const clienteStr = formatCliente(codigo.cliente);
+  if (clienteStr === "HACER RESET") return null;
+  const modo = codigo.modo;
+  const mes = formatMes(codigo.mes);
+  const pais = codigo.pais;
+  const annio = formatAnnio(codigo.annio);
+  const maquina = codigo.maquina;
+  const producto = formatProducto(codigo.producto);
+  return `${modo}${mes}${pais}${annio} ${maquina}-${clienteStr}-${producto}`;
+}
+function ModelPreview({
+  modelName,
+  label,
+  fecha,
+  localidad,
+  codePreview
+}) {
+  const [imageUrl, setImageUrl] = reactExports.useState(null);
+  const [loading, setLoading] = reactExports.useState(true);
+  reactExports.useEffect(() => {
+    let cancelled = false;
+    async function loadImage() {
+      if (!modelName) {
+        setImageUrl(null);
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      try {
+        const result = await getImageByName(modelName);
+        if (!cancelled) {
+          setImageUrl(result?.url ?? null);
+        }
+      } catch {
+        if (!cancelled) {
+          setImageUrl(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+    loadImage();
+    return () => {
+      cancelled = true;
+    };
+  }, [modelName]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center flex-1", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative mt-2", children: [
+      loading ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-[300px] h-[136px] bg-gray-200 animate-pulse rounded flex items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-gray-400 text-sm", children: "Cargando..." }) }) : imageUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "img",
+        {
+          src: imageUrl,
+          alt: label,
+          className: "w-[300px] h-auto rounded shadow-sm"
+        }
+      ) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-[300px] h-[136px] bg-gray-300 rounded flex items-center justify-center border border-gray-400", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-gray-600 text-sm font-medium", children: modelName || "Sin modelo" }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-1 text-center", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-black text-sm font-bold leading-tight", children: fecha }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-black text-sm font-bold leading-tight", children: localidad }),
+        codePreview && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-black text-xs font-bold mt-1", children: codePreview })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-gray-500 mt-1 font-medium", children: [
+      label,
+      ": ",
+      modelName || "—"
+    ] })
+  ] });
+}
+function PrinterControls() {
+  const pause = usePrinterStore((state) => state.pause);
+  const resume = usePrinterStore((state) => state.resume);
+  const loading = usePrinterStore((state) => state.loading);
+  const printers = usePrinterStore((state) => state.printers);
+  const anyPaused = printers.some((p) => p.status === "paused");
+  const handlePause = reactExports.useCallback(async () => {
+    try {
+      await pause();
+    } catch (err) {
+      console.error("[PrinterControls] Error pausing printer:", err);
+    }
+  }, [pause]);
+  const handleResume = reactExports.useCallback(async () => {
+    try {
+      await resume();
+    } catch (err) {
+      console.error("[PrinterControls] Error resuming printer:", err);
+    }
+  }, [resume]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-1 mb-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "button",
+      {
+        type: "button",
+        className: "inline-flex items-center gap-1 px-3 py-1 bg-red-500 hover:bg-red-600\n                   text-white rounded text-sm font-medium cursor-pointer\n                   transition-colors focus:outline-none focus:ring-2 focus:ring-red-400\n                   disabled:opacity-50 disabled:cursor-not-allowed",
+        "aria-label": "Pausar impresora",
+        disabled: loading,
+        onClick: handlePause,
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "svg",
+            {
+              xmlns: "http://www.w3.org/2000/svg",
+              viewBox: "0 0 24 24",
+              fill: "currentColor",
+              className: "w-4 h-4",
+              "aria-hidden": "true",
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: "6", y: "4", width: "4", height: "16" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: "14", y: "4", width: "4", height: "16" })
+              ]
+            }
+          ),
+          "Pausar impresora"
+        ]
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "button",
+      {
+        type: "button",
+        className: "inline-flex items-center gap-1 px-3 py-1 bg-blue-700 hover:bg-blue-800\n                   text-white rounded text-sm font-medium cursor-pointer\n                   transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400\n                   disabled:opacity-50 disabled:cursor-not-allowed",
+        "aria-label": "Reanudar impresora",
+        disabled: loading || !anyPaused,
+        onClick: handleResume,
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "svg",
+            {
+              xmlns: "http://www.w3.org/2000/svg",
+              viewBox: "0 0 24 24",
+              fill: "currentColor",
+              className: "w-4 h-4",
+              "aria-hidden": "true",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsx("polygon", { points: "5,3 19,12 5,21" })
+            }
+          ),
+          "Reanudar impresora"
+        ]
+      }
+    )
+  ] });
+}
+function StampModels() {
+  const config = useConfigStore((state) => state.config);
+  const activeEvent = config?.sello?.eventos?.[config.sello.elevento ?? 0] ?? null;
+  const modelo1Name = activeEvent?.motivoi ?? config?.sello?.modelo1 ?? "";
+  const modelo2Name = activeEvent?.motivod ?? config?.sello?.modelo2 ?? "";
+  const fecha = activeEvent?.fecha ?? "";
+  const localidad = activeEvent?.localidad ?? "";
+  const codePreview = config?.codigo ? formatLabelCode(config.codigo) : null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-center bg-white rounded px-4 py-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center flex-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(PrinterControls, {}),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ModelPreview,
+        {
+          modelName: modelo1Name,
+          label: "Modelo 1",
+          fecha,
+          localidad,
+          codePreview
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ModelPreview,
+      {
+        modelName: modelo2Name,
+        label: "Modelo 2",
+        fecha,
+        localidad,
+        codePreview
+      }
+    )
+  ] });
+}
+function normalizeQty(val) {
+  if (!Number.isFinite(val) || val < 0) return 0;
+  return Math.floor(val);
+}
+function calcUsedRollo1(q) {
+  return q.tarifaAT1 * 4 + q.tarifa4T1 * 4 + q.tarifaAS1 + q.tarifaA2S1 + q.tarifaBS1 + q.tarifaCS1;
+}
+function calcUsedRollo2(q) {
+  return q.tarifaAT2 * 4 + q.tarifa4T2 * 4 + q.tarifaAS2 + q.tarifaA2S2 + q.tarifaBS2 + q.tarifaCS2;
+}
+function calcUsedTickets(q) {
+  return q.tarifaAT1 + q.tarifa4T1 + q.tarifaAT2 + q.tarifa4T2;
+}
+function calcTotal(q, precios) {
+  const tarifaA = precios.tarifaA ?? 0;
+  const tarifaA2 = precios.tarifaA2 ?? 0;
+  const tarifaB = precios.tarifaB ?? 0;
+  const tarifaC = precios.tarifaC ?? 0;
+  const tarifaTA = precios.tarifaTA ?? 0;
+  const tarifaT4 = precios.tarifaT4 ?? 0;
+  return tarifaA * (q.tarifaAS1 + q.tarifaAS2) + tarifaA2 * (q.tarifaA2S1 + q.tarifaA2S2) + tarifaB * (q.tarifaBS1 + q.tarifaBS2) + tarifaC * (q.tarifaCS1 + q.tarifaCS2) + tarifaTA * (q.tarifaAT1 + q.tarifaAT2) + tarifaT4 * (q.tarifa4T1 + q.tarifa4T2);
+}
+function calcLimite(ticket, sello) {
+  const perfil = sello.elperfil;
+  if (perfil === 6) {
+    return Number(ticket.limiteImporte) || 0;
+  }
+  const nuevoLimite = Number(ticket.NUEVOlimiteImporte);
+  return nuevoLimite || Number(ticket.limiteImporte) || 0;
+}
+function calcLimiteSimple(budgetRemaining, precio, rolloDisponible) {
+  if (precio <= 0) return 0;
+  return Math.max(
+    0,
+    Math.min(Math.floor(budgetRemaining / precio), rolloDisponible)
+  );
+}
+function calcLimiteTira(budgetRemaining, precio, rolloDisponible, ticketsDisponibles) {
+  if (precio <= 0) return 0;
+  return Math.max(
+    0,
+    Math.min(
+      Math.floor(budgetRemaining / precio),
+      ticketsDisponibles,
+      Math.floor(rolloDisponible / 4)
+    )
+  );
+}
+function calcAllLimits(q, precios, ticket, sello) {
+  const limite = calcLimite(ticket, sello);
+  const total = calcTotal(q, precios);
+  const budgetRemaining = limite - total;
+  const usedRollo1 = calcUsedRollo1(q);
+  const usedRollo2 = calcUsedRollo2(q);
+  const usedTickets = calcUsedTickets(q);
+  const rollo1Available = (ticket.rollo1 ?? 0) - usedRollo1;
+  const rollo2Available = (ticket.rollo2 ?? 0) - usedRollo2;
+  const ticketsAvailable = (ticket.tickets ?? 0) - 2 - usedTickets;
+  const tarifaA = precios.tarifaA ?? 0;
+  const tarifaA2 = precios.tarifaA2 ?? 0;
+  const tarifaB = precios.tarifaB ?? 0;
+  const tarifaC = precios.tarifaC ?? 0;
+  const tarifaTA = precios.tarifaTA ?? 0;
+  const tarifaT4 = precios.tarifaT4 ?? 0;
+  return {
+    // Tiras (strips)
+    limiteAT1: calcLimiteTira(budgetRemaining, tarifaTA, rollo1Available, ticketsAvailable),
+    limiteAT2: calcLimiteTira(budgetRemaining, tarifaTA, rollo2Available, ticketsAvailable),
+    limite4T1: calcLimiteTira(budgetRemaining, tarifaT4, rollo1Available, ticketsAvailable),
+    limite4T2: calcLimiteTira(budgetRemaining, tarifaT4, rollo2Available, ticketsAvailable),
+    // Simples (individual stamps)
+    limiteAS1: calcLimiteSimple(budgetRemaining, tarifaA, rollo1Available),
+    limiteAS2: calcLimiteSimple(budgetRemaining, tarifaA, rollo2Available),
+    limiteA2S1: calcLimiteSimple(budgetRemaining, tarifaA2, rollo1Available),
+    limiteA2S2: calcLimiteSimple(budgetRemaining, tarifaA2, rollo2Available),
+    limiteBS1: calcLimiteSimple(budgetRemaining, tarifaB, rollo1Available),
+    limiteBS2: calcLimiteSimple(budgetRemaining, tarifaB, rollo2Available),
+    limiteCS1: calcLimiteSimple(budgetRemaining, tarifaC, rollo1Available),
+    limiteCS2: calcLimiteSimple(budgetRemaining, tarifaC, rollo2Available)
+  };
+}
+function validateSale(q, precios, ticket, sello, clienteId) {
+  const sellos1 = calcUsedRollo1(q);
+  const sellos2 = calcUsedRollo2(q);
+  const total = calcTotal(q, precios);
+  const limite = calcLimite(ticket, sello);
+  const ticketsNeeded = 2 + calcUsedTickets(q);
+  if (total === 0) {
+    return "empty";
+  }
+  if (clienteId > 9999) {
+    return "Límite de ID Cliente, haga reset en menú MÁQUINA";
+  }
+  if (sellos1 > ticket.rollo1 && sellos2 > ticket.rollo2) {
+    return "No hay suficientes sellos del primer motivo ni del segundo";
+  }
+  if (sellos1 > ticket.rollo1) {
+    return "No hay suficientes sellos del primer motivo";
+  }
+  if (sellos2 > ticket.rollo2) {
+    return "No hay suficientes sellos del segundo motivo";
+  }
+  if (total > limite) {
+    return `Ha excedido el límite de compra de ${limite}€`;
+  }
+  if (ticketsNeeded > ticket.tickets) {
+    return "No hay suficientes tickets";
+  }
+  return null;
+}
+const EMPTY_QUANTITIES = {
+  tarifaAS1: 0,
+  tarifaA2S1: 0,
+  tarifaBS1: 0,
+  tarifaCS1: 0,
+  tarifaAT1: 0,
+  tarifa4T1: 0,
+  tarifaAS2: 0,
+  tarifaA2S2: 0,
+  tarifaBS2: 0,
+  tarifaCS2: 0,
+  tarifaAT2: 0,
+  tarifa4T2: 0
+};
+const useKioskoStore = create((set, get) => ({
+  quantities: { ...EMPTY_QUANTITIES },
+  lastSale: { sellos1: 0, sellos2: 0, tickets: 0 },
+  // --- Derived getters ---
+  getTotal: (precios) => {
+    return calcTotal(get().quantities, precios);
+  },
+  getLimite: (ticket, sello) => {
+    return calcLimite(ticket, sello);
+  },
+  getBudgetRemaining: (precios, ticket, sello) => {
+    const limite = calcLimite(ticket, sello);
+    const total = calcTotal(get().quantities, precios);
+    return limite - total;
+  },
+  getLimits: (precios, ticket, sello) => {
+    return calcAllLimits(get().quantities, precios, ticket, sello);
+  },
+  getUsedRollo1: () => {
+    return calcUsedRollo1(get().quantities);
+  },
+  getUsedRollo2: () => {
+    return calcUsedRollo2(get().quantities);
+  },
+  getUsedTickets: () => {
+    return calcUsedTickets(get().quantities);
+  },
+  getRemainingRollo1: (ticket) => {
+    return (ticket.rollo1 ?? 0) - calcUsedRollo1(get().quantities);
+  },
+  getRemainingRollo2: (ticket) => {
+    return (ticket.rollo2 ?? 0) - calcUsedRollo2(get().quantities);
+  },
+  getRemainingTickets: (ticket) => {
+    return (ticket.tickets ?? 0) - 2 - calcUsedTickets(get().quantities);
+  },
+  // --- Actions ---
+  setQuantity: (field, value) => {
+    set((state) => ({
+      quantities: {
+        ...state.quantities,
+        [field]: normalizeQty(value)
+      }
+    }));
+  },
+  setQuantities: (partial) => {
+    set((state) => {
+      const updated = { ...state.quantities };
+      for (const [key, value] of Object.entries(partial)) {
+        if (key in updated && value !== void 0) {
+          updated[key] = normalizeQty(value);
+        }
+      }
+      return { quantities: updated };
+    });
+  },
+  reset: () => {
+    set({ quantities: { ...EMPTY_QUANTITIES } });
+  },
+  normalizeAll: () => {
+    set((state) => {
+      const q = state.quantities;
+      return {
+        quantities: {
+          tarifaAS1: normalizeQty(q.tarifaAS1),
+          tarifaA2S1: normalizeQty(q.tarifaA2S1),
+          tarifaBS1: normalizeQty(q.tarifaBS1),
+          tarifaCS1: normalizeQty(q.tarifaCS1),
+          tarifaAT1: normalizeQty(q.tarifaAT1),
+          tarifa4T1: normalizeQty(q.tarifa4T1),
+          tarifaAS2: normalizeQty(q.tarifaAS2),
+          tarifaA2S2: normalizeQty(q.tarifaA2S2),
+          tarifaBS2: normalizeQty(q.tarifaBS2),
+          tarifaCS2: normalizeQty(q.tarifaCS2),
+          tarifaAT2: normalizeQty(q.tarifaAT2),
+          tarifa4T2: normalizeQty(q.tarifa4T2)
+        }
+      };
+    });
+  },
+  recordLastSale: (sellos1, sellos2, tickets) => {
+    set({ lastSale: { sellos1, sellos2, tickets } });
+  },
+  clearLastSale: () => {
+    set({ lastSale: { sellos1: 0, sellos2: 0, tickets: 0 } });
+  },
+  validateSale: (config) => {
+    const q = get().quantities;
+    const { precios, ticket, sello, codigo } = config;
+    return validateSale(q, precios, ticket, sello, codigo.cliente);
+  }
+}));
+function TariffRow({
+  label,
+  price,
+  qtyField1,
+  qtyField2,
+  limitField1,
+  limitField2,
+  quantities,
+  limits,
+  className = "bg-gray-100",
+  inputClassName = "bg-gray-200 border-gray-300 text-black",
+  labelClassName = "text-2xl font-semibold",
+  highlighted = false
+}) {
+  const setQuantity = useKioskoStore((state) => state.setQuantity);
+  const qty1 = quantities[qtyField1];
+  const qty2 = quantities[qtyField2];
+  const limit1 = limits[limitField1];
+  const limit2 = limits[limitField2];
+  const subtotal1 = price * qty1;
+  const subtotal2 = price * qty2;
+  const handleChange1 = reactExports.useCallback(
+    (e) => {
+      const val = e.target.valueAsNumber;
+      setQuantity(qtyField1, Number.isNaN(val) ? 0 : val);
+    },
+    [setQuantity, qtyField1]
+  );
+  const handleChange2 = reactExports.useCallback(
+    (e) => {
+      const val = e.target.valueAsNumber;
+      setQuantity(qtyField2, Number.isNaN(val) ? 0 : val);
+    },
+    [setQuantity, qtyField2]
+  );
+  const textSizeClass = highlighted ? "text-3xl" : "text-base";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: `flex items-center text-center py-2 ${className}`,
+      role: "row",
+      "aria-label": `Fila tarifa ${label}`,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-[5%] text-xs", "aria-label": `Subtotal modelo 1: ${subtotal1.toFixed(2)}€`, children: [
+          subtotal1.toFixed(2),
+          " €"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-[10%]", "aria-label": `Límite modelo 1: ${limit1}`, children: limit1 }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-[15%]", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "number",
+            min: "0",
+            value: qty1,
+            onChange: handleChange1,
+            className: `w-16 text-center border rounded ${textSizeClass} ${inputClassName}`,
+            "aria-label": `Cantidad ${label} modelo 1`
+          }
+        ) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `w-[30%] ${labelClassName}`, children: label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-[10%]", children: [
+          price.toFixed(2),
+          "€"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-[15%]", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "number",
+            min: "0",
+            value: qty2,
+            onChange: handleChange2,
+            className: `w-16 text-center border rounded ${textSizeClass} ${inputClassName}`,
+            "aria-label": `Cantidad ${label} modelo 2`
+          }
+        ) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-[10%]", "aria-label": `Límite modelo 2: ${limit2}`, children: limit2 }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-[5%] text-xs", "aria-label": `Subtotal modelo 2: ${subtotal2.toFixed(2)}€`, children: [
+          subtotal2.toFixed(2),
+          " €"
+        ] })
+      ]
+    }
+  );
+}
+function TariffTable() {
+  const config = useConfigStore((state) => state.config);
+  const quantities = useKioskoStore((state) => state.quantities);
+  const getLimits = useKioskoStore((state) => state.getLimits);
+  const precios = config?.precios;
+  const tarifaA = precios?.tarifaA ?? 0;
+  const tarifaA2 = precios?.tarifaA2 ?? 0;
+  const tarifaB = precios?.tarifaB ?? 0;
+  const tarifaC = precios?.tarifaC ?? 0;
+  const tarifaTA = precios?.tarifaTA ?? 0;
+  const tarifaT4 = precios?.tarifaT4 ?? 0;
+  const limits = reactExports.useMemo(() => {
+    if (!config) {
+      return {
+        limiteAT1: 0,
+        limiteAT2: 0,
+        limite4T1: 0,
+        limite4T2: 0,
+        limiteAS1: 0,
+        limiteAS2: 0,
+        limiteA2S1: 0,
+        limiteA2S2: 0,
+        limiteBS1: 0,
+        limiteBS2: 0,
+        limiteCS1: 0,
+        limiteCS2: 0
+      };
+    }
+    return getLimits(config.precios, config.ticket, config.sello);
+  }, [config, quantities, getLimits]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex justify-center pt-0", role: "table", "aria-label": "Tabla de tarifas", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: "flex items-center text-center text-sm font-semibold text-gray-600 py-2 border-b border-gray-300",
+        role: "row",
+        "aria-label": "Encabezado tabla tarifas",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-[5%]", children: "Subtotal" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-[10%]", children: "Límite" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-[15%]", children: "Cantidad" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-[30%]", children: "Modalidad" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-[10%]", children: "Precio" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-[15%]", children: "Cantidad" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-[10%]", children: "Límite" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-[5%]", children: "Subtotal" })
+        ]
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      TariffRow,
+      {
+        label: "Tarifa A Tira 4",
+        price: tarifaTA,
+        qtyField1: "tarifaAT1",
+        qtyField2: "tarifaAT2",
+        limitField1: "limiteAT1",
+        limitField2: "limiteAT2",
+        quantities,
+        limits,
+        className: "bg-gray-100",
+        inputClassName: "bg-gray-200 border-gray-300 text-black"
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      TariffRow,
+      {
+        label: "Tira de 4 Tarifas",
+        price: tarifaT4,
+        qtyField1: "tarifa4T1",
+        qtyField2: "tarifa4T2",
+        limitField1: "limite4T1",
+        limitField2: "limite4T2",
+        quantities,
+        limits,
+        className: "bg-[rgb(24,62,117)] text-white",
+        inputClassName: "bg-[rgb(24,62,117)] text-white border-gray-500",
+        labelClassName: "text-3xl font-semibold",
+        highlighted: true
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-b border-gray-300 my-2", role: "separator" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      TariffRow,
+      {
+        label: "Tarifa A",
+        price: tarifaA,
+        qtyField1: "tarifaAS1",
+        qtyField2: "tarifaAS2",
+        limitField1: "limiteAS1",
+        limitField2: "limiteAS2",
+        quantities,
+        limits,
+        className: "bg-[rgb(255,192,0)]",
+        inputClassName: "border-gray-300 text-black"
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      TariffRow,
+      {
+        label: "Tarifa A2",
+        price: tarifaA2,
+        qtyField1: "tarifaA2S1",
+        qtyField2: "tarifaA2S2",
+        limitField1: "limiteA2S1",
+        limitField2: "limiteA2S2",
+        quantities,
+        limits,
+        className: "bg-gray-100",
+        inputClassName: "bg-gray-200 border-gray-300 text-black"
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      TariffRow,
+      {
+        label: "Tarifa B",
+        price: tarifaB,
+        qtyField1: "tarifaBS1",
+        qtyField2: "tarifaBS2",
+        limitField1: "limiteBS1",
+        limitField2: "limiteBS2",
+        quantities,
+        limits,
+        className: "bg-gray-100",
+        inputClassName: "bg-gray-200 border-gray-300 text-black"
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      TariffRow,
+      {
+        label: "Tarifa C",
+        price: tarifaC,
+        qtyField1: "tarifaCS1",
+        qtyField2: "tarifaCS2",
+        limitField1: "limiteCS1",
+        limitField2: "limiteCS2",
+        quantities,
+        limits,
+        className: "bg-gray-100",
+        inputClassName: "bg-gray-200 border-gray-300 text-black"
+      }
+    )
+  ] }) });
+}
+function CartControls({
+  onPrintNormal,
+  onPrintFilatelia,
+  onPrintProtocolo,
+  onPrintSPDE,
+  onPrintError,
+  onReset
+}) {
+  const config = useConfigStore((state) => state.config);
+  const quantities = useKioskoStore((state) => state.quantities);
+  const lastSale = useKioskoStore((state) => state.lastSale);
+  const getTotal = useKioskoStore((state) => state.getTotal);
+  const getLimite = useKioskoStore((state) => state.getLimite);
+  const validateSale2 = useKioskoStore((state) => state.validateSale);
+  const recordLastSale = useKioskoStore((state) => state.recordLastSale);
+  const clearLastSale = useKioskoStore((state) => state.clearLastSale);
+  const reset = useKioskoStore((state) => state.reset);
+  const [printing, setPrinting] = reactExports.useState(false);
+  const precios = config?.precios;
+  const ticket = config?.ticket;
+  const sello = config?.sello;
+  const total = reactExports.useMemo(() => {
+    if (!precios) return 0;
+    return getTotal(precios);
+  }, [precios, quantities, getTotal]);
+  const limite = reactExports.useMemo(() => {
+    if (!ticket || !sello) return 0;
+    return getLimite(ticket, sello);
+  }, [ticket, sello, getLimite]);
+  const budgetRemaining = limite - total;
+  const profileName = reactExports.useMemo(() => {
+    if (!sello) return "";
+    const perfil = sello.elperfil;
+    if (perfil >= 1 && perfil <= 5) {
+      const key = `nperfil${perfil}`;
+      return sello[key] ?? "";
+    }
+    return "";
+  }, [sello]);
+  const imprimeMasterTicket = ticket?.ImprimeMasterTicket ?? "N";
+  const imprimeCopiaTicket = ticket?.ImprimeCopiaTicket ?? "N";
+  const tEmod1 = ticket?.TEmod1 ?? "N";
+  const tEmod2 = ticket?.TEmod2 ?? "N";
+  const t1especial = ticket?.T1especial ?? 0;
+  const t2especial = ticket?.T2especial ?? 0;
+  const t3especial = ticket?.T3especial ?? 0;
+  const handlePrint = reactExports.useCallback(
+    async (profile, onSuccess) => {
+      if (!config || printing) return;
+      const error = validateSale2(config);
+      if (error) {
+        if (error === "empty") return;
+        window.alert(error);
+        return;
+      }
+      setPrinting(true);
+      try {
+        const sellos1 = calcUsedRollo1(quantities);
+        const sellos2 = calcUsedRollo2(quantities);
+        const ticketsUsed = 2 + calcUsedTickets(quantities);
+        recordLastSale(sellos1, sellos2, ticketsUsed);
+        await print(config, quantities, profile);
+        reset();
+        onSuccess?.();
+      } catch (err) {
+        console.error("[CartControls] Error during print:", err);
+        window.alert("Error al procesar la impresión");
+      } finally {
+        setPrinting(false);
+      }
+    },
+    [config, quantities, printing, validateSale2, recordLastSale, reset]
+  );
+  const handlePrintNormal = reactExports.useCallback(async () => {
+    await handlePrint("normal", onPrintNormal);
+  }, [handlePrint, onPrintNormal]);
+  const handlePrintFilatelia = reactExports.useCallback(async () => {
+    await handlePrint("filatelia", onPrintFilatelia);
+  }, [handlePrint, onPrintFilatelia]);
+  const handlePrintProtocolo = reactExports.useCallback(async () => {
+    await handlePrint("protocolo", onPrintProtocolo);
+  }, [handlePrint, onPrintProtocolo]);
+  const handlePrintSPDE = reactExports.useCallback(async () => {
+    await handlePrint("spde", onPrintSPDE);
+  }, [handlePrint, onPrintSPDE]);
+  const handlePrintError = reactExports.useCallback(async () => {
+    if (!config || printing) return;
+    const confirmed = window.confirm(
+      "¿Error de IMPRESIÓN? ¡Se procederá a ANULAR la VENTA ANTERIOR!"
+    );
+    if (!confirmed) {
+      return;
+    }
+    if (lastSale.sellos1 <= 0 && lastSale.sellos2 <= 0) {
+      window.alert("¡¡NINGUNA venta encontrada!!");
+      return;
+    }
+    setPrinting(true);
+    try {
+      await updateSesionError();
+      await updateRollosRevert(lastSale.sellos1, lastSale.sellos2, lastSale.tickets);
+      const errorOrder = {
+        event: "ELIMINAR ANTERIOR",
+        venue: " ",
+        machine: "error de impresión",
+        vendType: " ",
+        productName: " ",
+        transactionDate: "",
+        quantity: 0,
+        quantitySet: 0,
+        totalStamps: 0,
+        currency: " ",
+        value: 0,
+        paymentStatus: "Error",
+        sesionId: config.codigo.cliente,
+        etiquetasRollo1: 0,
+        etiquetasRollo2: 0,
+        etiquetaMes: " ",
+        tituloEvento: "Error",
+        feria: config.sello?.feria ?? "",
+        lugar: config.sello?.lugar ?? "",
+        fecha: "Error",
+        mes: "Error",
+        annio: "Error",
+        documento: "Error"
+      };
+      await insertOrders([errorOrder]);
+      clearLastSale();
+      reset();
+      onPrintError?.();
+    } catch (err) {
+      console.error("[CartControls] Error during print error reversal:", err);
+      window.alert("Error al anular la venta");
+    } finally {
+      setPrinting(false);
+    }
+  }, [config, printing, lastSale, clearLastSale, reset, onPrintError]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "flex items-center justify-center p-4",
+      role: "region",
+      "aria-label": "Controles de cesta",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              className: "w-[80px] h-[65px] bg-purple-700 hover:bg-purple-800 text-white rounded\n                     flex items-center justify-center text-xs font-bold cursor-pointer\n                     transition-colors focus:outline-none focus:ring-2 focus:ring-purple-400\n                     disabled:opacity-50 disabled:cursor-not-allowed",
+              "aria-label": "Imprimir Filatelia",
+              disabled: printing,
+              onClick: handlePrintFilatelia,
+              children: "Filatelia"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              className: "w-[70px] h-[70px] bg-red-600 hover:bg-red-700 text-white rounded-full\n                     flex items-center justify-center cursor-pointer\n                     transition-colors focus:outline-none focus:ring-2 focus:ring-red-400\n                     disabled:opacity-50 disabled:cursor-not-allowed",
+              "aria-label": "Error impresión - anular última venta",
+              disabled: printing,
+              onClick: handlePrintError,
+              children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "svg",
+                {
+                  xmlns: "http://www.w3.org/2000/svg",
+                  viewBox: "0 0 24 24",
+                  fill: "none",
+                  stroke: "currentColor",
+                  strokeWidth: 2,
+                  strokeLinecap: "round",
+                  strokeLinejoin: "round",
+                  className: "w-8 h-8",
+                  "aria-hidden": "true",
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "9", cy: "21", r: "1" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "20", cy: "21", r: "1" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("line", { x1: "4", y1: "4", x2: "22", y2: "20" })
+                  ]
+                }
+              )
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-1 mx-6", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-center text-gray-500 text-sm font-bold", "aria-label": "Presupuesto restante", children: [
+            budgetRemaining.toFixed(2),
+            " €"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "h2",
+            {
+              className: "text-center text-xl font-bold",
+              "aria-label": "Total de la cesta",
+              "aria-live": "polite",
+              children: [
+                "Cesta ",
+                total.toFixed(2),
+                "€"
+              ]
+            }
+          ),
+          profileName && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-center text-red-700 text-lg font-bold", "aria-label": "Modo de impresión activo", children: profileName }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-center text-blue-600 text-xs font-bold", children: [
+            imprimeMasterTicket,
+            ": MASTER SET"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-center text-red-700 text-[10px] font-bold leading-tight", children: [
+            imprimeCopiaTicket,
+            ": COPIA TICKET",
+            /* @__PURE__ */ jsxRuntimeExports.jsx("br", {}),
+            tEmod1,
+            "/",
+            tEmod2,
+            " (€: ",
+            t1especial,
+            "-",
+            t2especial,
+            "-",
+            t3especial,
+            ")"
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              className: "bg-transparent border-none cursor-pointer p-0\n                     hover:opacity-80 transition-opacity\n                     focus:outline-none focus:ring-2 focus:ring-[rgb(24,62,117)] rounded\n                     disabled:opacity-50 disabled:cursor-not-allowed",
+              "aria-label": "Imprimir normal - confirmar venta",
+              disabled: printing,
+              onClick: handlePrintNormal,
+              children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "svg",
+                {
+                  xmlns: "http://www.w3.org/2000/svg",
+                  viewBox: "0 0 24 24",
+                  fill: "none",
+                  stroke: "rgb(24,62,117)",
+                  strokeWidth: 2,
+                  strokeLinecap: "round",
+                  strokeLinejoin: "round",
+                  className: "w-16 h-16",
+                  "aria-hidden": "true",
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "9", cy: "21", r: "1" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "20", cy: "21", r: "1" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" })
+                  ]
+                }
+              )
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              className: "w-[50px] h-[50px] bg-gray-200 hover:bg-gray-300 rounded-full\n                     flex items-center justify-center cursor-pointer\n                     transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400",
+              "aria-label": "Reset - limpiar cantidades",
+              onClick: () => {
+                reset();
+                onReset?.();
+              },
+              children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "svg",
+                {
+                  xmlns: "http://www.w3.org/2000/svg",
+                  viewBox: "0 0 24 24",
+                  fill: "none",
+                  stroke: "currentColor",
+                  strokeWidth: 2,
+                  strokeLinecap: "round",
+                  strokeLinejoin: "round",
+                  className: "w-6 h-6 text-red-600",
+                  "aria-hidden": "true",
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("line", { x1: "18", y1: "6", x2: "6", y2: "18" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("line", { x1: "6", y1: "6", x2: "18", y2: "18" })
+                  ]
+                }
+              )
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              className: "px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded\n                     text-xs font-bold cursor-pointer transition-colors\n                     focus:outline-none focus:ring-2 focus:ring-green-400\n                     disabled:opacity-50 disabled:cursor-not-allowed",
+              "aria-label": "Imprimir Protocolo",
+              disabled: printing,
+              onClick: handlePrintProtocolo,
+              children: "Protocolo"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              className: "px-3 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded\n                     text-xs font-bold cursor-pointer transition-colors\n                     focus:outline-none focus:ring-2 focus:ring-orange-400\n                     disabled:opacity-50 disabled:cursor-not-allowed",
+              "aria-label": "Imprimir SPDE",
+              disabled: printing,
+              onClick: handlePrintSPDE,
+              children: "SPDE"
+            }
+          )
+        ] })
+      ]
+    }
+  );
+}
+function RollCounters() {
+  const config = useConfigStore((state) => state.config);
+  const getUsedRollo1 = useKioskoStore((state) => state.getUsedRollo1);
+  const getUsedRollo2 = useKioskoStore((state) => state.getUsedRollo2);
+  const getUsedTickets = useKioskoStore((state) => state.getUsedTickets);
+  const getRemainingRollo1 = useKioskoStore((state) => state.getRemainingRollo1);
+  const getRemainingRollo2 = useKioskoStore((state) => state.getRemainingRollo2);
+  const getRemainingTickets = useKioskoStore((state) => state.getRemainingTickets);
+  const quantities = useKioskoStore((state) => state.quantities);
+  const ticket = config?.ticket;
+  const sello = config?.sello;
+  const nombreModelo1 = reactExports.useMemo(() => {
+    if (!sello) return "";
+    const idx = sello.elevento ?? 0;
+    const evento = sello.eventos?.[idx];
+    return evento?.motivoi ?? "";
+  }, [sello]);
+  const nombreModelo2 = reactExports.useMemo(() => {
+    if (!sello) return "";
+    const idx = sello.elevento ?? 0;
+    const evento = sello.eventos?.[idx];
+    return evento?.motivod ?? "";
+  }, [sello]);
+  const usedRollo1 = reactExports.useMemo(() => getUsedRollo1(), [quantities, getUsedRollo1]);
+  const usedRollo2 = reactExports.useMemo(() => getUsedRollo2(), [quantities, getUsedRollo2]);
+  const usedTickets = reactExports.useMemo(() => getUsedTickets(), [quantities, getUsedTickets]);
+  const remainingRollo1 = reactExports.useMemo(() => {
+    if (!ticket) return 0;
+    return getRemainingRollo1(ticket);
+  }, [ticket, quantities, getRemainingRollo1]);
+  const remainingRollo2 = reactExports.useMemo(() => {
+    if (!ticket) return 0;
+    return getRemainingRollo2(ticket);
+  }, [ticket, quantities, getRemainingRollo2]);
+  const remainingTickets = reactExports.useMemo(() => {
+    if (!ticket) return 0;
+    return getRemainingTickets(ticket);
+  }, [ticket, quantities, getRemainingTickets]);
+  const rollo1Installed = (ticket?.rollo1 ?? 0) !== -1;
+  const rollo2Installed = (ticket?.rollo2 ?? 0) !== -1;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "flex justify-center items-center pt-2",
+      role: "region",
+      "aria-label": "Contadores de rollos",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "div",
+          {
+            className: "flex-1 text-center text-[rgb(24,62,117)] text-lg",
+            "aria-label": `Rollo 1: ${rollo1Installed ? remainingRollo1 + " etiquetas restantes" : "no instalado"}`,
+            children: rollo1Installed ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-bold", children: remainingRollo1 }),
+              ' "',
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: nombreModelo1 }),
+              '" ',
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm", children: [
+                "(Venta: ",
+                usedRollo1,
+                ")"
+              ] })
+            ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-gray-400 italic", children: "Rollo 1 no instalado" })
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "div",
+          {
+            className: "flex-1 text-center text-[rgb(24,62,117)]",
+            "aria-label": `Tickets: ${remainingTickets} restantes, ${usedTickets} utilizados`,
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Tickets: " }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-bold", children: remainingTickets }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm", children: [
+                " (Utilizados: ",
+                usedTickets,
+                ")"
+              ] })
+            ]
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "div",
+          {
+            className: "flex-1 text-center text-[rgb(24,62,117)] text-lg",
+            "aria-label": `Rollo 2: ${rollo2Installed ? remainingRollo2 + " etiquetas restantes" : "no instalado"}`,
+            children: rollo2Installed ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-bold", children: remainingRollo2 }),
+              ' "',
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: nombreModelo2 }),
+              '" ',
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm", children: [
+                "(Venta: ",
+                usedRollo2,
+                ")"
+              ] })
+            ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-gray-400 italic", children: "Rollo 2 no instalado" })
+          }
+        )
+      ]
+    }
+  );
+}
 function KioskoView() {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center justify-center h-full p-8", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-3xl font-bold mb-4", children: "Kiosko" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-muted-foreground", children: "Vista principal de venta — Tabla de tarifas, carrito, impresión" })
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col h-full p-2 gap-2 overflow-auto", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(StampModels, {}),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx(TariffTable, {}) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(CartControls, {})
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(RollCounters, {})
+  ] });
+}
+const MES_OPTIONS = [
+  { value: 0, label: "Auto" },
+  { value: 1, label: "1" },
+  { value: 2, label: "2" },
+  { value: 3, label: "3" },
+  { value: 4, label: "4" },
+  { value: 5, label: "5" },
+  { value: 6, label: "6" },
+  { value: 7, label: "7" },
+  { value: 8, label: "8" },
+  { value: 9, label: "9" },
+  { value: 10, label: "O" },
+  { value: 11, label: "N" },
+  { value: 12, label: "D" }
+];
+function CodigoSection({ codigo, onChange }) {
+  const [collapsed, setCollapsed] = reactExports.useState(true);
+  const [modo, setModo] = reactExports.useState(codigo.modo);
+  const [mes, setMes] = reactExports.useState(codigo.mes);
+  const [pais, setPais] = reactExports.useState(codigo.pais);
+  const [modoAnnio, setModoAnnio] = reactExports.useState(
+    codigo.annio === "auto" ? "auto" : "manual"
+  );
+  const [annioManual, setAnnioManual] = reactExports.useState(
+    codigo.annio === "auto" ? "" : codigo.annio
+  );
+  const [maquina, setMaquina] = reactExports.useState(codigo.maquina);
+  const [cliente, setCliente] = reactExports.useState(String(codigo.cliente));
+  const [producto] = reactExports.useState(String(codigo.producto));
+  reactExports.useEffect(() => {
+    setModo(codigo.modo);
+    setMes(codigo.mes);
+    setPais(codigo.pais);
+    setModoAnnio(codigo.annio === "auto" ? "auto" : "manual");
+    setAnnioManual(codigo.annio === "auto" ? "" : codigo.annio);
+    setMaquina(codigo.maquina);
+    setCliente(String(codigo.cliente));
+  }, [codigo]);
+  const displayMes = reactExports.useMemo(() => {
+    if (mes === 0) return "Automático";
+    const opt = MES_OPTIONS.find((o) => o.value === mes);
+    return opt?.label ?? String(mes);
+  }, [mes]);
+  const propagate = reactExports.useCallback(
+    (partial) => {
+      onChange(partial);
+    },
+    [onChange]
+  );
+  const handleModoChange = (value) => {
+    const trimmed = value.slice(0, 1).toUpperCase();
+    setModo(trimmed);
+    propagate({ modo: trimmed });
+  };
+  const handleMesChange = (value) => {
+    const numValue = parseInt(value, 10);
+    setMes(numValue);
+    propagate({ mes: numValue });
+  };
+  const handlePaisChange = (value) => {
+    const trimmed = value.slice(0, 2).toUpperCase();
+    setPais(trimmed);
+    propagate({ pais: trimmed });
+  };
+  const handleModoAnnioChange = (value) => {
+    setModoAnnio(value);
+    if (value === "auto") {
+      setAnnioManual("");
+      propagate({ annio: "auto" });
+    } else {
+      propagate({ annio: annioManual || "auto" });
+    }
+  };
+  const handleAnnioManualChange = (value) => {
+    const num = parseInt(value, 10);
+    if (isNaN(num)) {
+      setAnnioManual("");
+      propagate({ annio: "auto" });
+    } else {
+      const clamped = Math.max(0, Math.min(99, num));
+      const strVal = String(clamped);
+      setAnnioManual(strVal);
+      propagate({ annio: strVal });
+    }
+  };
+  const handleMaquinaChange = (value) => {
+    const trimmed = value.slice(0, 4).toUpperCase();
+    setMaquina(trimmed);
+    propagate({ maquina: trimmed });
+  };
+  const handleClienteChange = (value) => {
+    setCliente(value);
+    const num = parseInt(value, 10);
+    if (!isNaN(num) && num >= 0) {
+      propagate({ cliente: num });
+    }
+  };
+  const handleResetCliente = (resetValue) => {
+    setCliente(String(resetValue));
+    propagate({ cliente: resetValue });
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "codigo-section-heading", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "button",
+      {
+        type: "button",
+        id: "codigo-section-heading",
+        className: "w-full bg-[rgb(255,192,0)] p-2 rounded cursor-pointer flex items-center gap-2\n                   text-left focus:outline-none focus:ring-2 focus:ring-yellow-500",
+        onClick: () => setCollapsed(!collapsed),
+        "aria-expanded": !collapsed,
+        "aria-controls": "codigo-section-content",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "checkbox",
+              checked: !collapsed,
+              readOnly: true,
+              className: "cursor-pointer",
+              tabIndex: -1,
+              "aria-hidden": "true"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "text-base font-bold m-0", children: [
+            "CÓDIGO ETIQUETA: ",
+            displayMes,
+            "-",
+            maquina
+          ] })
+        ]
+      }
+    ),
+    !collapsed && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        id: "codigo-section-content",
+        className: "border border-gray-200 rounded-b p-4 bg-white",
+        role: "region",
+        "aria-label": "Campos de código de etiqueta",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start gap-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "codigo-modo", className: "text-xs text-gray-600", children: "Modo" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                id: "codigo-modo",
+                type: "text",
+                value: modo,
+                onChange: (e) => handleModoChange(e.target.value),
+                maxLength: 1,
+                className: "w-12 border-b border-gray-400 focus:border-blue-500 outline-none text-center",
+                "aria-describedby": "codigo-modo-desc"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { id: "codigo-modo-desc", className: "sr-only", children: "Modo del código de etiqueta (1 carácter, ej: P, F)" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "codigo-mes", className: "text-xs text-gray-600", children: "Mes" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "select",
+              {
+                id: "codigo-mes",
+                value: mes,
+                onChange: (e) => handleMesChange(e.target.value),
+                className: "border-b border-gray-400 text-red-600 outline-none",
+                children: MES_OPTIONS.map((opt) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: opt.value, children: opt.label }, opt.value))
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "codigo-pais", className: "text-xs text-gray-600", children: "País" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                id: "codigo-pais",
+                type: "text",
+                value: pais,
+                onChange: (e) => handlePaisChange(e.target.value),
+                maxLength: 2,
+                className: "w-12 border-b border-gray-400 focus:border-blue-500 outline-none text-center"
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "codigo-annio-mode", className: "text-xs text-gray-600", children: "Año" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "select",
+              {
+                id: "codigo-annio-mode",
+                value: modoAnnio === "auto" ? "1" : "2",
+                onChange: (e) => handleModoAnnioChange(e.target.value === "1" ? "auto" : "manual"),
+                className: "border-b border-gray-400 outline-none",
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "1", children: "Auto" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "2", children: "Manual" })
+                ]
+              }
+            ),
+            modoAnnio === "manual" && /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                id: "codigo-annio-manual",
+                type: "number",
+                value: annioManual,
+                onChange: (e) => handleAnnioManualChange(e.target.value),
+                min: 0,
+                max: 99,
+                className: "w-16 mt-1 border-b border-gray-400 outline-none",
+                placeholder: "Año",
+                "aria-label": "Año manual (2 dígitos)"
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "codigo-maquina", className: "text-xs text-gray-600", children: "Código Evento" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                id: "codigo-maquina",
+                type: "text",
+                value: maquina,
+                onChange: (e) => handleMaquinaChange(e.target.value),
+                minLength: 4,
+                maxLength: 4,
+                className: "w-20 border-b border-gray-400 text-red-600 focus:border-blue-500 outline-none"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 bg-[rgb(255,124,56)] text-white text-xs px-2 py-1 rounded", children: "(MD--) (FI--): NO imprime LOGO ni TICKET por TIRA" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 bg-[rgb(255,124,56)] text-white text-xs px-2 py-1 rounded", children: "(FI--): NO imprime FECHA ni EVENTO en las ETIQUETAS" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "codigo-cliente", className: "text-xs text-gray-600", children: "ID Cliente" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                id: "codigo-cliente",
+                type: "text",
+                value: cliente,
+                onChange: (e) => handleClienteChange(e.target.value),
+                className: "w-24 border-b border-gray-400 text-red-600 focus:border-blue-500 outline-none",
+                "aria-describedby": "codigo-cliente-desc"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { id: "codigo-cliente-desc", className: "sr-only", children: "Identificador incremental de sesión (0-9999)" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                className: "mt-1 bg-gray-200 text-xs px-2 py-1 rounded hover:bg-gray-300\n                           focus:outline-none focus:ring-2 focus:ring-gray-400",
+                onClick: () => handleResetCliente(1),
+                children: "Reset al inicio del año ATM NACIONAL=1"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                className: "mt-1 bg-gray-200 text-xs px-2 py-1 rounded hover:bg-gray-300\n                           focus:outline-none focus:ring-2 focus:ring-gray-400",
+                onClick: () => handleResetCliente(5001),
+                children: "Reset al inicio del año i7 Mojave=5001"
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "codigo-producto", className: "text-xs text-gray-600", children: "ID Producto" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                id: "codigo-producto",
+                type: "text",
+                value: producto,
+                disabled: true,
+                className: "w-16 border-b border-gray-300 text-gray-500 outline-none bg-transparent",
+                "aria-readonly": "true"
+              }
+            )
+          ] })
+        ] })
+      }
+    )
+  ] });
+}
+function TicketSection({
+  ticket,
+  activeProfileName,
+  feriaDisplay,
+  lugarDisplay,
+  onChange
+}) {
+  const [collapsed, setCollapsed] = reactExports.useState(true);
+  const [eltitulo, setEltitulo] = reactExports.useState(ticket.eltitulo ?? "");
+  const [limiteImporte, setLimiteImporte] = reactExports.useState(String(ticket.limiteImporte ?? ""));
+  const [nuevoLimiteImporte, setNuevoLimiteImporte] = reactExports.useState(
+    String(ticket.NUEVOlimiteImporte ?? "")
+  );
+  const [empresa, setEmpresa] = reactExports.useState(ticket.empresa);
+  const [cif, setCif] = reactExports.useState(ticket.cif);
+  const [cp, setCp] = reactExports.useState(ticket.cp);
+  const [l1, setL1] = reactExports.useState(ticket.l1);
+  const [l2, setL2] = reactExports.useState(ticket.l2);
+  const [l3, setL3] = reactExports.useState(ticket.l3);
+  const [modoFecha, setModoFecha] = reactExports.useState(
+    ticket.fecha === "auto" ? "auto" : "manual"
+  );
+  const [fechaManual, setFechaManual] = reactExports.useState(ticket.fecha === "auto" ? "" : ticket.fecha);
+  const [modoHora, setModoHora] = reactExports.useState(
+    ticket.hora === "auto" ? "auto" : "manual"
+  );
+  const [horaManual, setHoraManual] = reactExports.useState(ticket.hora === "auto" ? "" : ticket.hora);
+  const [imprimeCopiaTicket, setImprimeCopiaTicket] = reactExports.useState(ticket.ImprimeCopiaTicket ?? "S");
+  const [imprimeMasterTicket, setImprimeMasterTicket] = reactExports.useState(
+    ticket.ImprimeMasterTicket ?? "N"
+  );
+  reactExports.useEffect(() => {
+    setEltitulo(ticket.eltitulo ?? "");
+    setLimiteImporte(String(ticket.limiteImporte ?? ""));
+    setNuevoLimiteImporte(String(ticket.NUEVOlimiteImporte ?? ""));
+    setEmpresa(ticket.empresa);
+    setCif(ticket.cif);
+    setCp(ticket.cp);
+    setL1(ticket.l1);
+    setL2(ticket.l2);
+    setL3(ticket.l3);
+    setModoFecha(ticket.fecha === "auto" ? "auto" : "manual");
+    setFechaManual(ticket.fecha === "auto" ? "" : ticket.fecha);
+    setModoHora(ticket.hora === "auto" ? "auto" : "manual");
+    setHoraManual(ticket.hora === "auto" ? "" : ticket.hora);
+    setImprimeCopiaTicket(ticket.ImprimeCopiaTicket ?? "S");
+    setImprimeMasterTicket(ticket.ImprimeMasterTicket ?? "N");
+  }, [ticket]);
+  const displayTitulo = activeProfileName === "FERIA" ? eltitulo : activeProfileName;
+  const displayTituloCopia = activeProfileName === "FERIA" ? ticket.tituloCopia || `COPIA ${eltitulo}` : `COPIA ${activeProfileName}`;
+  const propagate = reactExports.useCallback(
+    (partial) => {
+      onChange(partial);
+    },
+    [onChange]
+  );
+  const handleEltituloChange = (value) => {
+    setEltitulo(value);
+    propagate({ eltitulo: value });
+  };
+  const handleLimiteImporteChange = (value) => {
+    setLimiteImporte(value);
+    const num = parseFloat(value);
+    if (!isNaN(num) && num >= 0) {
+      propagate({ limiteImporte: num });
+    }
+  };
+  const handleNuevoLimiteImporteChange = (value) => {
+    setNuevoLimiteImporte(value);
+    const num = parseFloat(value);
+    if (!isNaN(num) && num >= 0) {
+      propagate({ NUEVOlimiteImporte: num });
+    }
+  };
+  const handleEmpresaChange = (value) => {
+    setEmpresa(value);
+    propagate({ empresa: value });
+  };
+  const handleCifChange = (value) => {
+    setCif(value);
+    propagate({ cif: value });
+  };
+  const handleCpChange = (value) => {
+    setCp(value);
+    propagate({ cp: value });
+  };
+  const handleL1Change = (value) => {
+    setL1(value);
+    propagate({ l1: value });
+  };
+  const handleL2Change = (value) => {
+    setL2(value);
+    propagate({ l2: value });
+  };
+  const handleL3Change = (value) => {
+    setL3(value);
+    propagate({ l3: value });
+  };
+  const handleModoFechaChange = (value) => {
+    setModoFecha(value);
+    if (value === "auto") {
+      setFechaManual("");
+      propagate({ fecha: "auto" });
+    } else {
+      propagate({ fecha: fechaManual || "auto" });
+    }
+  };
+  const handleFechaManualChange = (value) => {
+    setFechaManual(value);
+    propagate({ fecha: value || "auto" });
+  };
+  const handleModoHoraChange = (value) => {
+    setModoHora(value);
+    if (value === "auto") {
+      setHoraManual("");
+      propagate({ hora: "auto" });
+    } else {
+      propagate({ hora: horaManual || "auto" });
+    }
+  };
+  const handleHoraManualChange = (value) => {
+    setHoraManual(value);
+    propagate({ hora: value || "auto" });
+  };
+  const handleImprimeCopiaChange = (value) => {
+    const normalized = value.slice(0, 1).toUpperCase();
+    setImprimeCopiaTicket(normalized);
+    propagate({ ImprimeCopiaTicket: normalized });
+  };
+  const handleImprimeMasterChange = (value) => {
+    const normalized = value.slice(0, 1).toUpperCase();
+    setImprimeMasterTicket(normalized);
+    propagate({ ImprimeMasterTicket: normalized });
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "ticket-section-heading", className: "mt-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "button",
+      {
+        type: "button",
+        id: "ticket-section-heading",
+        className: "w-full bg-[rgb(255,192,0)] p-2 rounded cursor-pointer flex items-center gap-2\n                   text-left focus:outline-none focus:ring-2 focus:ring-yellow-500",
+        onClick: () => setCollapsed(!collapsed),
+        "aria-expanded": !collapsed,
+        "aria-controls": "ticket-section-content",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "checkbox",
+              checked: !collapsed,
+              readOnly: true,
+              className: "cursor-pointer",
+              tabIndex: -1,
+              "aria-hidden": "true"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "text-base font-bold m-0", children: [
+            "TICKET: ",
+            displayTitulo,
+            " - COPIA TICKET: ",
+            imprimeCopiaTicket,
+            " - MASTER TICKET:",
+            " ",
+            imprimeMasterTicket
+          ] })
+        ]
+      }
+    ),
+    !collapsed && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        id: "ticket-section-content",
+        className: "border border-gray-200 rounded-b p-4 bg-white",
+        role: "region",
+        "aria-label": "Campos de configuración de ticket",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-8", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 flex flex-col gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-gray-100 p-2 rounded shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-sm font-bold m-0", children: "Cabecera Ticket" }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xl font-bold text-center", children: [
+              feriaDisplay,
+              /* @__PURE__ */ jsxRuntimeExports.jsx("br", {}),
+              lugarDisplay
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-gray-100 p-2 rounded shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-sm font-bold m-0", children: "Empresa" }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "ticket-empresa", className: "text-xs text-gray-600", children: "Empresa" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  id: "ticket-empresa",
+                  type: "text",
+                  value: empresa,
+                  onChange: (e) => handleEmpresaChange(e.target.value),
+                  className: "w-[400px] border-b border-gray-400 outline-none"
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "ticket-cif", className: "text-xs text-gray-600", children: "CIF" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  id: "ticket-cif",
+                  type: "text",
+                  value: cif,
+                  onChange: (e) => handleCifChange(e.target.value),
+                  className: "w-[400px] border-b border-gray-400 outline-none"
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "ticket-cp", className: "text-xs text-gray-600", children: "CP Población" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  id: "ticket-cp",
+                  type: "text",
+                  value: cp,
+                  onChange: (e) => handleCpChange(e.target.value),
+                  className: "w-[400px] border-b border-gray-400 outline-none"
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-gray-100 p-2 rounded shadow-sm mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-sm font-bold m-0", children: "Pié del Ticket" }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "ticket-l1", className: "text-xs text-gray-600", children: "Detalle línea 1" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  id: "ticket-l1",
+                  type: "text",
+                  value: l1,
+                  onChange: (e) => handleL1Change(e.target.value),
+                  className: "w-[400px] border-b border-gray-400 outline-none"
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "ticket-l2", className: "text-xs text-gray-600", children: "Detalle línea 2" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  id: "ticket-l2",
+                  type: "text",
+                  value: l2,
+                  onChange: (e) => handleL2Change(e.target.value),
+                  className: "w-[400px] border-b border-gray-400 outline-none"
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "ticket-l3", className: "text-xs text-gray-600", children: "Detalle línea 3" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  id: "ticket-l3",
+                  type: "text",
+                  value: l3,
+                  onChange: (e) => handleL3Change(e.target.value),
+                  className: "w-[400px] border-b border-gray-400 outline-none"
+                }
+              )
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 flex flex-col gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-gray-100 p-2 rounded shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-sm font-bold m-0", children: "Tipo de Documento" }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "ticket-eltitulo", className: "text-xs text-gray-600", children: "Título ticket (Sólo Perfil FERIA)" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  id: "ticket-eltitulo",
+                  type: "text",
+                  value: eltitulo,
+                  onChange: (e) => handleEltituloChange(e.target.value),
+                  className: "w-[400px] border-b border-gray-400 text-red-600 outline-none"
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "ticket-tituloCopia", className: "text-xs text-gray-600", children: "Título ticket copia (Perfil Activo)" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  id: "ticket-tituloCopia",
+                  type: "text",
+                  value: displayTituloCopia,
+                  disabled: true,
+                  className: "w-[400px] border-b border-gray-300 text-gray-500 outline-none bg-transparent",
+                  "aria-readonly": "true"
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "ticket-limiteImporte", className: "text-xs text-gray-600", children: "Límite importe sólo FERIA" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  id: "ticket-limiteImporte",
+                  type: "text",
+                  value: limiteImporte,
+                  onChange: (e) => handleLimiteImporteChange(e.target.value),
+                  className: "w-[400px] border-b border-gray-400 text-red-600 outline-none"
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "ticket-nuevoLimiteImporte", className: "text-xs text-gray-600", children: "NUEVO Límite importe EXCEPTO FERIA" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  id: "ticket-nuevoLimiteImporte",
+                  type: "text",
+                  value: nuevoLimiteImporte,
+                  onChange: (e) => handleNuevoLimiteImporteChange(e.target.value),
+                  className: "w-[400px] border-b border-gray-400 text-red-600 outline-none"
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-gray-100 p-2 rounded shadow-sm mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-sm font-bold m-0", children: "Modo Fecha Ticket" }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "ticket-modoFecha", className: "text-xs text-gray-600", children: "Fecha" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "select",
+                {
+                  id: "ticket-modoFecha",
+                  value: modoFecha === "auto" ? "1" : "2",
+                  onChange: (e) => handleModoFechaChange(e.target.value === "1" ? "auto" : "manual"),
+                  className: "border-b border-gray-400 outline-none",
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "1", children: "Automático" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "2", children: "Manual" })
+                  ]
+                }
+              )
+            ] }),
+            modoFecha === "manual" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "ticket-fechaManual", className: "text-xs text-gray-600", children: "Fecha" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  id: "ticket-fechaManual",
+                  type: "text",
+                  value: fechaManual,
+                  onChange: (e) => handleFechaManualChange(e.target.value),
+                  className: "w-[400px] border-b border-gray-400 outline-none",
+                  placeholder: "DD/MM/AAAA"
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "ticket-modoHora", className: "text-xs text-gray-600", children: "Hora" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "select",
+                {
+                  id: "ticket-modoHora",
+                  value: modoHora === "auto" ? "1" : "2",
+                  onChange: (e) => handleModoHoraChange(e.target.value === "1" ? "auto" : "manual"),
+                  className: "border-b border-gray-400 outline-none",
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "1", children: "Automático" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "2", children: "Manual" })
+                  ]
+                }
+              )
+            ] }),
+            modoHora === "manual" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "ticket-horaManual", className: "text-xs text-gray-600", children: "Hora" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  id: "ticket-horaManual",
+                  type: "text",
+                  value: horaManual,
+                  onChange: (e) => handleHoraManualChange(e.target.value),
+                  className: "w-[400px] border-b border-gray-400 outline-none",
+                  placeholder: "HH:MM"
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-gray-100 p-2 rounded shadow-sm mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-sm font-bold m-0", children: "COPIA Ticket para CAJA" }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "ticket-imprimeCopia", className: "text-xs text-gray-600", children: "IMPRIMIR COPIA TICKET S/N" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  id: "ticket-imprimeCopia",
+                  type: "text",
+                  value: imprimeCopiaTicket,
+                  onChange: (e) => handleImprimeCopiaChange(e.target.value),
+                  maxLength: 1,
+                  className: "w-[400px] border-b border-gray-400 text-red-600 outline-none"
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-red-600 text-white p-2 rounded shadow-sm mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-sm font-bold m-0", children: "IMPRIME SIEMPRE TICKET MASTER SET: VENDER 5 TIRAS DE 4 TARIFAS CADA VEZ" }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "ticket-imprimeMaster", className: "text-xs text-gray-600", children: "IMPRIMIR TICKET MASTER SET S/N" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  id: "ticket-imprimeMaster",
+                  type: "text",
+                  value: imprimeMasterTicket,
+                  onChange: (e) => handleImprimeMasterChange(e.target.value),
+                  maxLength: 1,
+                  className: "w-[400px] border-b border-gray-400 text-red-600 outline-none"
+                }
+              )
+            ] })
+          ] })
+        ] })
+      }
+    )
+  ] });
+}
+function createRollAuditOrder(event) {
+  return {
+    event,
+    venue: " ",
+    machine: " ",
+    vendType: " ",
+    productName: " ",
+    transactionDate: (/* @__PURE__ */ new Date()).toISOString(),
+    quantity: 0,
+    quantitySet: 0,
+    totalStamps: 0,
+    currency: " ",
+    value: 0,
+    paymentStatus: " ",
+    sesionId: 0,
+    etiquetasRollo1: 0,
+    etiquetasRollo2: 0,
+    etiquetaMes: " ",
+    tituloEvento: " ",
+    feria: " ",
+    lugar: " ",
+    fecha: " ",
+    mes: " ",
+    annio: " ",
+    documento: " "
+  };
+}
+function RollosSection({
+  ticket,
+  nombreModelo1,
+  nombreModelo2,
+  onChange,
+  onInsertOrder
+}) {
+  const [limiteTickets, setLimiteTickets] = reactExports.useState(String(ticket.limiteTickets ?? 450));
+  const [tickets, setTickets] = reactExports.useState(String(ticket.tickets ?? 0));
+  const [rollo1, setRollo1] = reactExports.useState(ticket.rollo1 ?? 0);
+  const [rollo2, setRollo2] = reactExports.useState(ticket.rollo2 ?? 0);
+  const [cantidad1, setCantidad1] = reactExports.useState(0);
+  const [desechadas1, setDesechadas1] = reactExports.useState(0);
+  const [cantidad2, setCantidad2] = reactExports.useState(0);
+  const [desechadas2, setDesechadas2] = reactExports.useState(0);
+  reactExports.useEffect(() => {
+    setLimiteTickets(String(ticket.limiteTickets ?? 450));
+    setTickets(String(ticket.tickets ?? 0));
+    setRollo1(ticket.rollo1 ?? 0);
+    setRollo2(ticket.rollo2 ?? 0);
+  }, [ticket]);
+  const isRollo1Installed = rollo1 !== -1;
+  const isRollo2Installed = rollo2 !== -1;
+  const isBlocked = isRollo1Installed || isRollo2Installed;
+  const propagate = reactExports.useCallback(
+    (partial) => {
+      onChange(partial);
+    },
+    [onChange]
+  );
+  const handleLimiteTicketsChange = (value) => {
+    setLimiteTickets(value);
+    const num = parseInt(value, 10);
+    if (!isNaN(num) && num >= 0) {
+      propagate({ limiteTickets: num });
+    }
+  };
+  const handleTicketsChange = (value) => {
+    setTickets(value);
+    const num = parseInt(value, 10);
+    if (!isNaN(num) && num >= 0) {
+      propagate({ tickets: num });
+    }
+  };
+  const handleResetTickets = () => {
+    const limite = parseInt(limiteTickets, 10) || 450;
+    setTickets(String(limite));
+    propagate({ tickets: limite });
+  };
+  const handleRollo1Change = (value) => {
+    const num = parseInt(value, 10);
+    if (!isNaN(num)) {
+      setRollo1(num);
+      propagate({ rollo1: num });
+    }
+  };
+  const handleRollo2Change = (value) => {
+    const num = parseInt(value, 10);
+    if (!isNaN(num)) {
+      setRollo2(num);
+      propagate({ rollo2: num });
+    }
+  };
+  const handleQuitarRollo1 = async () => {
+    const order = createRollAuditOrder("QUITAR ROLLO 1");
+    try {
+      await onInsertOrder(order);
+    } catch (err) {
+      console.error("Error registering roll 1 removal:", err);
+    }
+    setRollo1(-1);
+    propagate({ rollo1: -1 });
+  };
+  const handleQuitarRollo2 = async () => {
+    const order = createRollAuditOrder("QUITAR ROLLO 2");
+    try {
+      await onInsertOrder(order);
+    } catch (err) {
+      console.error("Error registering roll 2 removal:", err);
+    }
+    setRollo2(-1);
+    propagate({ rollo2: -1 });
+  };
+  const handleColocarRollo1 = async () => {
+    const order = createRollAuditOrder("COLOCAR ROLLO 1");
+    try {
+      await onInsertOrder(order);
+    } catch (err) {
+      console.error("Error registering roll 1 placement:", err);
+    }
+    const newValue = (cantidad1 || 0) - (desechadas1 || 0);
+    setRollo1(newValue);
+    propagate({ rollo1: newValue });
+    setCantidad1(0);
+    setDesechadas1(0);
+  };
+  const handleColocarRollo2 = async () => {
+    const order = createRollAuditOrder("COLOCAR ROLLO 2");
+    try {
+      await onInsertOrder(order);
+    } catch (err) {
+      console.error("Error registering roll 2 placement:", err);
+    }
+    const newValue = (cantidad2 || 0) - (desechadas2 || 0);
+    setRollo2(newValue);
+    propagate({ rollo2: newValue });
+    setCantidad2(0);
+    setDesechadas2(0);
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "rollos-section-heading", className: "mt-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-gray-100 p-2 rounded shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-sm font-bold m-0", children: "Máximo Nº de Tickets" }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1 mt-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "rollos-limiteTickets", className: "text-xs text-gray-600", children: "Cantidad por Rollo" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            id: "rollos-limiteTickets",
+            type: "text",
+            value: limiteTickets,
+            onChange: (e) => handleLimiteTicketsChange(e.target.value),
+            className: "w-[400px] border-b border-gray-400 text-red-600 outline-none"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-[rgb(51,102,153)] rounded p-4 mt-2 flex flex-col items-center", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "rollos-tickets", className: "text-xs text-white", children: "Rollo Tickets" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            id: "rollos-tickets",
+            type: "text",
+            value: tickets,
+            onChange: (e) => handleTicketsChange(e.target.value),
+            className: "w-32 text-center text-white bg-transparent border-b border-white outline-none"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            className: "mt-2 bg-white text-black px-3 py-1 rounded text-sm hover:bg-gray-100",
+            onClick: handleResetTickets,
+            children: "Reset"
+          }
+        )
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        id: "rollos-section-heading",
+        className: "bg-[rgb(255,192,0)] p-2 rounded mt-4",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-base font-bold m-0", children: "ROLLOS ETIQUETAS EN MÁQUINA" })
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex justify-center gap-8 mt-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col items-center", children: isRollo1Installed && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-gray-100 p-2 rounded shadow-sm mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("h4", { className: "text-sm font-bold m-0", children: [
+          "Motivo ",
+          nombreModelo1 || "Modelo 1"
+        ] }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1 mt-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "rollos-rollo1", className: "text-xs text-gray-600", children: "Existencias" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              id: "rollos-rollo1",
+              type: "text",
+              value: String(rollo1),
+              onChange: (e) => handleRollo1Change(e.target.value),
+              className: "w-[400px] border-b border-gray-400 text-xl outline-none"
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            className: "mt-2 bg-[rgb(153,38,0)] text-white px-4 py-2 rounded font-semibold\n                           hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-red-500",
+            onClick: handleQuitarRollo1,
+            children: "CONFIRMAR ROLLO QUITADO"
+          }
+        )
+      ] }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-8" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col items-center", children: isRollo2Installed && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-gray-100 p-2 rounded shadow-sm mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("h4", { className: "text-sm font-bold m-0", children: [
+          "Motivo ",
+          nombreModelo2 || "Modelo 2"
+        ] }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1 mt-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "rollos-rollo2", className: "text-xs text-gray-600", children: "Existencias" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              id: "rollos-rollo2",
+              type: "text",
+              value: String(rollo2),
+              onChange: (e) => handleRollo2Change(e.target.value),
+              className: "w-[400px] border-b border-gray-400 text-xl outline-none"
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            className: "mt-2 bg-[rgb(153,38,0)] text-white px-4 py-2 rounded font-semibold\n                           hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-red-500",
+            onClick: handleQuitarRollo2,
+            children: "CONFIRMAR ROLLO QUITADO"
+          }
+        )
+      ] }) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-[rgb(51,102,153)] text-white p-2 rounded mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-base font-bold m-0", children: "INSTALAR ROLLOS ETIQUETAS" }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex justify-center gap-8 mt-4", children: [
+      !isRollo1Installed && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-gray-100 p-2 rounded shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("h4", { className: "text-sm font-bold m-0", children: [
+          "Colocar rollo ",
+          nombreModelo1 || "Modelo 1"
+        ] }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1 mt-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "rollos-cantidad1", className: "text-xs text-gray-600", children: "Etiquetas en rollo" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              id: "rollos-cantidad1",
+              type: "number",
+              value: cantidad1,
+              onChange: (e) => setCantidad1(parseInt(e.target.value, 10) || 0),
+              className: "w-[400px] border-b border-gray-400 outline-none",
+              min: 0
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1 mt-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "rollos-desechadas1", className: "text-xs text-gray-600", children: "Desechadas en la instalación" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              id: "rollos-desechadas1",
+              type: "number",
+              value: desechadas1,
+              onChange: (e) => setDesechadas1(parseInt(e.target.value, 10) || 0),
+              className: "w-[400px] border-b border-gray-400 outline-none",
+              min: 0
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            className: "mt-2 bg-gray-400 text-white px-4 py-2 rounded font-semibold\n                         hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500",
+            onClick: handleColocarRollo1,
+            children: "CONFIRMAR COLOCACIÓN ROLLO"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-8" }),
+      !isRollo2Installed && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-gray-100 p-2 rounded shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("h4", { className: "text-sm font-bold m-0", children: [
+          "Colocar rollo ",
+          nombreModelo2 || "Modelo 2"
+        ] }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1 mt-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "rollos-cantidad2", className: "text-xs text-gray-600", children: "Etiquetas en rollo" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              id: "rollos-cantidad2",
+              type: "number",
+              value: cantidad2,
+              onChange: (e) => setCantidad2(parseInt(e.target.value, 10) || 0),
+              className: "w-[400px] border-b border-gray-400 outline-none",
+              min: 0
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1 mt-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "rollos-desechadas2", className: "text-xs text-gray-600", children: "Desechadas en la instalación" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              id: "rollos-desechadas2",
+              type: "number",
+              value: desechadas2,
+              onChange: (e) => setDesechadas2(parseInt(e.target.value, 10) || 0),
+              className: "w-[400px] border-b border-gray-400 outline-none",
+              min: 0
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            className: "mt-2 bg-gray-400 text-white px-4 py-2 rounded font-semibold\n                         hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500",
+            onClick: handleColocarRollo2,
+            children: "CONFIRMAR COLOCACIÓN ROLLO"
+          }
+        )
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex justify-center mt-4", children: !isBlocked ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "bg-[rgb(0,153,51)] rounded px-4 py-2",
+        role: "status",
+        "aria-live": "polite",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-white text-xl font-bold", children: "DESBLOQUEADO" })
+      }
+    ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "bg-[rgb(153,38,0)] rounded px-4 py-2",
+        role: "status",
+        "aria-live": "polite",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-white text-xl font-bold", children: "BLOQUEADO" })
+      }
+    ) })
+  ] });
+}
+function TirasSection({
+  ticket,
+  nombreModelo1,
+  nombreModelo2,
+  onChange
+}) {
+  const [collapsed, setCollapsed] = reactExports.useState(true);
+  const [t1especial, setT1especial] = reactExports.useState(String(ticket.T1especial ?? 0));
+  const [t2especial, setT2especial] = reactExports.useState(String(ticket.T2especial ?? 0));
+  const [t3especial, setT3especial] = reactExports.useState(String(ticket.T3especial ?? 0));
+  const [temod1, setTemod1] = reactExports.useState(ticket.TEmod1 ?? "N");
+  const [temod2, setTemod2] = reactExports.useState(ticket.TEmod2 ?? "N");
+  reactExports.useEffect(() => {
+    setT1especial(String(ticket.T1especial ?? 0));
+    setT2especial(String(ticket.T2especial ?? 0));
+    setT3especial(String(ticket.T3especial ?? 0));
+    setTemod1(ticket.TEmod1 ?? "N");
+    setTemod2(ticket.TEmod2 ?? "N");
+  }, [ticket]);
+  const propagate = reactExports.useCallback(
+    (partial) => {
+      onChange(partial);
+    },
+    [onChange]
+  );
+  const handleT1especialChange = (value) => {
+    setT1especial(value);
+    const num = parseFloat(value);
+    if (!isNaN(num) && num >= 0) {
+      propagate({ T1especial: num });
+    } else if (value === "" || value === "0") {
+      propagate({ T1especial: 0 });
+    }
+  };
+  const handleT2especialChange = (value) => {
+    setT2especial(value);
+    const num = parseFloat(value);
+    if (!isNaN(num) && num >= 0) {
+      propagate({ T2especial: num });
+    } else if (value === "" || value === "0") {
+      propagate({ T2especial: 0 });
+    }
+  };
+  const handleT3especialChange = (value) => {
+    setT3especial(value);
+    const num = parseFloat(value);
+    if (!isNaN(num) && num >= 0) {
+      propagate({ T3especial: num });
+    } else if (value === "" || value === "0") {
+      propagate({ T3especial: 0 });
+    }
+  };
+  const handleTemod1Change = (value) => {
+    const normalized = value.slice(0, 1).toUpperCase();
+    setTemod1(normalized);
+    propagate({ TEmod1: normalized });
+  };
+  const handleTemod2Change = (value) => {
+    const normalized = value.slice(0, 1).toUpperCase();
+    setTemod2(normalized);
+    propagate({ TEmod2: normalized });
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "tiras-section-heading", className: "mt-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "button",
+      {
+        type: "button",
+        id: "tiras-section-heading",
+        className: "w-full bg-[rgb(255,192,0)] p-2 rounded cursor-pointer flex items-center gap-2\n                   text-left focus:outline-none focus:ring-2 focus:ring-yellow-500",
+        onClick: () => setCollapsed(!collapsed),
+        "aria-expanded": !collapsed,
+        "aria-controls": "tiras-section-content",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "checkbox",
+              checked: !collapsed,
+              readOnly: true,
+              className: "cursor-pointer",
+              tabIndex: -1,
+              "aria-hidden": "true"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "text-base font-bold m-0", children: [
+            "TIRAS ESPECIALES ",
+            nombreModelo1 || "Modelo 1",
+            ": ",
+            temod1,
+            " / ",
+            nombreModelo2 || "Modelo 2",
+            ":",
+            " ",
+            temod2
+          ] })
+        ]
+      }
+    ),
+    !collapsed && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        id: "tiras-section-content",
+        className: "border border-gray-200 rounded-b p-4 bg-white",
+        role: "region",
+        "aria-label": "Campos de configuración de tiras especiales",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-8", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 flex flex-col gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-gray-100 p-2 rounded shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-sm font-bold m-0", children: "(NO dejar en blanco) IMPORTE € DE VENTA para:" }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "tiras-t1especial", className: "text-xs text-gray-600", children: "1 TIRA ESPECIAL (0 = ANULA LA TIRA)" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  id: "tiras-t1especial",
+                  type: "number",
+                  value: t1especial,
+                  onChange: (e) => handleT1especialChange(e.target.value),
+                  min: 0,
+                  step: "0.01",
+                  className: "w-[400px] border-b border-gray-400 outline-none"
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "tiras-t2especial", className: "text-xs text-gray-600", children: "2 TIRAS ESPECIALES (0 = ANULA LA TIRA)" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  id: "tiras-t2especial",
+                  type: "number",
+                  value: t2especial,
+                  onChange: (e) => handleT2especialChange(e.target.value),
+                  min: 0,
+                  step: "0.01",
+                  className: "w-[400px] border-b border-gray-400 outline-none"
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "tiras-t3especial", className: "text-xs text-gray-600", children: "3 TIRAS ESPECIALES (0 = ANULA LA TIRA)" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  id: "tiras-t3especial",
+                  type: "number",
+                  value: t3especial,
+                  onChange: (e) => handleT3especialChange(e.target.value),
+                  min: 0,
+                  step: "0.01",
+                  className: "w-[400px] border-b border-gray-400 outline-none"
+                }
+              )
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 flex flex-col gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-gray-100 p-2 rounded shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-sm font-bold m-0", children: "IMPRIMIR TIRA ESPECIAL S/N" }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { htmlFor: "tiras-temod1", className: "text-xs text-gray-600", children: [
+                "MODELO 1: ",
+                nombreModelo1 || "Modelo 1"
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  id: "tiras-temod1",
+                  type: "text",
+                  value: temod1,
+                  onChange: (e) => handleTemod1Change(e.target.value),
+                  maxLength: 1,
+                  className: "w-[400px] border-b border-gray-400 text-red-600 outline-none",
+                  "aria-describedby": "tiras-temod1-desc"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { id: "tiras-temod1-desc", className: "sr-only", children: "Introduce S para activar o N para desactivar tiras especiales en modelo 1" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { htmlFor: "tiras-temod2", className: "text-xs text-gray-600", children: [
+                "MODELO 2: ",
+                nombreModelo2 || "Modelo 2"
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  id: "tiras-temod2",
+                  type: "text",
+                  value: temod2,
+                  onChange: (e) => handleTemod2Change(e.target.value),
+                  maxLength: 1,
+                  className: "w-[400px] border-b border-gray-400 text-red-600 outline-none",
+                  "aria-describedby": "tiras-temod2-desc"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { id: "tiras-temod2-desc", className: "sr-only", children: "Introduce S para activar o N para desactivar tiras especiales en modelo 2" })
+            ] })
+          ] })
+        ] })
+      }
+    )
   ] });
 }
 function MaquinaView() {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center justify-center h-full p-8", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-3xl font-bold mb-4", children: "Máquina" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-muted-foreground", children: "Configuración de código de etiqueta, ticket y rollos" })
+  const navigate = useNavigate();
+  const { config, loading, error: storeError, loadConfig, updateMaquina: updateMaquina2 } = useConfigStore();
+  const [ticketChanges, setTicketChanges] = reactExports.useState({});
+  const [codigoChanges, setCodigoChanges] = reactExports.useState({});
+  const [saving, setSaving] = reactExports.useState(false);
+  const [saveSuccess, setSaveSuccess] = reactExports.useState(false);
+  const [saveError, setSaveError] = reactExports.useState(null);
+  const [exporting, setExporting] = reactExports.useState(false);
+  const [exportError, setExportError] = reactExports.useState(null);
+  reactExports.useEffect(() => {
+    if (!config && !loading) {
+      loadConfig();
+    }
+  }, [config, loading, loadConfig]);
+  reactExports.useEffect(() => {
+    if (!saveSuccess) return void 0;
+    const timer = setTimeout(() => setSaveSuccess(false), 3e3);
+    return () => clearTimeout(timer);
+  }, [saveSuccess]);
+  const ticket = config?.ticket;
+  const codigo = config?.codigo;
+  const sello = config?.sello;
+  const nombreModelo1 = reactExports.useMemo(() => {
+    if (!sello) return "";
+    const evIdx = sello.elevento ?? 0;
+    const evento = sello.eventos?.[evIdx];
+    return evento?.motivoi ?? sello.modelo1 ?? "";
+  }, [sello]);
+  const nombreModelo2 = reactExports.useMemo(() => {
+    if (!sello) return "";
+    const evIdx = sello.elevento ?? 0;
+    const evento = sello.eventos?.[evIdx];
+    return evento?.motivod ?? sello.modelo2 ?? "";
+  }, [sello]);
+  const activeProfileName = reactExports.useMemo(() => {
+    return sello?.elnperfil ?? "FERIA";
+  }, [sello]);
+  const feriaDisplay = reactExports.useMemo(() => {
+    return sello?.feria ?? config?.ticket?.feria ?? "";
+  }, [sello, config]);
+  const lugarDisplay = reactExports.useMemo(() => {
+    return sello?.lugar ?? config?.ticket?.lugar ?? "";
+  }, [sello, config]);
+  const mergedTicket = reactExports.useMemo(() => {
+    if (!ticket) return void 0;
+    return { ...ticket, ...ticketChanges };
+  }, [ticket, ticketChanges]);
+  const mergedCodigo = reactExports.useMemo(() => {
+    if (!codigo) return void 0;
+    return { ...codigo, ...codigoChanges };
+  }, [codigo, codigoChanges]);
+  const handleCodigoChange = reactExports.useCallback((updated) => {
+    setCodigoChanges((prev) => ({ ...prev, ...updated }));
+  }, []);
+  const handleTicketChange = reactExports.useCallback((updated) => {
+    setTicketChanges((prev) => ({ ...prev, ...updated }));
+  }, []);
+  const handleInsertOrder = reactExports.useCallback(async (order) => {
+    await insertOrders([order]);
+  }, []);
+  const handleGuardar = reactExports.useCallback(async () => {
+    setSaving(true);
+    setSaveError(null);
+    setSaveSuccess(false);
+    try {
+      await updateMaquina2({
+        ticket: ticketChanges,
+        codigo: codigoChanges
+      });
+      setTicketChanges({});
+      setCodigoChanges({});
+      setSaveSuccess(true);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Error al guardar la configuración";
+      setSaveError(message);
+    } finally {
+      setSaving(false);
+    }
+  }, [ticketChanges, codigoChanges, updateMaquina2]);
+  const handleExportXLS = reactExports.useCallback(async () => {
+    setExportError(null);
+    setExporting(true);
+    try {
+      const fileContent = await downloadCSV();
+      if (fileContent) {
+        const nameFile = "reporte-ATM.csv";
+        const blob = new Blob([fileContent], { type: "text/csv;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = nameFile;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      console.error("[MaquinaView] Error exporting CSV:", err);
+      setExportError("Error al exportar. Inténtelo de nuevo.");
+    } finally {
+      setExporting(false);
+    }
+  }, []);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-4 bg-gray-100 min-h-screen", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between px-4 py-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-black text-[25px] font-bold text-center m-0", children: "Máquina" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          className: "bg-gray-400 text-white px-4 py-2 rounded font-semibold hover:bg-gray-500\n                     focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50",
+          onClick: handleGuardar,
+          disabled: saving || loading || !config,
+          "aria-label": "Guardar configuración de máquina",
+          children: saving ? "Guardando..." : "Guardar"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-gray-500 text-[25px] font-bold text-center m-0", children: "Configuración de código, ticket y rollos" })
+    ] }),
+    saveSuccess && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "mx-4 mb-2 p-2 bg-green-100 text-green-800 rounded text-center",
+        role: "status",
+        "aria-live": "polite",
+        children: "Configuración guardada correctamente"
+      }
+    ),
+    saveError && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "mx-4 mb-2 p-2 bg-red-100 text-red-800 rounded text-center",
+        role: "alert",
+        children: saveError
+      }
+    ),
+    storeError && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: "mx-4 mb-2 p-2 bg-red-100 text-red-800 rounded text-center",
+        role: "alert",
+        children: [
+          "Error al cargar: ",
+          storeError
+        ]
+      }
+    ),
+    loading || !config ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center justify-center h-64", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-muted-foreground", children: "Cargando configuración..." }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex justify-center mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full max-w-7xl px-4", children: [
+      mergedCodigo && /* @__PURE__ */ jsxRuntimeExports.jsx(CodigoSection, { codigo: mergedCodigo, onChange: handleCodigoChange }),
+      mergedTicket && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        TicketSection,
+        {
+          ticket: mergedTicket,
+          activeProfileName,
+          feriaDisplay,
+          lugarDisplay,
+          onChange: handleTicketChange
+        }
+      ),
+      mergedTicket && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        RollosSection,
+        {
+          ticket: mergedTicket,
+          nombreModelo1,
+          nombreModelo2,
+          onChange: handleTicketChange,
+          onInsertOrder: handleInsertOrder
+        }
+      ),
+      mergedTicket && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        TirasSection,
+        {
+          ticket: mergedTicket,
+          nombreModelo1,
+          nombreModelo2,
+          onChange: handleTicketChange
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex justify-center items-center gap-4 mt-6 mb-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            className: "bg-gray-400 text-white px-4 py-2 rounded font-semibold hover:bg-gray-500\n                         focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50",
+            onClick: handleGuardar,
+            disabled: saving,
+            children: saving ? "Guardando..." : "Guardar"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            className: "bg-[#212F5D] text-white px-4 py-2 rounded font-semibold hover:bg-[#2d3f7a]\n                         focus:outline-none focus:ring-2 focus:ring-[#212F5D] disabled:opacity-50 disabled:cursor-not-allowed",
+            onClick: handleExportXLS,
+            disabled: exporting,
+            "aria-label": "Exportar informe XLS",
+            children: exporting ? "Exportando..." : "Exportar XLS"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            className: "bg-gray-200 text-black px-4 py-2 rounded font-semibold hover:bg-gray-300\n                         focus:outline-none focus:ring-2 focus:ring-gray-300",
+            onClick: () => navigate("/home"),
+            children: "Cancelar"
+          }
+        )
+      ] }),
+      exportError && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "div",
+        {
+          className: "mx-4 mb-4 p-2 bg-red-100 text-red-800 rounded text-center",
+          role: "alert",
+          children: exportError
+        }
+      )
+    ] }) })
+  ] });
+}
+function PerfilSection({
+  sello,
+  selectedPerfil,
+  onPerfilChange
+}) {
+  const profiles = [
+    { value: 1, label: sello.nperfil1 || "Perfil 1" },
+    { value: 2, label: sello.nperfil2 || "Perfil 2" },
+    { value: 3, label: sello.nperfil3 || "Perfil 3" },
+    { value: 4, label: sello.nperfil4 || "Perfil 4" },
+    { value: 5, label: sello.nperfil5 || "Perfil 5" },
+    { value: 6, label: sello.nperfil6 || "Perfil 6" }
+  ];
+  const handleChange = (e) => {
+    const value = parseInt(e.target.value, 10);
+    if (!isNaN(value) && value >= 1 && value <= 6) {
+      onPerfilChange(value);
+    }
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "perfil-section-heading", className: "mb-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-[rgb(255,192,0)] p-2 mb-2 rounded shadow", children: /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "perfil-section-heading", className: "text-black font-bold m-0", children: "PERFIL - MODO DE VENTA" }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center p-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "label",
+        {
+          htmlFor: "perfil-selector",
+          className: "text-red-600 text-lg font-bold mb-2",
+          children: "Ir a Menú MÁQUINA y GUARDAR"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "select",
+        {
+          id: "perfil-selector",
+          value: selectedPerfil,
+          onChange: handleChange,
+          className: "w-[250px] text-blue-700 text-lg border border-gray-300 rounded p-2\n                     focus:outline-none focus:ring-2 focus:ring-blue-500",
+          "aria-label": "Seleccionar perfil de venta activo",
+          children: profiles.map((profile) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: profile.value, children: profile.label }, profile.value))
+        }
+      )
+    ] })
+  ] });
+}
+function EventoSection({
+  sello,
+  ticket,
+  selectedEvento,
+  onEventoChange
+}) {
+  const bloqueado = ticket.bloqueado === "BLOQUEADO";
+  const eventos = sello.eventos ?? [];
+  const [modelo1Url, setModelo1Url] = reactExports.useState(null);
+  const [modelo2Url, setModelo2Url] = reactExports.useState(null);
+  const currentEvento = eventos[selectedEvento] ?? {
+    nferia: "",
+    nlugar: "",
+    motivoi: "",
+    motivod: "",
+    fecha: "",
+    localidad: ""
+  };
+  reactExports.useEffect(() => {
+    let cancelled = false;
+    async function loadImages() {
+      const motivoi = currentEvento.motivoi;
+      const motivod = currentEvento.motivod;
+      if (motivoi) {
+        try {
+          const img = await getImageByName(motivoi);
+          if (!cancelled) {
+            setModelo1Url(img?.url ?? null);
+          }
+        } catch {
+          if (!cancelled) setModelo1Url(null);
+        }
+      } else {
+        if (!cancelled) setModelo1Url(null);
+      }
+      if (motivod) {
+        try {
+          const img = await getImageByName(motivod);
+          if (!cancelled) {
+            setModelo2Url(img?.url ?? null);
+          }
+        } catch {
+          if (!cancelled) setModelo2Url(null);
+        }
+      } else {
+        if (!cancelled) setModelo2Url(null);
+      }
+    }
+    loadImages();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentEvento.motivoi, currentEvento.motivod]);
+  const handleChange = (e) => {
+    const value = parseInt(e.target.value, 10);
+    if (!isNaN(value) && value >= 0 && value <= 7) {
+      onEventoChange(value);
+    }
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "evento-section-heading", className: "mb-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-[rgb(255,192,0)] p-2 mb-2 rounded shadow", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { id: "evento-section-heading", className: "text-black font-bold m-0", children: [
+      "EVENTO: ",
+      bloqueado ? "BLOQUEADO" : "DESBLOQUEADO"
+    ] }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-4 p-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "label",
+            {
+              htmlFor: "evento-selector",
+              className: "block text-red-600 font-bold mb-1",
+              children: "EVENTO"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "select",
+            {
+              id: "evento-selector",
+              value: selectedEvento,
+              onChange: handleChange,
+              disabled: bloqueado,
+              className: `w-[250px] text-red-600 text-lg border border-gray-300 rounded p-2
+                focus:outline-none focus:ring-2 focus:ring-blue-500
+                ${bloqueado ? "opacity-60 cursor-not-allowed" : ""}`,
+              "aria-label": "Seleccionar evento activo",
+              children: Array.from({ length: 8 }, (_, i) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: i, children: eventos[i]?.nevento || `Evento ${i + 1}` }, i))
+            }
+          )
+        ] }),
+        !bloqueado && /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            className: "mt-5 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded",
+            "aria-label": "Activar evento seleccionado",
+            children: "ACTIVAR"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-black text-2xl font-bold text-center", children: [
+        currentEvento.nferia,
+        currentEvento.nferia && currentEvento.nlugar && /* @__PURE__ */ jsxRuntimeExports.jsx("br", {}),
+        currentEvento.nlugar
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-row gap-8 flex-wrap justify-center", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-black text-xl font-bold text-center", children: currentEvento.motivoi || "Modelo 1" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative w-[350px] h-[160px] border border-gray-200 rounded overflow-hidden bg-gray-50", children: [
+            modelo1Url ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "img",
+              {
+                src: modelo1Url,
+                alt: currentEvento.motivoi || "Modelo izquierdo",
+                className: "w-full h-full object-cover"
+              }
+            ) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full h-full flex items-center justify-center text-gray-400", children: "Sin imagen" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "absolute bottom-[10%] left-0 text-black text-lg font-bold p-4", children: [
+              "   ",
+              currentEvento.fecha,
+              currentEvento.fecha && currentEvento.localidad && /* @__PURE__ */ jsxRuntimeExports.jsx("br", {}),
+              currentEvento.localidad
+            ] })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-black text-xl font-bold text-center", children: currentEvento.motivod || "Modelo 2" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative w-[350px] h-[160px] border border-gray-200 rounded overflow-hidden bg-gray-50", children: [
+            modelo2Url ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "img",
+              {
+                src: modelo2Url,
+                alt: currentEvento.motivod || "Modelo derecho",
+                className: "w-full h-full object-cover"
+              }
+            ) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full h-full flex items-center justify-center text-gray-400", children: "Sin imagen" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "absolute bottom-[10%] left-0 text-black text-lg font-bold p-4", children: [
+              "   ",
+              currentEvento.fecha,
+              currentEvento.fecha && currentEvento.localidad && /* @__PURE__ */ jsxRuntimeExports.jsx("br", {}),
+              currentEvento.localidad
+            ] })
+          ] })
+        ] })
+      ] })
+    ] })
+  ] });
+}
+function EventoEditor({
+  eventos,
+  onEventoDataChange
+}) {
+  const [editingEvent, setEditingEvent] = reactExports.useState(-1);
+  const [motivoiUrl, setMotivoiUrl] = reactExports.useState(null);
+  const [motivodUrl, setMotivodUrl] = reactExports.useState(null);
+  const currentEvento = editingEvent >= 0 && editingEvent <= 7 ? eventos[editingEvent] : null;
+  reactExports.useEffect(() => {
+    if (!currentEvento) {
+      setMotivoiUrl(null);
+      setMotivodUrl(null);
+      return;
+    }
+    let cancelled = false;
+    async function loadImages() {
+      if (!currentEvento) return;
+      if (currentEvento.motivoi) {
+        try {
+          const img = await getImageByName(currentEvento.motivoi);
+          if (!cancelled) setMotivoiUrl(img?.url ?? null);
+        } catch {
+          if (!cancelled) setMotivoiUrl(null);
+        }
+      } else {
+        if (!cancelled) setMotivoiUrl(null);
+      }
+      if (currentEvento.motivod) {
+        try {
+          const img = await getImageByName(currentEvento.motivod);
+          if (!cancelled) setMotivodUrl(img?.url ?? null);
+        } catch {
+          if (!cancelled) setMotivodUrl(null);
+        }
+      } else {
+        if (!cancelled) setMotivodUrl(null);
+      }
+    }
+    loadImages();
+    return () => {
+      cancelled = true;
+    };
+  }, [editingEvent, currentEvento?.motivoi, currentEvento?.motivod]);
+  const handleFieldChange = (field, value) => {
+    if (editingEvent >= 0 && editingEvent <= 7) {
+      onEventoDataChange(editingEvent, field, value);
+    }
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "evento-editor-heading", className: "mb-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-[rgb(255,192,0)] p-2 mb-2 rounded shadow", children: /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "evento-editor-heading", className: "text-black font-bold m-0", children: "EDITAR EVENTOS" }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2 items-center mb-4 p-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-bold", children: "SELECCIONE:" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "inline-flex items-center gap-1", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "radio",
+            name: "editing-event",
+            checked: editingEvent === -1,
+            onChange: () => setEditingEvent(-1),
+            "aria-label": "No editar ningún evento"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm", children: "Ninguno" })
+      ] }),
+      Array.from({ length: 8 }, (_, i) => /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "inline-flex items-center gap-1", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "radio",
+            name: "editing-event",
+            checked: editingEvent === i,
+            onChange: () => setEditingEvent(i),
+            "aria-label": `Editar evento ${i + 1}`
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm", children: eventos[i]?.nevento || `Evento ${i + 1}` })
+      ] }, i))
+    ] }),
+    currentEvento && editingEvent >= 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-4 p-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-[250px]", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "label",
+          {
+            htmlFor: "evento-editor-nombre",
+            className: "block text-sm text-gray-600",
+            children: [
+              "Evento ",
+              editingEvent + 1
+            ]
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            id: "evento-editor-nombre",
+            type: "text",
+            value: currentEvento.nevento,
+            onChange: (e) => handleFieldChange("nevento", e.target.value),
+            className: "w-full text-red-600 text-2xl font-bold text-center border border-gray-300 rounded p-2",
+            "aria-label": `Nombre del evento ${editingEvent + 1}`
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-[250px]", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "label",
+          {
+            htmlFor: "evento-editor-feria",
+            className: "block text-sm text-gray-600",
+            children: "Feria Ticket"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            id: "evento-editor-feria",
+            type: "text",
+            value: currentEvento.nferia,
+            onChange: (e) => handleFieldChange("nferia", e.target.value),
+            className: "w-full border border-gray-300 rounded p-2"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-[250px]", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "label",
+          {
+            htmlFor: "evento-editor-lugar",
+            className: "block text-sm text-gray-600",
+            children: "Lugar Ticket"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            id: "evento-editor-lugar",
+            type: "text",
+            value: currentEvento.nlugar,
+            onChange: (e) => handleFieldChange("nlugar", e.target.value),
+            className: "w-full border border-gray-300 rounded p-2"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-[250px]", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "label",
+          {
+            htmlFor: "evento-editor-fecha",
+            className: "block text-sm text-gray-600",
+            children: "Fechas Etiqueta"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            id: "evento-editor-fecha",
+            type: "text",
+            value: currentEvento.fecha,
+            onChange: (e) => handleFieldChange("fecha", e.target.value),
+            className: "w-full border border-gray-300 rounded p-2"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-[250px]", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "label",
+          {
+            htmlFor: "evento-editor-localidad",
+            className: "block text-sm text-gray-600",
+            children: "Localidad Etiqueta"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            id: "evento-editor-localidad",
+            type: "text",
+            value: currentEvento.localidad,
+            onChange: (e) => handleFieldChange("localidad", e.target.value),
+            className: "w-full border border-gray-300 rounded p-2"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-4 flex-wrap justify-center", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-[300px]", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "label",
+            {
+              htmlFor: "evento-editor-motivoi",
+              className: "block text-sm text-gray-600",
+              children: "Motivo izquierda"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              id: "evento-editor-motivoi",
+              type: "text",
+              value: currentEvento.motivoi,
+              onChange: (e) => handleFieldChange("motivoi", e.target.value),
+              className: "w-full border border-gray-300 rounded p-2 mb-2"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-[300px] h-[140px] border border-gray-200 rounded overflow-hidden bg-gray-50", children: motivoiUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "img",
+            {
+              src: motivoiUrl,
+              alt: `Motivo izquierda: ${currentEvento.motivoi}`,
+              className: "w-full h-full object-cover"
+            }
+          ) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full h-full flex items-center justify-center text-gray-400", children: "Sin imagen" }) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-[300px]", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "label",
+            {
+              htmlFor: "evento-editor-motivod",
+              className: "block text-sm text-gray-600",
+              children: "Motivo derecha"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              id: "evento-editor-motivod",
+              type: "text",
+              value: currentEvento.motivod,
+              onChange: (e) => handleFieldChange("motivod", e.target.value),
+              className: "w-full border border-gray-300 rounded p-2 mb-2"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-[300px] h-[140px] border border-gray-200 rounded overflow-hidden bg-gray-50", children: motivodUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "img",
+            {
+              src: motivodUrl,
+              alt: `Motivo derecha: ${currentEvento.motivod}`,
+              className: "w-full h-full object-cover"
+            }
+          ) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full h-full flex items-center justify-center text-gray-400", children: "Sin imagen" }) })
+        ] })
+      ] })
+    ] })
+  ] });
+}
+const READONLY_PROFILES = /* @__PURE__ */ new Set([1, 2, 3, 5, 6]);
+function PerfilesSection({
+  sello,
+  onProfileNameChange
+}) {
+  const [expanded, setExpanded] = reactExports.useState(false);
+  const getProfileName = (index2) => {
+    switch (index2) {
+      case 1:
+        return sello.nperfil1 || "";
+      case 2:
+        return sello.nperfil2 || "";
+      case 3:
+        return sello.nperfil3 || "";
+      case 4:
+        return sello.nperfil4 || "";
+      case 5:
+        return sello.nperfil5 || "";
+      case 6:
+        return sello.nperfil6 || "";
+      default:
+        return "";
+    }
+  };
+  const handleToggle = () => {
+    setExpanded((prev) => !prev);
+  };
+  const handleInputChange = (profileIndex, e) => {
+    onProfileNameChange(profileIndex, e.target.value);
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "perfiles-section-heading", className: "mb-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-[rgb(255,192,0)] p-2 mb-2 rounded shadow flex items-center gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          id: "toggle-perfiles",
+          type: "checkbox",
+          checked: expanded,
+          onChange: handleToggle,
+          className: "cursor-pointer",
+          "aria-expanded": expanded,
+          "aria-controls": "perfiles-section-content"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "label",
+        {
+          htmlFor: "toggle-perfiles",
+          id: "perfiles-section-heading",
+          className: "text-black text-lg font-bold cursor-pointer",
+          children: "EDITAR PERFILES"
+        }
+      )
+    ] }),
+    expanded && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        id: "perfiles-section-content",
+        className: "flex flex-col items-center gap-2 p-4",
+        role: "region",
+        "aria-labelledby": "perfiles-section-heading",
+        children: [1, 2, 3, 4, 5, 6].map((index2) => {
+          const isReadonly = READONLY_PROFILES.has(index2);
+          const value = getProfileName(index2);
+          return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-[250px]", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "label",
+              {
+                htmlFor: `perfil-name-${index2}`,
+                className: "block text-sm text-gray-600",
+                children: [
+                  "Perfil ",
+                  index2
+                ]
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                id: `perfil-name-${index2}`,
+                type: "text",
+                value,
+                onChange: (e) => handleInputChange(index2, e),
+                disabled: isReadonly,
+                className: `w-full border border-gray-300 rounded p-2 ${isReadonly ? "bg-gray-100 cursor-not-allowed" : ""}`,
+                "aria-label": `Nombre del perfil ${index2}`
+              }
+            )
+          ] }, index2);
+        })
+      }
+    )
+  ] });
+}
+const TARIFA_LABELS = {
+  standard: ["Tarifa A", "Tarifa A2", "Tarifa B", "Tarifa C"],
+  america: ["Tarifa A", "Tarifa A2", "Tarifa B", "Tarifa D"],
+  andorra: ["Tarifa A", "Tarifa B", "Tarifa C", "Tarifa D"]
+};
+const PRICE_FIELDS = ["tarifaA", "tarifaA2", "tarifaB", "tarifaC"];
+function TarifaSection({
+  precios,
+  onPreciosChange
+}) {
+  const [expanded, setExpanded] = reactExports.useState(false);
+  const [template, setTemplate] = reactExports.useState("standard");
+  const labels = TARIFA_LABELS[template];
+  const handleToggle = () => {
+    setExpanded((prev) => !prev);
+  };
+  const handleTemplateChange = (newTemplate) => {
+    setTemplate(newTemplate);
+  };
+  const handlePriceChange = (field, rawValue) => {
+    const parsed = parseFloat(rawValue);
+    const value = isNaN(parsed) || parsed < 0 ? 0 : parsed;
+    onPreciosChange(field, value);
+  };
+  const getPriceValue = (field) => {
+    const value = precios[field];
+    return value !== void 0 && value !== null ? String(value) : "0";
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "tarifa-section-heading", className: "mb-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-[rgb(255,192,0)] p-2 mb-2 rounded shadow flex items-center gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          id: "toggle-tarifas",
+          type: "checkbox",
+          checked: expanded,
+          onChange: handleToggle,
+          className: "cursor-pointer",
+          "aria-expanded": expanded,
+          "aria-controls": "tarifa-section-content"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "label",
+        {
+          htmlFor: "toggle-tarifas",
+          id: "tarifa-section-heading",
+          className: "text-black text-lg font-bold cursor-pointer",
+          children: "TARIFA VIGENTE"
+        }
+      )
+    ] }),
+    expanded && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        id: "tarifa-section-content",
+        className: "p-4",
+        role: "region",
+        "aria-labelledby": "tarifa-section-heading",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { className: "flex items-center gap-4 mb-4", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "font-bold text-sm", children: "Plantilla de tarifas:" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "inline-flex items-center gap-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  type: "radio",
+                  name: "tarifa-template",
+                  value: "standard",
+                  checked: template === "standard",
+                  onChange: () => handleTemplateChange("standard")
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm", children: "Estándar (A-A2-B-C)" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "inline-flex items-center gap-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  type: "radio",
+                  name: "tarifa-template",
+                  value: "america",
+                  checked: template === "america",
+                  onChange: () => handleTemplateChange("america")
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm", children: "América (A-A2-B-D)" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "inline-flex items-center gap-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  type: "radio",
+                  name: "tarifa-template",
+                  value: "andorra",
+                  checked: template === "andorra",
+                  onChange: () => handleTemplateChange("andorra")
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm", children: "Andorra (A-B-C-D)" })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-2", children: [
+            PRICE_FIELDS.map((field, index2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-[250px]", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "label",
+                {
+                  htmlFor: `tarifa-price-${field}`,
+                  className: "block text-sm text-gray-600",
+                  children: labels[index2]
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  id: `tarifa-price-${field}`,
+                  type: "number",
+                  step: "0.01",
+                  min: "0",
+                  value: getPriceValue(field),
+                  onChange: (e) => handlePriceChange(field, e.target.value),
+                  className: "w-full border border-gray-300 rounded p-2",
+                  "aria-label": `Precio ${labels[index2]}`
+                }
+              )
+            ] }, field)),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-4 mt-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-[200px]", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "label",
+                  {
+                    htmlFor: "tarifa-price-tarifaTA",
+                    className: "block text-sm text-gray-600",
+                    children: "TIRA Tarifa A"
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    id: "tarifa-price-tarifaTA",
+                    type: "number",
+                    step: "0.01",
+                    min: "0",
+                    value: getPriceValue("tarifaTA"),
+                    onChange: (e) => handlePriceChange("tarifaTA", e.target.value),
+                    className: "w-full border border-gray-300 rounded p-2",
+                    "aria-label": "Precio TIRA Tarifa A"
+                  }
+                )
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-[200px]", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "label",
+                  {
+                    htmlFor: "tarifa-price-tarifaT4",
+                    className: "block text-sm text-gray-600",
+                    children: "TIRA 4 Tarifas"
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    id: "tarifa-price-tarifaT4",
+                    type: "number",
+                    step: "0.01",
+                    min: "0",
+                    value: getPriceValue("tarifaT4"),
+                    onChange: (e) => handlePriceChange("tarifaT4", e.target.value),
+                    className: "w-full border border-gray-300 rounded p-2",
+                    "aria-label": "Precio TIRA 4 Tarifas"
+                  }
+                )
+              ] })
+            ] })
+          ] })
+        ]
+      }
+    )
   ] });
 }
 function ImprimirView() {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center justify-center h-full p-8", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-3xl font-bold mb-4", children: "Imprimir" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-muted-foreground", children: "Configuración de perfiles, eventos y tarifas" })
+  const config = useConfigStore((s) => s.config);
+  const updateImprimir2 = useConfigStore((s) => s.updateImprimir);
+  const navigate = useNavigate();
+  const [saving, setSaving] = reactExports.useState(false);
+  const [saveError, setSaveError] = reactExports.useState(null);
+  const [selectedPerfil, setSelectedPerfil] = reactExports.useState(
+    config?.sello.elperfil ?? 6
+  );
+  const [selectedEvento, setSelectedEvento] = reactExports.useState(
+    config?.sello.elevento ?? 0
+  );
+  const [localEventos, setLocalEventos] = reactExports.useState(
+    () => config?.sello.eventos ?? Array.from({ length: 8 }, () => ({
+      nevento: "",
+      nferia: "",
+      nlugar: "",
+      motivoi: "",
+      motivod: "",
+      fecha: "",
+      localidad: ""
+    }))
+  );
+  const [localProfileNames, setLocalProfileNames] = reactExports.useState(() => ({
+    1: config?.sello.nperfil1 ?? "Filatelia",
+    2: config?.sello.nperfil2 ?? "Esporádicos",
+    3: config?.sello.nperfil3 ?? "SPDE",
+    4: config?.sello.nperfil4 ?? "",
+    5: config?.sello.nperfil5 ?? "Abono/Envío",
+    6: config?.sello.nperfil6 ?? "FERIA"
+  }));
+  const [localPrecios, setLocalPrecios] = reactExports.useState(() => ({
+    tarifaA: config?.precios.tarifaA ?? 0,
+    tarifaA2: config?.precios.tarifaA2 ?? 0,
+    tarifaB: config?.precios.tarifaB ?? 0,
+    tarifaC: config?.precios.tarifaC ?? 0,
+    tarifaTA: config?.precios.tarifaTA ?? 0,
+    tarifaT4: config?.precios.tarifaT4 ?? 0
+  }));
+  reactExports.useEffect(() => {
+    if (config?.sello.eventos) {
+      setLocalEventos(config.sello.eventos.map((e) => ({ ...e })));
+    }
+  }, [config?.sello.eventos]);
+  reactExports.useEffect(() => {
+    if (config?.sello) {
+      setLocalProfileNames({
+        1: config.sello.nperfil1 ?? "Filatelia",
+        2: config.sello.nperfil2 ?? "Esporádicos",
+        3: config.sello.nperfil3 ?? "SPDE",
+        4: config.sello.nperfil4 ?? "",
+        5: config.sello.nperfil5 ?? "Abono/Envío",
+        6: config.sello.nperfil6 ?? "FERIA"
+      });
+    }
+  }, [config?.sello.nperfil1, config?.sello.nperfil2, config?.sello.nperfil3, config?.sello.nperfil4, config?.sello.nperfil5, config?.sello.nperfil6]);
+  reactExports.useEffect(() => {
+    if (config?.precios) {
+      setLocalPrecios({
+        tarifaA: config.precios.tarifaA ?? 0,
+        tarifaA2: config.precios.tarifaA2 ?? 0,
+        tarifaB: config.precios.tarifaB ?? 0,
+        tarifaC: config.precios.tarifaC ?? 0,
+        tarifaTA: config.precios.tarifaTA ?? 0,
+        tarifaT4: config.precios.tarifaT4 ?? 0
+      });
+    }
+  }, [config?.precios.tarifaA, config?.precios.tarifaA2, config?.precios.tarifaB, config?.precios.tarifaC, config?.precios.tarifaTA, config?.precios.tarifaT4]);
+  const handlePerfilChange = reactExports.useCallback((perfil) => {
+    setSelectedPerfil(perfil);
+  }, []);
+  const handleEventoChange = reactExports.useCallback((evento) => {
+    setSelectedEvento(evento);
+  }, []);
+  const handleEventoDataChange = reactExports.useCallback(
+    (index2, field, value) => {
+      setLocalEventos((prev) => {
+        const updated = prev.map((e) => ({ ...e }));
+        if (updated[index2]) {
+          updated[index2] = { ...updated[index2], [field]: value };
+        }
+        return updated;
+      });
+    },
+    []
+  );
+  const handleProfileNameChange = reactExports.useCallback(
+    (profileIndex, value) => {
+      setLocalProfileNames((prev) => ({ ...prev, [profileIndex]: value }));
+    },
+    []
+  );
+  const handlePreciosChange = reactExports.useCallback(
+    (field, value) => {
+      setLocalPrecios((prev) => ({ ...prev, [field]: value }));
+    },
+    []
+  );
+  const handleSave = reactExports.useCallback(async () => {
+    if (!config) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const perfilNames = {
+        1: localProfileNames[1],
+        2: localProfileNames[2],
+        3: localProfileNames[3],
+        4: localProfileNames[4],
+        5: localProfileNames[5],
+        6: localProfileNames[6]
+      };
+      const elnperfil = perfilNames[selectedPerfil] ?? "";
+      const activeEvent = localEventos[selectedEvento];
+      const activeModelo1 = activeEvent?.motivoi ?? "";
+      const activeModelo2 = activeEvent?.motivod ?? "";
+      const selloUpdate = {
+        elperfil: selectedPerfil,
+        elnperfil,
+        elevento: selectedEvento,
+        elnevento: activeEvent?.nevento ?? "",
+        feria: activeEvent?.nferia ?? "",
+        lugar: activeEvent?.nlugar ?? "",
+        modelo1: activeModelo1,
+        modelo2: activeModelo2,
+        modo: config.sello.modo,
+        nperfil1: localProfileNames[1],
+        nperfil2: localProfileNames[2],
+        nperfil3: localProfileNames[3],
+        nperfil4: localProfileNames[4],
+        nperfil5: localProfileNames[5],
+        nperfil6: localProfileNames[6],
+        eventos: localEventos
+      };
+      const preciosUpdate = {
+        tarifaA: localPrecios.tarifaA,
+        tarifaA2: localPrecios.tarifaA2,
+        tarifaB: localPrecios.tarifaB,
+        tarifaC: localPrecios.tarifaC,
+        tarifaTA: localPrecios.tarifaTA,
+        tarifaT4: localPrecios.tarifaT4
+      };
+      await updateImprimir2({ sello: selloUpdate, precios: preciosUpdate });
+      navigate("/kiosko");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Error al guardar configuración";
+      setSaveError(message);
+      console.error("Error al guardar configuración:", err);
+    } finally {
+      setSaving(false);
+    }
+  }, [config, selectedPerfil, selectedEvento, localEventos, localProfileNames, localPrecios, updateImprimir2, navigate]);
+  if (!config) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center justify-center h-full p-8", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-muted-foreground", children: "Cargando configuración..." }) });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-4 min-h-screen", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-2 mb-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-black text-2xl font-bold text-center", children: "CONFIGURACIÓN" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onClick: handleSave,
+          disabled: saving,
+          className: "bg-gray-400 hover:bg-gray-500 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded",
+          children: saving ? "Guardando..." : "GUARDAR e ir al KIOSKO"
+        }
+      ),
+      saveError && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-red-600 text-sm", children: saveError }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-gray-500 text-2xl font-bold text-center", children: "PERFIL - EVENTOS - TARIFAS" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      PerfilSection,
+      {
+        sello: config.sello,
+        selectedPerfil,
+        onPerfilChange: handlePerfilChange
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      EventoSection,
+      {
+        sello: { ...config.sello, eventos: localEventos },
+        ticket: config.ticket,
+        selectedEvento,
+        onEventoChange: handleEventoChange
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      EventoEditor,
+      {
+        eventos: localEventos,
+        onEventoDataChange: handleEventoDataChange
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      PerfilesSection,
+      {
+        sello: {
+          ...config.sello,
+          nperfil1: localProfileNames[1],
+          nperfil2: localProfileNames[2],
+          nperfil3: localProfileNames[3],
+          nperfil4: localProfileNames[4],
+          nperfil5: localProfileNames[5],
+          nperfil6: localProfileNames[6]
+        },
+        onProfileNameChange: handleProfileNameChange
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      TarifaSection,
+      {
+        precios: localPrecios,
+        onPreciosChange: handlePreciosChange
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex justify-center gap-4 p-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onClick: () => navigate("/home"),
+          className: "bg-gray-300 hover:bg-gray-400 text-black font-bold py-2 px-4 rounded",
+          children: "Cancelar"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onClick: handleSave,
+          disabled: saving,
+          className: "bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded",
+          children: saving ? "Guardando..." : "GUARDAR + ACTIVAR"
+        }
+      )
+    ] })
+  ] });
+}
+var UserAgent_DEPRECATED_1;
+var hasRequiredUserAgent_DEPRECATED;
+function requireUserAgent_DEPRECATED() {
+  if (hasRequiredUserAgent_DEPRECATED) return UserAgent_DEPRECATED_1;
+  hasRequiredUserAgent_DEPRECATED = 1;
+  var _populated = false;
+  var _ie, _firefox, _opera, _webkit, _chrome;
+  var _ie_real_version;
+  var _osx, _windows, _linux, _android;
+  var _win64;
+  var _iphone, _ipad, _native;
+  var _mobile;
+  function _populate() {
+    if (_populated) {
+      return;
+    }
+    _populated = true;
+    var uas = navigator.userAgent;
+    var agent = /(?:MSIE.(\d+\.\d+))|(?:(?:Firefox|GranParadiso|Iceweasel).(\d+\.\d+))|(?:Opera(?:.+Version.|.)(\d+\.\d+))|(?:AppleWebKit.(\d+(?:\.\d+)?))|(?:Trident\/\d+\.\d+.*rv:(\d+\.\d+))/.exec(uas);
+    var os = /(Mac OS X)|(Windows)|(Linux)/.exec(uas);
+    _iphone = /\b(iPhone|iP[ao]d)/.exec(uas);
+    _ipad = /\b(iP[ao]d)/.exec(uas);
+    _android = /Android/i.exec(uas);
+    _native = /FBAN\/\w+;/i.exec(uas);
+    _mobile = /Mobile/i.exec(uas);
+    _win64 = !!/Win64/.exec(uas);
+    if (agent) {
+      _ie = agent[1] ? parseFloat(agent[1]) : agent[5] ? parseFloat(agent[5]) : NaN;
+      if (_ie && document && document.documentMode) {
+        _ie = document.documentMode;
+      }
+      var trident = /(?:Trident\/(\d+.\d+))/.exec(uas);
+      _ie_real_version = trident ? parseFloat(trident[1]) + 4 : _ie;
+      _firefox = agent[2] ? parseFloat(agent[2]) : NaN;
+      _opera = agent[3] ? parseFloat(agent[3]) : NaN;
+      _webkit = agent[4] ? parseFloat(agent[4]) : NaN;
+      if (_webkit) {
+        agent = /(?:Chrome\/(\d+\.\d+))/.exec(uas);
+        _chrome = agent && agent[1] ? parseFloat(agent[1]) : NaN;
+      } else {
+        _chrome = NaN;
+      }
+    } else {
+      _ie = _firefox = _opera = _chrome = _webkit = NaN;
+    }
+    if (os) {
+      if (os[1]) {
+        var ver = /(?:Mac OS X (\d+(?:[._]\d+)?))/.exec(uas);
+        _osx = ver ? parseFloat(ver[1].replace("_", ".")) : true;
+      } else {
+        _osx = false;
+      }
+      _windows = !!os[2];
+      _linux = !!os[3];
+    } else {
+      _osx = _windows = _linux = false;
+    }
+  }
+  var UserAgent_DEPRECATED = {
+    /**
+     *  Check if the UA is Internet Explorer.
+     *
+     *
+     *  @return float|NaN Version number (if match) or NaN.
+     */
+    ie: function() {
+      return _populate() || _ie;
+    },
+    /**
+     * Check if we're in Internet Explorer compatibility mode.
+     *
+     * @return bool true if in compatibility mode, false if
+     * not compatibility mode or not ie
+     */
+    ieCompatibilityMode: function() {
+      return _populate() || _ie_real_version > _ie;
+    },
+    /**
+     * Whether the browser is 64-bit IE.  Really, this is kind of weak sauce;  we
+     * only need this because Skype can't handle 64-bit IE yet.  We need to remove
+     * this when we don't need it -- tracked by #601957.
+     */
+    ie64: function() {
+      return UserAgent_DEPRECATED.ie() && _win64;
+    },
+    /**
+     *  Check if the UA is Firefox.
+     *
+     *
+     *  @return float|NaN Version number (if match) or NaN.
+     */
+    firefox: function() {
+      return _populate() || _firefox;
+    },
+    /**
+     *  Check if the UA is Opera.
+     *
+     *
+     *  @return float|NaN Version number (if match) or NaN.
+     */
+    opera: function() {
+      return _populate() || _opera;
+    },
+    /**
+     *  Check if the UA is WebKit.
+     *
+     *
+     *  @return float|NaN Version number (if match) or NaN.
+     */
+    webkit: function() {
+      return _populate() || _webkit;
+    },
+    /**
+     *  For Push
+     *  WILL BE REMOVED VERY SOON. Use UserAgent_DEPRECATED.webkit
+     */
+    safari: function() {
+      return UserAgent_DEPRECATED.webkit();
+    },
+    /**
+     *  Check if the UA is a Chrome browser.
+     *
+     *
+     *  @return float|NaN Version number (if match) or NaN.
+     */
+    chrome: function() {
+      return _populate() || _chrome;
+    },
+    /**
+     *  Check if the user is running Windows.
+     *
+     *  @return bool `true' if the user's OS is Windows.
+     */
+    windows: function() {
+      return _populate() || _windows;
+    },
+    /**
+     *  Check if the user is running Mac OS X.
+     *
+     *  @return float|bool   Returns a float if a version number is detected,
+     *                       otherwise true/false.
+     */
+    osx: function() {
+      return _populate() || _osx;
+    },
+    /**
+     * Check if the user is running Linux.
+     *
+     * @return bool `true' if the user's OS is some flavor of Linux.
+     */
+    linux: function() {
+      return _populate() || _linux;
+    },
+    /**
+     * Check if the user is running on an iPhone or iPod platform.
+     *
+     * @return bool `true' if the user is running some flavor of the
+     *    iPhone OS.
+     */
+    iphone: function() {
+      return _populate() || _iphone;
+    },
+    mobile: function() {
+      return _populate() || (_iphone || _ipad || _android || _mobile);
+    },
+    nativeApp: function() {
+      return _populate() || _native;
+    },
+    android: function() {
+      return _populate() || _android;
+    },
+    ipad: function() {
+      return _populate() || _ipad;
+    }
+  };
+  UserAgent_DEPRECATED_1 = UserAgent_DEPRECATED;
+  return UserAgent_DEPRECATED_1;
+}
+var ExecutionEnvironment_1;
+var hasRequiredExecutionEnvironment;
+function requireExecutionEnvironment() {
+  if (hasRequiredExecutionEnvironment) return ExecutionEnvironment_1;
+  hasRequiredExecutionEnvironment = 1;
+  var canUseDOM = !!(typeof window !== "undefined" && window.document && window.document.createElement);
+  var ExecutionEnvironment = {
+    canUseDOM,
+    canUseWorkers: typeof Worker !== "undefined",
+    canUseEventListeners: canUseDOM && !!(window.addEventListener || window.attachEvent),
+    canUseViewport: canUseDOM && !!window.screen,
+    isInWorker: !canUseDOM
+    // For now, this is true - might change in the future.
+  };
+  ExecutionEnvironment_1 = ExecutionEnvironment;
+  return ExecutionEnvironment_1;
+}
+var isEventSupported_1;
+var hasRequiredIsEventSupported;
+function requireIsEventSupported() {
+  if (hasRequiredIsEventSupported) return isEventSupported_1;
+  hasRequiredIsEventSupported = 1;
+  var ExecutionEnvironment = requireExecutionEnvironment();
+  var useHasFeature;
+  if (ExecutionEnvironment.canUseDOM) {
+    useHasFeature = document.implementation && document.implementation.hasFeature && // always returns true in newer browsers as per the standard.
+    // @see http://dom.spec.whatwg.org/#dom-domimplementation-hasfeature
+    document.implementation.hasFeature("", "") !== true;
+  }
+  /**
+   * Checks if an event is supported in the current execution environment.
+   *
+   * NOTE: This will not work correctly for non-generic events such as `change`,
+   * `reset`, `load`, `error`, and `select`.
+   *
+   * Borrows from Modernizr.
+   *
+   * @param {string} eventNameSuffix Event name, e.g. "click".
+   * @param {?boolean} capture Check if the capture phase is supported.
+   * @return {boolean} True if the event is supported.
+   * @internal
+   * @license Modernizr 3.0.0pre (Custom Build) | MIT
+   */
+  function isEventSupported(eventNameSuffix, capture) {
+    if (!ExecutionEnvironment.canUseDOM || capture && !("addEventListener" in document)) {
+      return false;
+    }
+    var eventName = "on" + eventNameSuffix;
+    var isSupported = eventName in document;
+    if (!isSupported) {
+      var element = document.createElement("div");
+      element.setAttribute(eventName, "return;");
+      isSupported = typeof element[eventName] === "function";
+    }
+    if (!isSupported && useHasFeature && eventNameSuffix === "wheel") {
+      isSupported = document.implementation.hasFeature("Events.wheel", "3.0");
+    }
+    return isSupported;
+  }
+  isEventSupported_1 = isEventSupported;
+  return isEventSupported_1;
+}
+var normalizeWheel_1;
+var hasRequiredNormalizeWheel$1;
+function requireNormalizeWheel$1() {
+  if (hasRequiredNormalizeWheel$1) return normalizeWheel_1;
+  hasRequiredNormalizeWheel$1 = 1;
+  var UserAgent_DEPRECATED = requireUserAgent_DEPRECATED();
+  var isEventSupported = requireIsEventSupported();
+  var PIXEL_STEP = 10;
+  var LINE_HEIGHT = 40;
+  var PAGE_HEIGHT = 800;
+  function normalizeWheel2(event) {
+    var sX = 0, sY = 0, pX = 0, pY = 0;
+    if ("detail" in event) {
+      sY = event.detail;
+    }
+    if ("wheelDelta" in event) {
+      sY = -event.wheelDelta / 120;
+    }
+    if ("wheelDeltaY" in event) {
+      sY = -event.wheelDeltaY / 120;
+    }
+    if ("wheelDeltaX" in event) {
+      sX = -event.wheelDeltaX / 120;
+    }
+    if ("axis" in event && event.axis === event.HORIZONTAL_AXIS) {
+      sX = sY;
+      sY = 0;
+    }
+    pX = sX * PIXEL_STEP;
+    pY = sY * PIXEL_STEP;
+    if ("deltaY" in event) {
+      pY = event.deltaY;
+    }
+    if ("deltaX" in event) {
+      pX = event.deltaX;
+    }
+    if ((pX || pY) && event.deltaMode) {
+      if (event.deltaMode == 1) {
+        pX *= LINE_HEIGHT;
+        pY *= LINE_HEIGHT;
+      } else {
+        pX *= PAGE_HEIGHT;
+        pY *= PAGE_HEIGHT;
+      }
+    }
+    if (pX && !sX) {
+      sX = pX < 1 ? -1 : 1;
+    }
+    if (pY && !sY) {
+      sY = pY < 1 ? -1 : 1;
+    }
+    return {
+      spinX: sX,
+      spinY: sY,
+      pixelX: pX,
+      pixelY: pY
+    };
+  }
+  normalizeWheel2.getEventType = function() {
+    return UserAgent_DEPRECATED.firefox() ? "DOMMouseScroll" : isEventSupported("wheel") ? "wheel" : "mousewheel";
+  };
+  normalizeWheel_1 = normalizeWheel2;
+  return normalizeWheel_1;
+}
+var normalizeWheel$1;
+var hasRequiredNormalizeWheel;
+function requireNormalizeWheel() {
+  if (hasRequiredNormalizeWheel) return normalizeWheel$1;
+  hasRequiredNormalizeWheel = 1;
+  normalizeWheel$1 = requireNormalizeWheel$1();
+  return normalizeWheel$1;
+}
+var normalizeWheelExports = requireNormalizeWheel();
+const normalizeWheel = /* @__PURE__ */ getDefaultExportFromCjs(normalizeWheelExports);
+function _typeof(o) {
+  "@babel/helpers - typeof";
+  return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(o2) {
+    return typeof o2;
+  } : function(o2) {
+    return o2 && "function" == typeof Symbol && o2.constructor === Symbol && o2 !== Symbol.prototype ? "symbol" : typeof o2;
+  }, _typeof(o);
+}
+function toPrimitive(t, r2) {
+  if ("object" != _typeof(t) || !t) return t;
+  var e = t[Symbol.toPrimitive];
+  if (void 0 !== e) {
+    var i = e.call(t, r2);
+    if ("object" != _typeof(i)) return i;
+    throw new TypeError("@@toPrimitive must return a primitive value.");
+  }
+  return ("string" === r2 ? String : Number)(t);
+}
+function toPropertyKey(t) {
+  var i = toPrimitive(t, "string");
+  return "symbol" == _typeof(i) ? i : i + "";
+}
+function _defineProperty(e, r2, t) {
+  return (r2 = toPropertyKey(r2)) in e ? Object.defineProperty(e, r2, {
+    value: t,
+    enumerable: true,
+    configurable: true,
+    writable: true
+  }) : e[r2] = t, e;
+}
+function ownKeys(e, r2) {
+  var t = Object.keys(e);
+  if (Object.getOwnPropertySymbols) {
+    var o = Object.getOwnPropertySymbols(e);
+    r2 && (o = o.filter(function(r3) {
+      return Object.getOwnPropertyDescriptor(e, r3).enumerable;
+    })), t.push.apply(t, o);
+  }
+  return t;
+}
+function _objectSpread2(e) {
+  for (var r2 = 1; r2 < arguments.length; r2++) {
+    var t = null != arguments[r2] ? arguments[r2] : {};
+    r2 % 2 ? ownKeys(Object(t), true).forEach(function(r3) {
+      _defineProperty(e, r3, t[r3]);
+    }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(e, Object.getOwnPropertyDescriptors(t)) : ownKeys(Object(t)).forEach(function(r3) {
+      Object.defineProperty(e, r3, Object.getOwnPropertyDescriptor(t, r3));
+    });
+  }
+  return e;
+}
+function getCropSize(mediaWidth, mediaHeight, containerWidth, containerHeight, aspect, rotation = 0) {
+  const { width, height } = rotateSize(mediaWidth, mediaHeight, rotation);
+  const fittingWidth = Math.min(width, containerWidth);
+  const fittingHeight = Math.min(height, containerHeight);
+  if (fittingWidth > fittingHeight * aspect) return {
+    width: fittingHeight * aspect,
+    height: fittingHeight
+  };
+  return {
+    width: fittingWidth,
+    height: fittingWidth / aspect
+  };
+}
+function getMediaZoom(mediaSize) {
+  return mediaSize.width > mediaSize.height ? mediaSize.width / mediaSize.naturalWidth : mediaSize.height / mediaSize.naturalHeight;
+}
+function restrictPosition(position, mediaSize, cropSize, zoom, rotation = 0) {
+  const { width, height } = rotateSize(mediaSize.width, mediaSize.height, rotation);
+  return {
+    x: restrictPositionCoord(position.x, width, cropSize.width, zoom),
+    y: restrictPositionCoord(position.y, height, cropSize.height, zoom)
+  };
+}
+function restrictPositionCoord(position, mediaSize, cropSize, zoom) {
+  const maxPosition = Math.abs(mediaSize * zoom / 2 - cropSize / 2);
+  return clamp(position, -maxPosition, maxPosition);
+}
+function getDistanceBetweenPoints(pointA, pointB) {
+  return Math.sqrt(Math.pow(pointA.y - pointB.y, 2) + Math.pow(pointA.x - pointB.x, 2));
+}
+function getRotationBetweenPoints(pointA, pointB) {
+  return Math.atan2(pointB.y - pointA.y, pointB.x - pointA.x) * 180 / Math.PI;
+}
+function computeCroppedArea(crop, mediaSize, cropSize, aspect, zoom, rotation = 0, restrictPosition2 = true) {
+  const limitAreaFn = restrictPosition2 ? limitArea : noOp;
+  const mediaBBoxSize = rotateSize(mediaSize.width, mediaSize.height, rotation);
+  const mediaNaturalBBoxSize = rotateSize(mediaSize.naturalWidth, mediaSize.naturalHeight, rotation);
+  const croppedAreaPercentages = {
+    x: limitAreaFn(100, ((mediaBBoxSize.width - cropSize.width / zoom) / 2 - crop.x / zoom) / mediaBBoxSize.width * 100),
+    y: limitAreaFn(100, ((mediaBBoxSize.height - cropSize.height / zoom) / 2 - crop.y / zoom) / mediaBBoxSize.height * 100),
+    width: limitAreaFn(100, cropSize.width / mediaBBoxSize.width * 100 / zoom),
+    height: limitAreaFn(100, cropSize.height / mediaBBoxSize.height * 100 / zoom)
+  };
+  const widthInPixels = Math.round(limitAreaFn(mediaNaturalBBoxSize.width, croppedAreaPercentages.width * mediaNaturalBBoxSize.width / 100));
+  const heightInPixels = Math.round(limitAreaFn(mediaNaturalBBoxSize.height, croppedAreaPercentages.height * mediaNaturalBBoxSize.height / 100));
+  const sizePixels = mediaNaturalBBoxSize.width >= mediaNaturalBBoxSize.height * aspect ? {
+    width: Math.round(heightInPixels * aspect),
+    height: heightInPixels
+  } : {
+    width: widthInPixels,
+    height: Math.round(widthInPixels / aspect)
+  };
+  return {
+    croppedAreaPercentages,
+    croppedAreaPixels: _objectSpread2(_objectSpread2({}, sizePixels), {}, {
+      x: Math.round(limitAreaFn(mediaNaturalBBoxSize.width - sizePixels.width, croppedAreaPercentages.x * mediaNaturalBBoxSize.width / 100)),
+      y: Math.round(limitAreaFn(mediaNaturalBBoxSize.height - sizePixels.height, croppedAreaPercentages.y * mediaNaturalBBoxSize.height / 100))
+    })
+  };
+}
+function limitArea(max2, value) {
+  return Math.min(max2, Math.max(0, value));
+}
+function noOp(_max, value) {
+  return value;
+}
+function getInitialCropFromCroppedAreaPercentages(croppedAreaPercentages, mediaSize, rotation, cropSize, minZoom, maxZoom) {
+  const mediaBBoxSize = rotateSize(mediaSize.width, mediaSize.height, rotation);
+  const zoom = clamp(cropSize.width / mediaBBoxSize.width * (100 / croppedAreaPercentages.width), minZoom, maxZoom);
+  return {
+    crop: {
+      x: zoom * mediaBBoxSize.width / 2 - cropSize.width / 2 - mediaBBoxSize.width * zoom * (croppedAreaPercentages.x / 100),
+      y: zoom * mediaBBoxSize.height / 2 - cropSize.height / 2 - mediaBBoxSize.height * zoom * (croppedAreaPercentages.y / 100)
+    },
+    zoom
+  };
+}
+function getZoomFromCroppedAreaPixels(croppedAreaPixels, mediaSize, cropSize) {
+  const mediaZoom = getMediaZoom(mediaSize);
+  return cropSize.height > cropSize.width ? cropSize.height / (croppedAreaPixels.height * mediaZoom) : cropSize.width / (croppedAreaPixels.width * mediaZoom);
+}
+function getInitialCropFromCroppedAreaPixels(croppedAreaPixels, mediaSize, rotation = 0, cropSize, minZoom, maxZoom) {
+  const mediaNaturalBBoxSize = rotateSize(mediaSize.naturalWidth, mediaSize.naturalHeight, rotation);
+  const zoom = clamp(getZoomFromCroppedAreaPixels(croppedAreaPixels, mediaSize, cropSize), minZoom, maxZoom);
+  const cropZoom = cropSize.height > cropSize.width ? cropSize.height / croppedAreaPixels.height : cropSize.width / croppedAreaPixels.width;
+  return {
+    crop: {
+      x: ((mediaNaturalBBoxSize.width - croppedAreaPixels.width) / 2 - croppedAreaPixels.x) * cropZoom,
+      y: ((mediaNaturalBBoxSize.height - croppedAreaPixels.height) / 2 - croppedAreaPixels.y) * cropZoom
+    },
+    zoom
+  };
+}
+function getCenter(a, b) {
+  return {
+    x: (b.x + a.x) / 2,
+    y: (b.y + a.y) / 2
+  };
+}
+function getRadianAngle(degreeValue) {
+  return degreeValue * Math.PI / 180;
+}
+function rotateSize(width, height, rotation) {
+  const rotRad = getRadianAngle(rotation);
+  return {
+    width: Math.abs(Math.cos(rotRad) * width) + Math.abs(Math.sin(rotRad) * height),
+    height: Math.abs(Math.sin(rotRad) * width) + Math.abs(Math.cos(rotRad) * height)
+  };
+}
+function clamp(value, min2, max2) {
+  return Math.min(Math.max(value, min2), max2);
+}
+function classNames(...args) {
+  return args.filter((value) => {
+    if (typeof value === "string" && value.length > 0) return true;
+    return false;
+  }).join(" ").trim();
+}
+var styles_default = ".reactEasyCrop_Container {\n  position: absolute;\n  top: 0;\n  left: 0;\n  right: 0;\n  bottom: 0;\n  overflow: hidden;\n  user-select: none;\n  touch-action: none;\n  cursor: move;\n  display: flex;\n  justify-content: center;\n  align-items: center;\n}\n\n.reactEasyCrop_Image,\n.reactEasyCrop_Video {\n  will-change: transform; /* this improves performances and prevent painting issues on iOS Chrome */\n  max-width: unset; /* prevent global img/video reset rules from constraining the cropper media */\n}\n\n.reactEasyCrop_Contain {\n  max-width: 100%;\n  max-height: 100%;\n  margin: auto;\n  position: absolute;\n  top: 0;\n  bottom: 0;\n  left: 0;\n  right: 0;\n}\n.reactEasyCrop_Cover_Horizontal {\n  width: 100%;\n  height: auto;\n}\n.reactEasyCrop_Cover_Vertical {\n  width: auto;\n  height: 100%;\n}\n\n.reactEasyCrop_CropArea {\n  position: absolute;\n  left: 50%;\n  top: 50%;\n  transform: translate(-50%, -50%);\n  border: 1px solid rgba(255, 255, 255, 0.5);\n  box-sizing: border-box;\n  box-shadow: 0 0 0 9999em;\n  color: rgba(0, 0, 0, 0.5);\n  overflow: hidden;\n}\n\n.reactEasyCrop_CropAreaRound {\n  border-radius: 50%;\n}\n\n.reactEasyCrop_CropAreaGrid::before {\n  content: ' ';\n  box-sizing: border-box;\n  position: absolute;\n  border: 1px solid rgba(255, 255, 255, 0.5);\n  top: 0;\n  bottom: 0;\n  left: 33.33%;\n  right: 33.33%;\n  border-top: 0;\n  border-bottom: 0;\n}\n\n.reactEasyCrop_CropAreaGrid::after {\n  content: ' ';\n  box-sizing: border-box;\n  position: absolute;\n  border: 1px solid rgba(255, 255, 255, 0.5);\n  top: 33.33%;\n  bottom: 33.33%;\n  left: 0;\n  right: 0;\n  border-left: 0;\n  border-right: 0;\n}\n";
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 3;
+const KEYBOARD_STEP = 1;
+var Cropper = class Cropper2 extends reactExports.Component {
+  constructor(..._args) {
+    super(..._args);
+    this.cropperRef = reactExports.createRef();
+    this.imageRef = reactExports.createRef();
+    this.videoRef = reactExports.createRef();
+    this.containerPosition = {
+      x: 0,
+      y: 0
+    };
+    this.containerRef = null;
+    this.styleRef = null;
+    this.containerRect = null;
+    this.mediaSize = {
+      width: 0,
+      height: 0,
+      naturalWidth: 0,
+      naturalHeight: 0
+    };
+    this.dragStartPosition = {
+      x: 0,
+      y: 0
+    };
+    this.dragStartCrop = {
+      x: 0,
+      y: 0
+    };
+    this.gestureZoomStart = 0;
+    this.gestureRotationStart = 0;
+    this.isTouching = false;
+    this.lastPinchDistance = 0;
+    this.lastPinchRotation = 0;
+    this.rafDragTimeout = null;
+    this.rafPinchTimeout = null;
+    this.wheelTimer = null;
+    this.currentDoc = typeof document !== "undefined" ? document : null;
+    this.currentWindow = typeof window !== "undefined" ? window : null;
+    this.resizeObserver = null;
+    this.previousCropSize = null;
+    this.isInitialized = false;
+    this.state = {
+      cropSize: null,
+      hasWheelJustStarted: false,
+      mediaObjectFit: void 0
+    };
+    this.initResizeObserver = () => {
+      if (typeof window.ResizeObserver === "undefined" || !this.containerRef) return;
+      let isFirstResize = true;
+      this.resizeObserver = new window.ResizeObserver((entries) => {
+        if (isFirstResize) {
+          isFirstResize = false;
+          return;
+        }
+        this.computeSizes();
+      });
+      this.resizeObserver.observe(this.containerRef);
+    };
+    this.preventZoomSafari = (e) => e.preventDefault();
+    this.cleanEvents = () => {
+      if (!this.currentDoc) return;
+      this.currentDoc.removeEventListener("mousemove", this.onMouseMove);
+      this.currentDoc.removeEventListener("mouseup", this.onDragStopped);
+      this.currentDoc.removeEventListener("touchmove", this.onTouchMove);
+      this.currentDoc.removeEventListener("touchend", this.onDragStopped);
+      this.currentDoc.removeEventListener("gesturechange", this.onGestureChange);
+      this.currentDoc.removeEventListener("gestureend", this.onGestureEnd);
+      this.currentDoc.removeEventListener("scroll", this.onScroll);
+    };
+    this.clearScrollEvent = () => {
+      if (this.containerRef) this.containerRef.removeEventListener("wheel", this.onWheel);
+      if (this.wheelTimer) clearTimeout(this.wheelTimer);
+    };
+    this.onMediaLoad = () => {
+      const cropSize = this.computeSizes();
+      if (cropSize) {
+        this.previousCropSize = cropSize;
+        this.emitCropData();
+        this.setInitialCrop(cropSize);
+        this.isInitialized = true;
+      }
+      if (this.props.onMediaLoaded) this.props.onMediaLoaded(this.mediaSize);
+    };
+    this.setInitialCrop = (cropSize) => {
+      if (this.props.initialCroppedAreaPercentages) {
+        const { crop, zoom } = getInitialCropFromCroppedAreaPercentages(this.props.initialCroppedAreaPercentages, this.mediaSize, this.props.rotation, cropSize, this.props.minZoom, this.props.maxZoom);
+        this.props.onCropChange(crop);
+        this.props.onZoomChange && this.props.onZoomChange(zoom);
+      } else if (this.props.initialCroppedAreaPixels) {
+        const { crop, zoom } = getInitialCropFromCroppedAreaPixels(this.props.initialCroppedAreaPixels, this.mediaSize, this.props.rotation, cropSize, this.props.minZoom, this.props.maxZoom);
+        this.props.onCropChange(crop);
+        this.props.onZoomChange && this.props.onZoomChange(zoom);
+      }
+    };
+    this.computeSizes = () => {
+      const mediaRef = this.imageRef.current || this.videoRef.current;
+      if (mediaRef && this.containerRef) {
+        var _this$imageRef$curren, _this$videoRef$curren, _this$imageRef$curren2, _this$videoRef$curren2, _this$state$cropSize, _this$state$cropSize2;
+        this.containerRect = this.containerRef.getBoundingClientRect();
+        this.saveContainerPosition();
+        const containerAspect = this.containerRect.width / this.containerRect.height;
+        const naturalWidth = ((_this$imageRef$curren = this.imageRef.current) === null || _this$imageRef$curren === void 0 ? void 0 : _this$imageRef$curren.naturalWidth) || ((_this$videoRef$curren = this.videoRef.current) === null || _this$videoRef$curren === void 0 ? void 0 : _this$videoRef$curren.videoWidth) || 0;
+        const naturalHeight = ((_this$imageRef$curren2 = this.imageRef.current) === null || _this$imageRef$curren2 === void 0 ? void 0 : _this$imageRef$curren2.naturalHeight) || ((_this$videoRef$curren2 = this.videoRef.current) === null || _this$videoRef$curren2 === void 0 ? void 0 : _this$videoRef$curren2.videoHeight) || 0;
+        const isMediaScaledDown = mediaRef.offsetWidth < naturalWidth || mediaRef.offsetHeight < naturalHeight;
+        const mediaAspect = naturalWidth / naturalHeight;
+        let renderedMediaSize;
+        if (isMediaScaledDown) switch (this.state.mediaObjectFit) {
+          default:
+          case "contain":
+            renderedMediaSize = containerAspect > mediaAspect ? {
+              width: this.containerRect.height * mediaAspect,
+              height: this.containerRect.height
+            } : {
+              width: this.containerRect.width,
+              height: this.containerRect.width / mediaAspect
+            };
+            break;
+          case "horizontal-cover":
+            renderedMediaSize = {
+              width: this.containerRect.width,
+              height: this.containerRect.width / mediaAspect
+            };
+            break;
+          case "vertical-cover":
+            renderedMediaSize = {
+              width: this.containerRect.height * mediaAspect,
+              height: this.containerRect.height
+            };
+            break;
+        }
+        else renderedMediaSize = {
+          width: mediaRef.offsetWidth,
+          height: mediaRef.offsetHeight
+        };
+        this.mediaSize = _objectSpread2(_objectSpread2({}, renderedMediaSize), {}, {
+          naturalWidth,
+          naturalHeight
+        });
+        if (this.props.setMediaSize) this.props.setMediaSize(this.mediaSize);
+        const cropSize = this.props.cropSize ? this.props.cropSize : getCropSize(this.mediaSize.width, this.mediaSize.height, this.containerRect.width, this.containerRect.height, this.props.aspect, this.props.rotation);
+        if (((_this$state$cropSize = this.state.cropSize) === null || _this$state$cropSize === void 0 ? void 0 : _this$state$cropSize.height) !== cropSize.height || ((_this$state$cropSize2 = this.state.cropSize) === null || _this$state$cropSize2 === void 0 ? void 0 : _this$state$cropSize2.width) !== cropSize.width) this.props.onCropSizeChange && this.props.onCropSizeChange(cropSize);
+        this.setState({ cropSize }, this.recomputeCropPosition);
+        if (this.props.setCropSize) this.props.setCropSize(cropSize);
+        return cropSize;
+      }
+    };
+    this.saveContainerPosition = () => {
+      if (this.containerRef) {
+        const bounds = this.containerRef.getBoundingClientRect();
+        this.containerPosition = {
+          x: bounds.left,
+          y: bounds.top
+        };
+      }
+    };
+    this.onMouseDown = (e) => {
+      if (!this.currentDoc) return;
+      e.preventDefault();
+      this.currentDoc.addEventListener("mousemove", this.onMouseMove);
+      this.currentDoc.addEventListener("mouseup", this.onDragStopped);
+      this.saveContainerPosition();
+      this.onDragStart(Cropper2.getMousePoint(e));
+    };
+    this.onMouseMove = (e) => this.onDrag(Cropper2.getMousePoint(e));
+    this.onScroll = (e) => {
+      if (!this.currentDoc) return;
+      e.preventDefault();
+      this.saveContainerPosition();
+    };
+    this.onTouchStart = (e) => {
+      if (!this.currentDoc) return;
+      this.isTouching = true;
+      if (this.props.onTouchRequest && !this.props.onTouchRequest(e)) return;
+      this.currentDoc.addEventListener("touchmove", this.onTouchMove, { passive: false });
+      this.currentDoc.addEventListener("touchend", this.onDragStopped);
+      this.saveContainerPosition();
+      if (e.touches.length === 2) this.onPinchStart(e);
+      else if (e.touches.length === 1) this.onDragStart(Cropper2.getTouchPoint(e.touches[0]));
+    };
+    this.onTouchMove = (e) => {
+      e.preventDefault();
+      if (e.touches.length === 2) this.onPinchMove(e);
+      else if (e.touches.length === 1) this.onDrag(Cropper2.getTouchPoint(e.touches[0]));
+    };
+    this.onGestureStart = (e) => {
+      if (!this.currentDoc) return;
+      e.preventDefault();
+      this.currentDoc.addEventListener("gesturechange", this.onGestureChange);
+      this.currentDoc.addEventListener("gestureend", this.onGestureEnd);
+      this.gestureZoomStart = this.props.zoom;
+      this.gestureRotationStart = this.props.rotation;
+    };
+    this.onGestureChange = (e) => {
+      e.preventDefault();
+      if (this.isTouching) return;
+      const point = Cropper2.getMousePoint(e);
+      const newZoom = this.gestureZoomStart - 1 + e.scale;
+      this.setNewZoom(newZoom, point, { shouldUpdatePosition: true });
+      if (this.props.onRotationChange) {
+        const newRotation = this.gestureRotationStart + e.rotation;
+        this.props.onRotationChange(newRotation);
+      }
+    };
+    this.onGestureEnd = (e) => {
+      this.cleanEvents();
+    };
+    this.onDragStart = ({ x, y }) => {
+      var _this$props$onInterac, _this$props;
+      this.dragStartPosition = {
+        x,
+        y
+      };
+      this.dragStartCrop = _objectSpread2({}, this.props.crop);
+      (_this$props$onInterac = (_this$props = this.props).onInteractionStart) === null || _this$props$onInterac === void 0 || _this$props$onInterac.call(_this$props);
+    };
+    this.onDrag = ({ x, y }) => {
+      if (!this.currentWindow) return;
+      if (this.rafDragTimeout) this.currentWindow.cancelAnimationFrame(this.rafDragTimeout);
+      this.rafDragTimeout = this.currentWindow.requestAnimationFrame(() => {
+        if (!this.state.cropSize) return;
+        if (x === void 0 || y === void 0) return;
+        const offsetX = x - this.dragStartPosition.x;
+        const offsetY = y - this.dragStartPosition.y;
+        const requestedPosition = {
+          x: this.dragStartCrop.x + offsetX,
+          y: this.dragStartCrop.y + offsetY
+        };
+        const newPosition = this.props.restrictPosition ? restrictPosition(requestedPosition, this.mediaSize, this.state.cropSize, this.props.zoom, this.props.rotation) : requestedPosition;
+        this.props.onCropChange(newPosition);
+      });
+    };
+    this.onDragStopped = () => {
+      var _this$props$onInterac2, _this$props2;
+      this.isTouching = false;
+      this.cleanEvents();
+      this.emitCropData();
+      (_this$props$onInterac2 = (_this$props2 = this.props).onInteractionEnd) === null || _this$props$onInterac2 === void 0 || _this$props$onInterac2.call(_this$props2);
+    };
+    this.onWheel = (e) => {
+      if (!this.currentWindow) return;
+      if (this.props.onWheelRequest && !this.props.onWheelRequest(e)) return;
+      e.preventDefault();
+      const point = Cropper2.getMousePoint(e);
+      const { pixelY } = normalizeWheel(e);
+      const newZoom = this.props.zoom - pixelY * this.props.zoomSpeed / 200;
+      this.setNewZoom(newZoom, point, { shouldUpdatePosition: true });
+      if (!this.state.hasWheelJustStarted) this.setState({ hasWheelJustStarted: true }, () => {
+        var _this$props$onInterac3, _this$props3;
+        return (_this$props$onInterac3 = (_this$props3 = this.props).onInteractionStart) === null || _this$props$onInterac3 === void 0 ? void 0 : _this$props$onInterac3.call(_this$props3);
+      });
+      if (this.wheelTimer) clearTimeout(this.wheelTimer);
+      this.wheelTimer = this.currentWindow.setTimeout(() => this.setState({ hasWheelJustStarted: false }, () => {
+        var _this$props$onInterac4, _this$props4;
+        return (_this$props$onInterac4 = (_this$props4 = this.props).onInteractionEnd) === null || _this$props$onInterac4 === void 0 ? void 0 : _this$props$onInterac4.call(_this$props4);
+      }), 250);
+    };
+    this.getPointOnContainer = ({ x, y }, containerTopLeft) => {
+      if (!this.containerRect) throw new Error("The Cropper is not mounted");
+      return {
+        x: this.containerRect.width / 2 - (x - containerTopLeft.x),
+        y: this.containerRect.height / 2 - (y - containerTopLeft.y)
+      };
+    };
+    this.getPointOnMedia = ({ x, y }) => {
+      const { crop, zoom } = this.props;
+      return {
+        x: (x + crop.x) / zoom,
+        y: (y + crop.y) / zoom
+      };
+    };
+    this.setNewZoom = (zoom, point, { shouldUpdatePosition = true } = {}) => {
+      if (!this.state.cropSize || !this.props.onZoomChange) return;
+      const newZoom = clamp(zoom, this.props.minZoom, this.props.maxZoom);
+      if (shouldUpdatePosition) {
+        const zoomPoint = this.getPointOnContainer(point, this.containerPosition);
+        const zoomTarget = this.getPointOnMedia(zoomPoint);
+        const requestedPosition = {
+          x: zoomTarget.x * newZoom - zoomPoint.x,
+          y: zoomTarget.y * newZoom - zoomPoint.y
+        };
+        const newPosition = this.props.restrictPosition ? restrictPosition(requestedPosition, this.mediaSize, this.state.cropSize, newZoom, this.props.rotation) : requestedPosition;
+        this.props.onCropChange(newPosition);
+      }
+      this.props.onZoomChange(newZoom);
+    };
+    this.getCropData = () => {
+      if (!this.state.cropSize) return null;
+      return computeCroppedArea(this.props.restrictPosition ? restrictPosition(this.props.crop, this.mediaSize, this.state.cropSize, this.props.zoom, this.props.rotation) : this.props.crop, this.mediaSize, this.state.cropSize, this.getAspect(), this.props.zoom, this.props.rotation, this.props.restrictPosition);
+    };
+    this.emitCropData = () => {
+      const cropData = this.getCropData();
+      if (!cropData) return;
+      const { croppedAreaPercentages, croppedAreaPixels } = cropData;
+      if (this.props.onCropComplete) this.props.onCropComplete(croppedAreaPercentages, croppedAreaPixels);
+      if (this.props.onCropAreaChange) this.props.onCropAreaChange(croppedAreaPercentages, croppedAreaPixels);
+    };
+    this.emitCropAreaChange = () => {
+      const cropData = this.getCropData();
+      if (!cropData) return;
+      const { croppedAreaPercentages, croppedAreaPixels } = cropData;
+      if (this.props.onCropAreaChange) this.props.onCropAreaChange(croppedAreaPercentages, croppedAreaPixels);
+    };
+    this.recomputeCropPosition = () => {
+      var _this$previousCropSiz, _this$previousCropSiz2;
+      if (!this.state.cropSize) return;
+      let adjustedCrop = this.props.crop;
+      if (this.isInitialized && ((_this$previousCropSiz = this.previousCropSize) === null || _this$previousCropSiz === void 0 ? void 0 : _this$previousCropSiz.width) && ((_this$previousCropSiz2 = this.previousCropSize) === null || _this$previousCropSiz2 === void 0 ? void 0 : _this$previousCropSiz2.height)) {
+        if (Math.abs(this.previousCropSize.width - this.state.cropSize.width) > 1e-6 || Math.abs(this.previousCropSize.height - this.state.cropSize.height) > 1e-6) {
+          const scaleX = this.state.cropSize.width / this.previousCropSize.width;
+          const scaleY = this.state.cropSize.height / this.previousCropSize.height;
+          adjustedCrop = {
+            x: this.props.crop.x * scaleX,
+            y: this.props.crop.y * scaleY
+          };
+        }
+      }
+      const newPosition = this.props.restrictPosition ? restrictPosition(adjustedCrop, this.mediaSize, this.state.cropSize, this.props.zoom, this.props.rotation) : adjustedCrop;
+      this.previousCropSize = this.state.cropSize;
+      this.props.onCropChange(newPosition);
+      this.emitCropData();
+    };
+    this.onKeyDown = (event) => {
+      const { crop, onCropChange, keyboardStep, zoom, rotation } = this.props;
+      let step = keyboardStep;
+      if (!this.state.cropSize) return;
+      if (event.shiftKey) step *= 0.2;
+      let newCrop = _objectSpread2({}, crop);
+      switch (event.key) {
+        case "ArrowUp":
+          newCrop.y -= step;
+          event.preventDefault();
+          break;
+        case "ArrowDown":
+          newCrop.y += step;
+          event.preventDefault();
+          break;
+        case "ArrowLeft":
+          newCrop.x -= step;
+          event.preventDefault();
+          break;
+        case "ArrowRight":
+          newCrop.x += step;
+          event.preventDefault();
+          break;
+        default:
+          return;
+      }
+      if (this.props.restrictPosition) newCrop = restrictPosition(newCrop, this.mediaSize, this.state.cropSize, zoom, rotation);
+      if (!event.repeat) {
+        var _this$props$onInterac5, _this$props5;
+        (_this$props$onInterac5 = (_this$props5 = this.props).onInteractionStart) === null || _this$props$onInterac5 === void 0 || _this$props$onInterac5.call(_this$props5);
+      }
+      onCropChange(newCrop);
+    };
+    this.onKeyUp = (event) => {
+      var _this$props$onInterac6, _this$props6;
+      switch (event.key) {
+        case "ArrowUp":
+        case "ArrowDown":
+        case "ArrowLeft":
+        case "ArrowRight":
+          event.preventDefault();
+          break;
+        default:
+          return;
+      }
+      this.emitCropData();
+      (_this$props$onInterac6 = (_this$props6 = this.props).onInteractionEnd) === null || _this$props$onInterac6 === void 0 || _this$props$onInterac6.call(_this$props6);
+    };
+  }
+  componentDidMount() {
+    if (!this.currentDoc || !this.currentWindow) return;
+    if (this.containerRef) {
+      if (this.containerRef.ownerDocument) this.currentDoc = this.containerRef.ownerDocument;
+      if (this.currentDoc.defaultView) this.currentWindow = this.currentDoc.defaultView;
+      this.initResizeObserver();
+      if (typeof window.ResizeObserver === "undefined") this.currentWindow.addEventListener("resize", this.computeSizes);
+      this.props.zoomWithScroll && this.containerRef.addEventListener("wheel", this.onWheel, { passive: false });
+      this.containerRef.addEventListener("gesturestart", this.onGestureStart);
+    }
+    this.currentDoc.addEventListener("scroll", this.onScroll);
+    if (!this.props.disableAutomaticStylesInjection) {
+      this.styleRef = this.currentDoc.createElement("style");
+      this.styleRef.setAttribute("type", "text/css");
+      if (this.props.nonce) this.styleRef.setAttribute("nonce", this.props.nonce);
+      this.styleRef.innerHTML = styles_default;
+      this.currentDoc.head.appendChild(this.styleRef);
+    }
+    if (this.imageRef.current && this.imageRef.current.complete) this.onMediaLoad();
+    if (this.props.setImageRef) this.props.setImageRef(this.imageRef);
+    if (this.props.setVideoRef) this.props.setVideoRef(this.videoRef);
+    if (this.props.setCropperRef) this.props.setCropperRef(this.cropperRef);
+  }
+  componentWillUnmount() {
+    var _this$resizeObserver;
+    if (!this.currentDoc || !this.currentWindow) return;
+    if (typeof window.ResizeObserver === "undefined") this.currentWindow.removeEventListener("resize", this.computeSizes);
+    (_this$resizeObserver = this.resizeObserver) === null || _this$resizeObserver === void 0 || _this$resizeObserver.disconnect();
+    if (this.containerRef) this.containerRef.removeEventListener("gesturestart", this.preventZoomSafari);
+    if (this.styleRef) {
+      var _this$styleRef$parent;
+      (_this$styleRef$parent = this.styleRef.parentNode) === null || _this$styleRef$parent === void 0 || _this$styleRef$parent.removeChild(this.styleRef);
+    }
+    this.cleanEvents();
+    this.props.zoomWithScroll && this.clearScrollEvent();
+  }
+  componentDidUpdate(prevProps) {
+    var _prevProps$cropSize, _this$props$cropSize, _prevProps$cropSize2, _this$props$cropSize2, _prevProps$crop, _this$props$crop, _prevProps$crop2, _this$props$crop2;
+    if (prevProps.rotation !== this.props.rotation) {
+      this.computeSizes();
+      this.recomputeCropPosition();
+    } else if (prevProps.aspect !== this.props.aspect) this.computeSizes();
+    else if (prevProps.objectFit !== this.props.objectFit) this.computeSizes();
+    else if (prevProps.zoom !== this.props.zoom) this.recomputeCropPosition();
+    else if (((_prevProps$cropSize = prevProps.cropSize) === null || _prevProps$cropSize === void 0 ? void 0 : _prevProps$cropSize.height) !== ((_this$props$cropSize = this.props.cropSize) === null || _this$props$cropSize === void 0 ? void 0 : _this$props$cropSize.height) || ((_prevProps$cropSize2 = prevProps.cropSize) === null || _prevProps$cropSize2 === void 0 ? void 0 : _prevProps$cropSize2.width) !== ((_this$props$cropSize2 = this.props.cropSize) === null || _this$props$cropSize2 === void 0 ? void 0 : _this$props$cropSize2.width)) this.computeSizes();
+    else if (((_prevProps$crop = prevProps.crop) === null || _prevProps$crop === void 0 ? void 0 : _prevProps$crop.x) !== ((_this$props$crop = this.props.crop) === null || _this$props$crop === void 0 ? void 0 : _this$props$crop.x) || ((_prevProps$crop2 = prevProps.crop) === null || _prevProps$crop2 === void 0 ? void 0 : _prevProps$crop2.y) !== ((_this$props$crop2 = this.props.crop) === null || _this$props$crop2 === void 0 ? void 0 : _this$props$crop2.y)) this.emitCropAreaChange();
+    if (prevProps.zoomWithScroll !== this.props.zoomWithScroll && this.containerRef) this.props.zoomWithScroll ? this.containerRef.addEventListener("wheel", this.onWheel, { passive: false }) : this.clearScrollEvent();
+    if (prevProps.video !== this.props.video) {
+      var _this$videoRef$curren3;
+      (_this$videoRef$curren3 = this.videoRef.current) === null || _this$videoRef$curren3 === void 0 || _this$videoRef$curren3.load();
+    }
+    const objectFit = this.getObjectFit();
+    if (objectFit !== this.state.mediaObjectFit) this.setState({ mediaObjectFit: objectFit }, this.computeSizes);
+  }
+  getAspect() {
+    const { cropSize, aspect } = this.props;
+    if (cropSize) return cropSize.width / cropSize.height;
+    return aspect;
+  }
+  getObjectFit() {
+    if (this.props.objectFit === "cover") {
+      if ((this.imageRef.current || this.videoRef.current) && this.containerRef) {
+        var _this$imageRef$curren3, _this$videoRef$curren4, _this$imageRef$curren4, _this$videoRef$curren5;
+        this.containerRect = this.containerRef.getBoundingClientRect();
+        const containerAspect = this.containerRect.width / this.containerRect.height;
+        return (((_this$imageRef$curren3 = this.imageRef.current) === null || _this$imageRef$curren3 === void 0 ? void 0 : _this$imageRef$curren3.naturalWidth) || ((_this$videoRef$curren4 = this.videoRef.current) === null || _this$videoRef$curren4 === void 0 ? void 0 : _this$videoRef$curren4.videoWidth) || 0) / (((_this$imageRef$curren4 = this.imageRef.current) === null || _this$imageRef$curren4 === void 0 ? void 0 : _this$imageRef$curren4.naturalHeight) || ((_this$videoRef$curren5 = this.videoRef.current) === null || _this$videoRef$curren5 === void 0 ? void 0 : _this$videoRef$curren5.videoHeight) || 0) < containerAspect ? "horizontal-cover" : "vertical-cover";
+      }
+      return "horizontal-cover";
+    }
+    return this.props.objectFit;
+  }
+  onPinchStart(e) {
+    const pointA = Cropper2.getTouchPoint(e.touches[0]);
+    const pointB = Cropper2.getTouchPoint(e.touches[1]);
+    this.lastPinchDistance = getDistanceBetweenPoints(pointA, pointB);
+    this.lastPinchRotation = getRotationBetweenPoints(pointA, pointB);
+    this.onDragStart(getCenter(pointA, pointB));
+  }
+  onPinchMove(e) {
+    if (!this.currentDoc || !this.currentWindow) return;
+    const pointA = Cropper2.getTouchPoint(e.touches[0]);
+    const pointB = Cropper2.getTouchPoint(e.touches[1]);
+    const center = getCenter(pointA, pointB);
+    this.onDrag(center);
+    if (this.rafPinchTimeout) this.currentWindow.cancelAnimationFrame(this.rafPinchTimeout);
+    this.rafPinchTimeout = this.currentWindow.requestAnimationFrame(() => {
+      const distance = getDistanceBetweenPoints(pointA, pointB);
+      const newZoom = this.props.zoom * (distance / this.lastPinchDistance);
+      this.setNewZoom(newZoom, center, { shouldUpdatePosition: false });
+      this.lastPinchDistance = distance;
+      const rotation = getRotationBetweenPoints(pointA, pointB);
+      const newRotation = this.props.rotation + (rotation - this.lastPinchRotation);
+      this.props.onRotationChange && this.props.onRotationChange(newRotation);
+      this.lastPinchRotation = rotation;
+    });
+  }
+  render() {
+    var _this$state$mediaObje;
+    const { image, video, mediaProps, cropperProps, transform, crop: { x, y }, rotation, zoom, cropShape, showGrid, roundCropAreaPixels, style: { containerStyle, cropAreaStyle, mediaStyle }, classes: { containerClassName, cropAreaClassName, mediaClassName } } = this.props;
+    const objectFit = (_this$state$mediaObje = this.state.mediaObjectFit) !== null && _this$state$mediaObje !== void 0 ? _this$state$mediaObje : this.getObjectFit();
+    return /* @__PURE__ */ reactExports.createElement("div", {
+      onMouseDown: this.onMouseDown,
+      onTouchStart: this.onTouchStart,
+      ref: (el) => this.containerRef = el,
+      "data-testid": "container",
+      style: containerStyle,
+      className: classNames("reactEasyCrop_Container", containerClassName)
+    }, image ? /* @__PURE__ */ reactExports.createElement("img", _objectSpread2(_objectSpread2({
+      alt: "",
+      className: classNames("reactEasyCrop_Image", objectFit === "contain" && "reactEasyCrop_Contain", objectFit === "horizontal-cover" && "reactEasyCrop_Cover_Horizontal", objectFit === "vertical-cover" && "reactEasyCrop_Cover_Vertical", mediaClassName)
+    }, mediaProps), {}, {
+      src: image,
+      ref: this.imageRef,
+      style: _objectSpread2(_objectSpread2({}, mediaStyle), {}, { transform: transform || `translate(${x}px, ${y}px) rotate(${rotation}deg) scale(${zoom})` }),
+      onLoad: this.onMediaLoad
+    })) : video && /* @__PURE__ */ reactExports.createElement("video", _objectSpread2(_objectSpread2({
+      autoPlay: true,
+      playsInline: true,
+      loop: true,
+      muted: true,
+      className: classNames("reactEasyCrop_Video", objectFit === "contain" && "reactEasyCrop_Contain", objectFit === "horizontal-cover" && "reactEasyCrop_Cover_Horizontal", objectFit === "vertical-cover" && "reactEasyCrop_Cover_Vertical", mediaClassName)
+    }, mediaProps), {}, {
+      ref: this.videoRef,
+      onLoadedMetadata: this.onMediaLoad,
+      style: _objectSpread2(_objectSpread2({}, mediaStyle), {}, { transform: transform || `translate(${x}px, ${y}px) rotate(${rotation}deg) scale(${zoom})` }),
+      controls: false
+    }), (Array.isArray(video) ? video : [{ src: video }]).map((item) => /* @__PURE__ */ reactExports.createElement("source", _objectSpread2({ key: item.src }, item)))), this.state.cropSize && /* @__PURE__ */ reactExports.createElement("div", _objectSpread2({
+      ref: this.cropperRef,
+      style: _objectSpread2(_objectSpread2({}, cropAreaStyle), {}, {
+        width: roundCropAreaPixels ? Math.round(this.state.cropSize.width) : this.state.cropSize.width,
+        height: roundCropAreaPixels ? Math.round(this.state.cropSize.height) : this.state.cropSize.height
+      }),
+      tabIndex: 0,
+      onKeyDown: this.onKeyDown,
+      onKeyUp: this.onKeyUp,
+      "data-testid": "cropper",
+      className: classNames("reactEasyCrop_CropArea", cropShape === "round" && "reactEasyCrop_CropAreaRound", showGrid && "reactEasyCrop_CropAreaGrid", cropAreaClassName)
+    }, cropperProps)));
+  }
+};
+Cropper.defaultProps = {
+  zoom: 1,
+  rotation: 0,
+  aspect: 4 / 3,
+  maxZoom: MAX_ZOOM,
+  minZoom: MIN_ZOOM,
+  cropShape: "rect",
+  objectFit: "contain",
+  showGrid: true,
+  style: {},
+  classes: {},
+  mediaProps: {},
+  cropperProps: {},
+  zoomSpeed: 1,
+  restrictPosition: true,
+  zoomWithScroll: true,
+  keyboardStep: KEYBOARD_STEP
+};
+Cropper.getMousePoint = (e) => ({
+  x: Number(e.clientX),
+  y: Number(e.clientY)
+});
+Cropper.getTouchPoint = (touch) => ({
+  x: Number(touch.clientX),
+  y: Number(touch.clientY)
+});
+var src_default = Cropper;
+async function getCroppedImage(imageSrc, pixelCrop) {
+  const image = await createImage(imageSrc);
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    throw new Error("No 2d context");
+  }
+  canvas.width = pixelCrop.width;
+  canvas.height = pixelCrop.height;
+  ctx.drawImage(
+    image,
+    pixelCrop.x,
+    pixelCrop.y,
+    pixelCrop.width,
+    pixelCrop.height,
+    0,
+    0,
+    pixelCrop.width,
+    pixelCrop.height
+  );
+  return canvas.toDataURL("image/png");
+}
+function createImage(url) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.addEventListener("load", () => resolve(image));
+    image.addEventListener("error", (error) => reject(error));
+    image.setAttribute("crossOrigin", "anonymous");
+    image.src = url;
+  });
+}
+function ImageUpload({
+  imageName,
+  onUpload,
+  onSuccess,
+  onError
+}) {
+  const [isDragOver, setIsDragOver] = reactExports.useState(false);
+  const [isDragReject, setIsDragReject] = reactExports.useState(false);
+  const [imageSrc, setImageSrc] = reactExports.useState(null);
+  const [crop, setCrop] = reactExports.useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = reactExports.useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = reactExports.useState(null);
+  const [uploading, setUploading] = reactExports.useState(false);
+  const [statusMessage, setStatusMessage] = reactExports.useState("");
+  const [statusError, setStatusError] = reactExports.useState(false);
+  const fileInputRef = reactExports.useRef(null);
+  const triggerFileInput = reactExports.useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+  const processFile = reactExports.useCallback((file) => {
+    if (!file.type.startsWith("image/")) {
+      setStatusMessage("El archivo seleccionado no es una imagen válida.");
+      setStatusError(true);
+      return;
+    }
+    setStatusMessage("");
+    setStatusError(false);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result;
+      if (typeof result === "string") {
+        setImageSrc(result);
+        setCrop({ x: 0, y: 0 });
+        setZoom(1);
+        setCroppedAreaPixels(null);
+      }
+    };
+    reader.readAsDataURL(file);
+  }, []);
+  const handleFileSelected = reactExports.useCallback(
+    (event) => {
+      const files = event.target.files;
+      if (files && files.length > 0) {
+        processFile(files[0]);
+      }
+      event.target.value = "";
+    },
+    [processFile]
+  );
+  const handleDragOver = reactExports.useCallback((event) => {
+    event.preventDefault();
+    setIsDragOver(true);
+    setIsDragReject(false);
+    if (event.dataTransfer?.items) {
+      const item = event.dataTransfer.items[0];
+      if (item && item.type && !item.type.startsWith("image/")) {
+        setIsDragReject(true);
+      }
+    }
+  }, []);
+  const handleDragLeave = reactExports.useCallback((event) => {
+    event.preventDefault();
+    setIsDragOver(false);
+    setIsDragReject(false);
+  }, []);
+  const handleDrop = reactExports.useCallback(
+    (event) => {
+      event.preventDefault();
+      setIsDragOver(false);
+      setIsDragReject(false);
+      const files = event.dataTransfer?.files;
+      if (files && files.length > 0) {
+        const file = files[0];
+        if (!file.type.startsWith("image/")) {
+          setStatusMessage("El archivo seleccionado no es una imagen válida.");
+          setStatusError(true);
+          return;
+        }
+        processFile(file);
+      }
+    },
+    [processFile]
+  );
+  const onCropComplete = reactExports.useCallback((_croppedArea, croppedAreaPx) => {
+    setCroppedAreaPixels(croppedAreaPx);
+  }, []);
+  const handleSave = reactExports.useCallback(async () => {
+    if (!imageSrc || !croppedAreaPixels) return;
+    setUploading(true);
+    setStatusMessage("");
+    setStatusError(false);
+    try {
+      const croppedDataUri = await getCroppedImage(imageSrc, croppedAreaPixels);
+      const size2 = Math.round(croppedDataUri.length * 3 / 4);
+      await onUpload(imageName, croppedDataUri, "image/png", size2);
+      setStatusMessage(`Imagen "${imageName}" subida correctamente.`);
+      setStatusError(false);
+      setImageSrc(null);
+      onSuccess?.();
+    } catch (err) {
+      console.error("[ImageUpload] Error uploading image:", err);
+      setStatusMessage("Error al subir la imagen. Inténtalo de nuevo.");
+      setStatusError(true);
+      onError?.(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      setUploading(false);
+    }
+  }, [imageSrc, croppedAreaPixels, imageName, onUpload, onSuccess, onError]);
+  const handleCancel = reactExports.useCallback(() => {
+    setImageSrc(null);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setCroppedAreaPixels(null);
+    setStatusMessage("");
+    setStatusError(false);
+  }, []);
+  if (imageSrc) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col w-full", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-lg font-bold mb-3", children: "Editar y recortar" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "relative w-full h-[300px] bg-gray-100 rounded overflow-hidden mb-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        src_default,
+        {
+          image: imageSrc,
+          crop,
+          zoom,
+          aspect: 11 / 5,
+          onCropChange: setCrop,
+          onZoomChange: setZoom,
+          onCropComplete
+        }
+      ) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 mb-4 px-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "zoom-slider", className: "text-sm font-medium text-gray-700", children: "Zoom:" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            id: "zoom-slider",
+            type: "range",
+            min: 1,
+            max: 3,
+            step: 0.1,
+            value: zoom,
+            onChange: (e) => setZoom(Number(e.target.value)),
+            className: "flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer",
+            "aria-label": "Ajustar zoom de imagen"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm text-gray-500 w-10 text-right", children: [
+          zoom.toFixed(1),
+          "x"
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex justify-end gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            className: "px-4 py-2 rounded bg-gray-200 text-gray-700 font-semibold\n                       hover:bg-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400",
+            onClick: handleCancel,
+            disabled: uploading,
+            children: "Cancelar"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            className: "px-4 py-2 rounded bg-blue-600 text-white font-semibold\n                       hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400\n                       disabled:opacity-50 disabled:cursor-not-allowed",
+            onClick: handleSave,
+            disabled: uploading || !croppedAreaPixels,
+            children: uploading ? "Subiendo..." : "Guardar Imagen"
+          }
+        )
+      ] }),
+      statusMessage && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "p",
+        {
+          className: `mt-3 text-center font-semibold ${statusError ? "text-red-600" : "text-green-600"}`,
+          children: statusMessage
+        }
+      )
+    ] });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col w-full", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: `border-[4px] border-dashed rounded-lg text-center p-8 cursor-pointer
+                    transition-colors ${isDragReject ? "border-red-400 bg-red-50" : isDragOver ? "border-blue-500 bg-blue-50" : "border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-gray-100"}`,
+        onClick: triggerFileInput,
+        onDragOver: handleDragOver,
+        onDragLeave: handleDragLeave,
+        onDrop: handleDrop,
+        role: "button",
+        tabIndex: 0,
+        onKeyDown: (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            triggerFileInput();
+          }
+        },
+        "aria-label": `Subir imagen para ${imageName}. Haz click o arrastra un archivo.`,
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              ref: fileInputRef,
+              type: "file",
+              accept: "image/*",
+              className: "hidden",
+              onChange: handleFileSelected,
+              "aria-hidden": "true"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-gray-600", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex justify-center mb-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "svg",
+              {
+                xmlns: "http://www.w3.org/2000/svg",
+                fill: "none",
+                viewBox: "0 0 24 24",
+                strokeWidth: 1.5,
+                stroke: "currentColor",
+                className: "w-12 h-12 text-gray-400",
+                "aria-hidden": "true",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "path",
+                  {
+                    strokeLinecap: "round",
+                    strokeLinejoin: "round",
+                    d: "M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
+                  }
+                )
+              }
+            ) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-lg font-medium", children: "Haz click para seleccionar el archivo" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "my-2 text-gray-500", children: /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "o si lo prefieres" }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-lg font-medium", children: "También puedes arrastrar el archivo aquí" }),
+            isDragReject && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-red-500 text-sm font-medium", children: "Solo se aceptan archivos de imagen" })
+          ] })
+        ]
+      }
+    ),
+    statusMessage && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "p",
+      {
+        className: `mt-4 text-center font-semibold ${statusError ? "text-red-600" : "text-green-600"}`,
+        children: statusMessage
+      }
+    ),
+    uploading && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-center text-blue-600 font-semibold", children: "Subiendo imagen..." })
   ] });
 }
 function SubirImagenView() {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center justify-center h-full p-8", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-3xl font-bold mb-4", children: "Subir Imagen" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-muted-foreground", children: "Gestión de imágenes de fondo para sellos" })
+  const navigate = useNavigate();
+  const config = useConfigStore((s) => s.config);
+  const activeEvento = config?.sello.elevento ?? 0;
+  const eventos = config?.sello.eventos ?? [];
+  const currentEvento = eventos[activeEvento];
+  const modelo1Name = currentEvento?.motivoi || "Modelo1";
+  const modelo2Name = currentEvento?.motivod || "Modelo2";
+  const [modelo1Url, setModelo1Url] = reactExports.useState(null);
+  const [modelo2Url, setModelo2Url] = reactExports.useState(null);
+  const [selectedModel, setSelectedModel] = reactExports.useState(null);
+  const [confirmDelete, setConfirmDelete] = reactExports.useState(null);
+  const [deleting, setDeleting] = reactExports.useState(false);
+  const [deleteStatus, setDeleteStatus] = reactExports.useState(
+    null
+  );
+  reactExports.useEffect(() => {
+    async function loadImages() {
+      try {
+        const img1 = await getImageByName(modelo1Name);
+        setModelo1Url(img1?.url ?? null);
+      } catch {
+        setModelo1Url(null);
+      }
+      try {
+        const img2 = await getImageByName(modelo2Name);
+        setModelo2Url(img2?.url ?? null);
+      } catch {
+        setModelo2Url(null);
+      }
+    }
+    loadImages();
+  }, [modelo1Name, modelo2Name]);
+  const handleUpload = reactExports.useCallback(
+    async (name, dataUri, type, size2) => {
+      await uploadImage(name, dataUri, type, size2);
+    },
+    []
+  );
+  const handleSuccess = reactExports.useCallback(async () => {
+    try {
+      const img1 = await getImageByName(modelo1Name);
+      setModelo1Url(img1?.url ?? null);
+    } catch {
+      setModelo1Url(null);
+    }
+    try {
+      const img2 = await getImageByName(modelo2Name);
+      setModelo2Url(img2?.url ?? null);
+    } catch {
+      setModelo2Url(null);
+    }
+    setSelectedModel(null);
+  }, [modelo1Name, modelo2Name]);
+  const handleDelete = reactExports.useCallback(
+    async (model) => {
+      const name = model === "modelo1" ? modelo1Name : modelo2Name;
+      setDeleting(true);
+      setDeleteStatus(null);
+      try {
+        await removeImage(name);
+        if (model === "modelo1") {
+          setModelo1Url(null);
+        } else {
+          setModelo2Url(null);
+        }
+        setDeleteStatus({ message: `Imagen "${name}" eliminada correctamente.`, error: false });
+      } catch (err) {
+        console.error("[SubirImagenView] Error deleting image:", err);
+        setDeleteStatus({ message: "Error al eliminar la imagen. Inténtalo de nuevo.", error: true });
+      } finally {
+        setDeleting(false);
+        setConfirmDelete(null);
+      }
+    },
+    [modelo1Name, modelo2Name]
+  );
+  const uploadImageName = selectedModel === "modelo1" ? modelo1Name : modelo2Name;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-4 bg-gray-100 min-h-screen", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between px-4 py-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-black text-[25px] font-bold", children: "Subir Imagen" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-muted-foreground", children: "Gestión de imágenes de fondo para sellos" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          className: "bg-gray-400 text-white px-4 py-2 rounded font-semibold hover:bg-gray-500",
+          onClick: () => navigate("/maquina"),
+          children: "Volver"
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex justify-center mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full max-w-4xl px-4", children: [
+      !selectedModel && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-8 justify-center mb-6", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-base font-bold mb-2", children: "Modelo 1" }),
+          modelo1Url ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-2 border-gray-300 rounded p-2 mb-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "img",
+            {
+              src: modelo1Url,
+              alt: "Modelo 1",
+              className: "max-w-[200px] max-h-[200px] object-contain"
+            }
+          ) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-gray-400 text-sm mb-2", children: "Sin imagen" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-gray-500 mb-2", children: modelo1Name }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "button",
+              {
+                type: "button",
+                className: "bg-blue-600 text-white px-4 py-2 rounded font-semibold hover:bg-blue-700",
+                onClick: () => setSelectedModel("modelo1"),
+                children: [
+                  modelo1Url ? "Cambiar" : "Subir",
+                  " Imagen"
+                ]
+              }
+            ),
+            modelo1Url && /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                className: "bg-red-600 text-white px-4 py-2 rounded font-semibold hover:bg-red-700\n                                 disabled:opacity-50 disabled:cursor-not-allowed",
+                onClick: () => setConfirmDelete("modelo1"),
+                disabled: deleting,
+                "aria-label": `Eliminar imagen ${modelo1Name}`,
+                children: "Eliminar"
+              }
+            )
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-base font-bold mb-2", children: "Modelo 2" }),
+          modelo2Url ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-2 border-gray-300 rounded p-2 mb-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "img",
+            {
+              src: modelo2Url,
+              alt: "Modelo 2",
+              className: "max-w-[200px] max-h-[200px] object-contain"
+            }
+          ) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-gray-400 text-sm mb-2", children: "Sin imagen" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-gray-500 mb-2", children: modelo2Name }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "button",
+              {
+                type: "button",
+                className: "bg-blue-600 text-white px-4 py-2 rounded font-semibold hover:bg-blue-700",
+                onClick: () => setSelectedModel("modelo2"),
+                children: [
+                  modelo2Url ? "Cambiar" : "Subir",
+                  " Imagen"
+                ]
+              }
+            ),
+            modelo2Url && /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                className: "bg-red-600 text-white px-4 py-2 rounded font-semibold hover:bg-red-700\n                                 disabled:opacity-50 disabled:cursor-not-allowed",
+                onClick: () => setConfirmDelete("modelo2"),
+                disabled: deleting,
+                "aria-label": `Eliminar imagen ${modelo2Name}`,
+                children: "Eliminar"
+              }
+            )
+          ] })
+        ] })
+      ] }),
+      confirmDelete && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 bg-black/50 flex items-center justify-center z-50", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-white rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-lg font-bold mb-3", children: "Confirmar eliminación" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-gray-600 mb-4", children: [
+          '¿Estás seguro de que quieres eliminar la imagen "',
+          confirmDelete === "modelo1" ? modelo1Name : modelo2Name,
+          '"? Esta acción no se puede deshacer.'
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex justify-end gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              className: "px-4 py-2 rounded bg-gray-200 text-gray-700 font-semibold\n                               hover:bg-gray-300 transition-colors",
+              onClick: () => setConfirmDelete(null),
+              disabled: deleting,
+              children: "Cancelar"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              className: "px-4 py-2 rounded bg-red-600 text-white font-semibold\n                               hover:bg-red-700 transition-colors\n                               disabled:opacity-50 disabled:cursor-not-allowed",
+              onClick: () => handleDelete(confirmDelete),
+              disabled: deleting,
+              children: deleting ? "Eliminando..." : "Eliminar"
+            }
+          )
+        ] })
+      ] }) }),
+      deleteStatus && !selectedModel && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "p",
+        {
+          className: `text-center font-semibold mb-4 ${deleteStatus.error ? "text-red-600" : "text-green-600"}`,
+          children: deleteStatus.message
+        }
+      ),
+      selectedModel && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "text-lg font-bold", children: [
+            "Subir imagen para ",
+            selectedModel === "modelo1" ? "Modelo 1" : "Modelo 2",
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm font-normal text-gray-500 ml-2", children: [
+              "(",
+              uploadImageName,
+              ")"
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              className: "bg-gray-300 text-gray-700 px-3 py-1 rounded font-semibold hover:bg-gray-400 text-sm",
+              onClick: () => setSelectedModel(null),
+              children: "← Volver a modelos"
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ImageUpload,
+          {
+            imageName: uploadImageName,
+            onUpload: handleUpload,
+            onSuccess: handleSuccess
+          }
+        )
+      ] })
+    ] }) })
   ] });
 }
 const router = createHashRouter([
