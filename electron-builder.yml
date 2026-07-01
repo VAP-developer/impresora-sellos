@@ -49,8 +49,7 @@ deb:
     - libatspi2.0-0
     - libuuid1
     - libsecret-1-0
-appImage:
-  license: UNLICENSED
+appImage: {}
 win:
   target:
     - target: nsis

@@ -27,10 +27,10 @@
 # Activar la versión correcta de Node
 nvm use
 
-# Instalar dependencias
+# 1. Instalar dependencias
 npm install
 
-# Reconstruir better-sqlite3 para Electron
+# 2. Reconstruir better-sqlite3 para Electron
 npm run rebuild
 ```
 
@@ -45,6 +45,10 @@ Los artefactos se generan en `dist/`:
 - `dist/StampSales-1.0.0.AppImage`
 
 ### 1.3 Instalar el .deb
+``` bash
+sudo apt-get install fakeroot dpkg-dev
+npm run build:linux
+```
 
 ```bash
 sudo dpkg -i dist/stamp-sales-app_1.0.0_amd64.deb
