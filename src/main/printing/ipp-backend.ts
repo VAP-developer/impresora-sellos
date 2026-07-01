@@ -634,25 +634,22 @@ export class IppBackend implements PrinterBackend {
       writeFileSync(tempFile, pdfBuffer)
 
       const copies = options.copies ?? 1
-      // Use PowerShell to print via Windows spooler
-      // The -PrinterName parameter routes to the specific printer
+      // Escape single quotes for PowerShell by doubling them
       const escapedPrinterName = printerName.replace(/'/g, "''")
       const escapedPath = tempFile.replace(/'/g, "''")
 
-      const psCommand = `powershell -NoProfile -Command "` +
-        `$printer = '${escapedPrinterName}'; ` +
-        `$file = '${escapedPath}'; ` +
-        `$copies = ${copies}; ` +
-        `for ($$i = 0; $$i -lt $copies; $$i++) { ` +
-        `Start-Process -FilePath $file -Verb Print -ArgumentList '/p /h /d:$printer' -Wait -WindowStyle Hidden ` +
-        `}"`
-
-      await execAsync(psCommand, { timeout: 30000 })
+      // Use Start-Process with -Verb PrintTo to send the PDF directly to the named printer.
+      // PrintTo verb accepts the printer name as an argument and prints without user interaction.
+      for (let i = 0; i < copies; i++) {
+        const psCommand =
+          `powershell -NoProfile -Command "Start-Process -FilePath '${escapedPath}' -Verb PrintTo -ArgumentList '${escapedPrinterName}' -Wait -WindowStyle Hidden"`
+        await execAsync(psCommand, { timeout: 60000 })
+      }
 
       // Clean up temp file after a delay to let the spooler read it
       setTimeout(() => {
         try { unlinkSync(tempFile) } catch { /* ignore */ }
-      }, 10000)
+      }, 15000)
 
       return { success: true, jobId: jobName }
     } catch (err: unknown) {
@@ -662,6 +659,7 @@ export class IppBackend implements PrinterBackend {
       return { success: false, error: `Windows print failed: ${message}` }
     }
   }
+
 
   /**
    * Sends a PDF buffer to the specified printer.

@@ -151,7 +151,9 @@ export async function print(
   quantities: KioskoQuantities,
   profile: string
 ): Promise<void> {
-  return getAPI().printer.print(config, quantities, profile)
+  // Triggers the full sale flow: atomic transaction + PDF generation + print queue enqueue.
+  // Previously called printer:print which is a no-op stub.
+  await getAPI().sale.execute(config, quantities, profile)
 }
 
 export async function pausePrinter(): Promise<void> {

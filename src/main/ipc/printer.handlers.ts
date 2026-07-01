@@ -10,6 +10,7 @@
 import { handleIpc } from './handlers'
 import { getPrinterManager, getPrintQueueService } from '../services'
 import { PrintQueueRepository } from '../database/repositories/print-queue.repository'
+import { PrinterAssignmentsRepository } from '../database/repositories/printer-assignments.repository'
 import type { PrinterTarget, DiscoveredPrinter } from '../printing/printer-manager'
 
 // === Printer Types (matching preload interface) ===
@@ -136,6 +137,7 @@ export function registerPrinterHandlers(): void {
   /**
    * Reassigns a printer target to a different printer URI.
    * Used to switch which physical printer handles a given role (printer1, printer2, ticket).
+   * Persists the assignment to the database so it survives app restarts.
    *
    * @param target - The role to reassign ('printer1' | 'printer2' | 'ticket')
    * @param uri - The new printer URI (from discovery results)
@@ -155,6 +157,15 @@ export function registerPrinterHandlers(): void {
 
       const printerManager = getPrinterManager()
       printerManager.setAssignments({ [typedTarget]: typedUri })
+
+      // Persist assignment to database
+      try {
+        const assignmentsRepo = new PrinterAssignmentsRepository()
+        assignmentsRepo.set(typedTarget, typedUri)
+      } catch (err) {
+        console.warn('[Printer] Failed to persist assignment:', err)
+      }
+
       console.log(`[Printer] Reassigned ${typedTarget} → ${typedUri}`)
       return { success: true }
     }

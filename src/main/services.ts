@@ -11,6 +11,7 @@
 
 import { createPrinterManager, PrinterManager } from './printing/printer-manager'
 import { PrintQueueService } from './printing/print-queue.service'
+import { PrinterAssignmentsRepository } from './database/repositories/printer-assignments.repository'
 
 // ─── Singleton instances ──────────────────────────────────────────────────────
 
@@ -20,10 +21,22 @@ let printQueueService: PrintQueueService | null = null
 /**
  * Returns the singleton PrinterManager instance.
  * Creates it on first access (lazy initialization).
+ * Loads persisted printer assignments from the database.
  */
 export function getPrinterManager(): PrinterManager {
   if (!printerManager) {
-    printerManager = createPrinterManager()
+    // Load persisted assignments from database
+    let savedAssignments: Record<string, string> = {}
+    try {
+      const assignmentsRepo = new PrinterAssignmentsRepository()
+      savedAssignments = assignmentsRepo.getAll()
+    } catch (err) {
+      console.warn('[Services] Failed to load printer assignments:', err)
+    }
+
+    printerManager = createPrinterManager(
+      Object.keys(savedAssignments).length > 0 ? savedAssignments : undefined
+    )
   }
   return printerManager
 }
