@@ -602,27 +602,28 @@ export class IppBackend implements PrinterBackend {
   }
 
   /**
-   * Prints a PDF to a local Windows printer using Electron's built-in printing API.
+   * Prints a PDF to a local Windows printer using pdf-to-printer (SumatraPDF engine).
    *
-   * Creates a hidden BrowserWindow, loads the PDF via file:// protocol, and uses
-   * webContents.print() with silent mode to send directly to the named printer
-   * via the OS spooler. This avoids any dependency on external PDF viewers
-   * and prints completely silently without any visible window or dialog.
+   * This library bundles SumatraPDF which handles PDF rendering and silent printing
+   * directly to the Windows spooler without opening any visible window or requiring
+   * any external PDF viewer (Adobe, Edge, etc.).
+   *
+   * Supports label printers, network printers, and USB printers alike.
    */
   private async printViaWindowsSpooler(
     printerName: string,
     pdfBuffer: Buffer,
     options: PrintOptions
   ): Promise<PrintResult> {
-    const { BrowserWindow } = require('electron')
     const { writeFileSync, unlinkSync, mkdirSync } = require('fs')
     const { join } = require('path')
     const { tmpdir } = require('os')
+    const { print: printPdf } = require('pdf-to-printer')
 
     const jobName = options.jobName ?? `print_${Date.now()}`
     const copies = options.copies ?? 1
 
-    // Write PDF to a temp file (Chromium needs a file:// URL for reliable PDF loading)
+    // Write PDF to a temp file (pdf-to-printer needs a file path)
     const tempDir = join(tmpdir(), 'stamp-sales-print')
     try {
       mkdirSync(tempDir, { recursive: true })
@@ -634,54 +635,19 @@ export class IppBackend implements PrinterBackend {
     try {
       writeFileSync(tempFile, pdfBuffer)
 
-      // Create a hidden window to render and print the PDF
-      const printWindow = new BrowserWindow({
-        show: false,
-        width: 800,
-        height: 600,
-        webPreferences: {
-          nodeIntegration: false,
-          contextIsolation: true,
-          plugins: true // Enable PDF plugin for proper rendering
-        }
+      // Print using pdf-to-printer (SumatraPDF engine)
+      await printPdf(tempFile, {
+        printer: printerName,
+        copies,
+        silent: true
       })
 
-      try {
-        // Load the PDF via file:// protocol (more reliable than data: URLs for PDFs)
-        const fileUrl = `file://${tempFile.replace(/\\/g, '/')}`
-        await printWindow.loadURL(fileUrl)
+      // Clean up temp file after a delay to let the spooler finish reading
+      setTimeout(() => {
+        try { unlinkSync(tempFile) } catch { /* ignore */ }
+      }, 10000)
 
-        // Wait for the PDF to be fully rendered by Chromium's PDF viewer
-        await new Promise((resolve) => setTimeout(resolve, 2000))
-
-        // Print silently to the specified printer
-        for (let i = 0; i < copies; i++) {
-          await new Promise<void>((resolve, reject) => {
-            printWindow.webContents.print(
-              {
-                silent: true,
-                deviceName: printerName,
-                printBackground: true
-              },
-              (success, failureReason) => {
-                if (success) {
-                  resolve()
-                } else {
-                  reject(new Error(failureReason || 'Print failed'))
-                }
-              }
-            )
-          })
-        }
-
-        return { success: true, jobId: jobName }
-      } finally {
-        // Always close the hidden window and clean up temp file
-        printWindow.close()
-        setTimeout(() => {
-          try { unlinkSync(tempFile) } catch { /* ignore */ }
-        }, 5000)
-      }
+      return { success: true, jobId: jobName }
     } catch (err: unknown) {
       // Clean up on error
       try { unlinkSync(tempFile) } catch { /* ignore */ }

@@ -1439,32 +1439,34 @@ class IppBackend {
     return decodeURIComponent(encoded);
   }
   /**
-   * Prints a PDF to a local Windows printer using PowerShell and the Windows spooler.
-   * Uses Out-Printer which sends content through the Windows printing subsystem.
-   * For PDF files, we use Start-Process with the -Verb Print action which leverages
-   * the registered PDF handler on the system.
+   * Prints a PDF to a local Windows printer using pdf-to-printer (SumatraPDF engine).
+   *
+   * This library bundles SumatraPDF which handles PDF rendering and silent printing
+   * directly to the Windows spooler without opening any visible window or requiring
+   * any external PDF viewer (Adobe, Edge, etc.).
+   *
+   * Supports label printers, network printers, and USB printers alike.
    */
   async printViaWindowsSpooler(printerName, pdfBuffer, options) {
-    const { exec: nodeExec } = require("child_process");
-    const { promisify: nodePromisify } = require("util");
     const { writeFileSync, unlinkSync, mkdirSync } = require("fs");
     const { join } = require("path");
     const { tmpdir } = require("os");
-    const execAsync2 = nodePromisify(nodeExec);
+    const { print: printPdf } = require("pdf-to-printer");
+    const jobName = options.jobName ?? `print_${Date.now()}`;
+    const copies = options.copies ?? 1;
     const tempDir = join(tmpdir(), "stamp-sales-print");
     try {
       mkdirSync(tempDir, { recursive: true });
     } catch {
     }
-    const jobName = options.jobName ?? `print_${Date.now()}`;
     const tempFile = join(tempDir, `${jobName}_${Date.now()}.pdf`);
     try {
       writeFileSync(tempFile, pdfBuffer);
-      const copies = options.copies ?? 1;
-      const escapedPrinterName = printerName.replace(/'/g, "''");
-      const escapedPath = tempFile.replace(/'/g, "''");
-      const psCommand = `powershell -NoProfile -Command "$printer = '${escapedPrinterName}'; $file = '${escapedPath}'; $copies = ${copies}; for ($$i = 0; $$i -lt $copies; $$i++) { Start-Process -FilePath $file -Verb Print -ArgumentList '/p /h /d:$printer' -Wait -WindowStyle Hidden }"`;
-      await execAsync2(psCommand, { timeout: 3e4 });
+      await printPdf(tempFile, {
+        printer: printerName,
+        copies,
+        silent: true
+      });
       setTimeout(() => {
         try {
           unlinkSync(tempFile);
@@ -1991,7 +1993,10 @@ function createPlatformBackend(platformOverride) {
 function createPrinterManager(backendOrAssignments, assignments) {
   let backend;
   let resolvedAssignments;
-  {
+  if (backendOrAssignments && "print" in backendOrAssignments) {
+    backend = backendOrAssignments;
+    resolvedAssignments = assignments;
+  } else {
     backend = createPlatformBackend();
     resolvedAssignments = backendOrAssignments;
   }
@@ -2421,11 +2426,52 @@ class PrintQueueService {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
+class PrinterAssignmentsRepository {
+  db;
+  constructor(db2) {
+    this.db = db2 ?? getDatabase();
+  }
+  /**
+   * Gets all stored assignments as a target → URI map.
+   */
+  getAll() {
+    const rows = this.db.prepare("SELECT target, uri FROM printer_assignments").all();
+    const result = {};
+    for (const row of rows) {
+      result[row.target] = row.uri;
+    }
+    return result;
+  }
+  /**
+   * Saves or updates a single assignment.
+   */
+  set(target, uri, name) {
+    this.db.prepare(
+      `INSERT OR REPLACE INTO printer_assignments (target, uri, name, updated_at)
+         VALUES (?, ?, ?, datetime('now'))`
+    ).run(target, uri, name ?? null);
+  }
+  /**
+   * Removes an assignment.
+   */
+  remove(target) {
+    this.db.prepare("DELETE FROM printer_assignments WHERE target = ?").run(target);
+  }
+}
 let printerManager = null;
 let printQueueService = null;
 function getPrinterManager() {
   if (!printerManager) {
-    printerManager = createPrinterManager();
+    let savedAssignments = {};
+    try {
+      const assignmentsRepo = new PrinterAssignmentsRepository();
+      savedAssignments = assignmentsRepo.getAll();
+    } catch (err) {
+      console.warn("[Services] Failed to load printer assignments:", err);
+    }
+    printerManager = createPrinterManager(
+      Object.keys(savedAssignments).length > 0 ? savedAssignments : void 0
+    );
   }
   return printerManager;
 }
@@ -2513,6 +2559,12 @@ function registerPrinterHandlers() {
       }
       const printerManager2 = getPrinterManager();
       printerManager2.setAssignments({ [typedTarget]: typedUri });
+      try {
+        const assignmentsRepo = new PrinterAssignmentsRepository();
+        assignmentsRepo.set(typedTarget, typedUri);
+      } catch (err) {
+        console.warn("[Printer] Failed to persist assignment:", err);
+      }
       console.log(`[Printer] Reassigned ${typedTarget} → ${typedUri}`);
       return { success: true };
     }

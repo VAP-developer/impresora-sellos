@@ -13969,7 +13969,7 @@ async function getPrinterStatus() {
   return getAPI().printer.getStatus();
 }
 async function print(config, quantities, profile) {
-  return getAPI().printer.print(config, quantities, profile);
+  await getAPI().sale.execute(config, quantities, profile);
 }
 async function pausePrinter() {
   return getAPI().printer.pause();
@@ -21668,7 +21668,7 @@ function PrinterSelector() {
     if (!expanded) return void 0;
     const interval = setInterval(() => {
       fetchStatus();
-    }, 5e3);
+    }, 3e4);
     return () => clearInterval(interval);
   }, [expanded, fetchStatus]);
   const handleDiscover = reactExports.useCallback(async () => {
