@@ -563,6 +563,10 @@ export function mapPrinterState(state: number | undefined): PrinterStatus {
  * 2. Send as HTTP POST to printer's IPP endpoint (typically port 631)
  * 3. Parse binary IPP response to extract status/job info
  *
+ * For local/USB printers (win:// URIs), it delegates to the Windows print spooler
+ * via PowerShell, which supports any printer installed in Windows regardless of
+ * whether it exposes an IPP endpoint.
+ *
  * Accepts an optional HttpTransport for testability (like CupsBackend's CommandExecutor).
  */
 export class IppBackend implements PrinterBackend {
@@ -582,16 +586,108 @@ export class IppBackend implements PrinterBackend {
   }
 
   /**
-   * Sends a PDF buffer to the specified IPP printer.
+   * Checks if a printer URI refers to a local Windows printer (win:// scheme).
+   */
+  private isLocalWindowsPrinter(printerUri: string): boolean {
+    return printerUri.startsWith('win://')
+  }
+
+  /**
+   * Extracts the printer name from a win:// URI.
+   * win://Canon%20PIXMA%20MG3600 → "Canon PIXMA MG3600"
+   */
+  private getWindowsPrinterName(printerUri: string): string {
+    const encoded = printerUri.replace('win://', '')
+    return decodeURIComponent(encoded)
+  }
+
+  /**
+   * Prints a PDF to a local Windows printer using PowerShell and the Windows spooler.
+   * Uses Out-Printer which sends content through the Windows printing subsystem.
+   * For PDF files, we use Start-Process with the -Verb Print action which leverages
+   * the registered PDF handler on the system.
+   */
+  private async printViaWindowsSpooler(
+    printerName: string,
+    pdfBuffer: Buffer,
+    options: PrintOptions
+  ): Promise<PrintResult> {
+    const { exec: nodeExec } = require('child_process')
+    const { promisify: nodePromisify } = require('util')
+    const { writeFileSync, unlinkSync, mkdirSync } = require('fs')
+    const { join } = require('path')
+    const { tmpdir } = require('os')
+    const execAsync = nodePromisify(nodeExec)
+
+    // Write PDF to a temp file
+    const tempDir = join(tmpdir(), 'stamp-sales-print')
+    try {
+      mkdirSync(tempDir, { recursive: true })
+    } catch {
+      // dir already exists
+    }
+
+    const jobName = options.jobName ?? `print_${Date.now()}`
+    const tempFile = join(tempDir, `${jobName}_${Date.now()}.pdf`)
+
+    try {
+      writeFileSync(tempFile, pdfBuffer)
+
+      const copies = options.copies ?? 1
+      // Use PowerShell to print via Windows spooler
+      // The -PrinterName parameter routes to the specific printer
+      const escapedPrinterName = printerName.replace(/'/g, "''")
+      const escapedPath = tempFile.replace(/'/g, "''")
+
+      const psCommand = `powershell -NoProfile -Command "` +
+        `$printer = '${escapedPrinterName}'; ` +
+        `$file = '${escapedPath}'; ` +
+        `$copies = ${copies}; ` +
+        `for ($$i = 0; $$i -lt $copies; $$i++) { ` +
+        `Start-Process -FilePath $file -Verb Print -ArgumentList '/p /h /d:$printer' -Wait -WindowStyle Hidden ` +
+        `}"`
+
+      await execAsync(psCommand, { timeout: 30000 })
+
+      // Clean up temp file after a delay to let the spooler read it
+      setTimeout(() => {
+        try { unlinkSync(tempFile) } catch { /* ignore */ }
+      }, 10000)
+
+      return { success: true, jobId: jobName }
+    } catch (err: unknown) {
+      // Clean up on error
+      try { unlinkSync(tempFile) } catch { /* ignore */ }
+      const message = err instanceof Error ? err.message : String(err)
+      return { success: false, error: `Windows print failed: ${message}` }
+    }
+  }
+
+  /**
+   * Sends a PDF buffer to the specified printer.
+   * Routes to either IPP (network printers) or Windows spooler (local/USB printers)
+   * based on the URI scheme.
    *
-   * Workflow:
+   * Workflow for IPP (ipp:// URIs):
    * 1. Parse the printer URI to get hostname/port/path
    * 2. Build IPP Print-Job request with options (media, orientation, copies)
    * 3. Concatenate IPP request header + PDF document data
    * 4. Send via HTTP POST to the printer
    * 5. Parse response for job ID and status
+   *
+   * Workflow for local printers (win:// URIs):
+   * 1. Extract printer name from URI
+   * 2. Write PDF to temp file
+   * 3. Print via PowerShell using Windows spooler
    */
   async print(printerUri: string, pdfBuffer: Buffer, options: PrintOptions): Promise<PrintResult> {
+    // Route local Windows printers through the spooler
+    if (this.isLocalWindowsPrinter(printerUri)) {
+      const printerName = this.getWindowsPrinterName(printerUri)
+      return this.printViaWindowsSpooler(printerName, pdfBuffer, options)
+    }
+
+    // IPP path for network printers
     const uri = parseIppUri(printerUri)
     const reqId = this.nextRequestId()
 
@@ -636,9 +732,17 @@ export class IppBackend implements PrinterBackend {
   }
 
   /**
-   * Queries the current status of an IPP printer using Get-Printer-Attributes.
+   * Queries the current status of a printer.
+   * For IPP printers: uses Get-Printer-Attributes.
+   * For local Windows printers (win://): uses PowerShell Get-Printer.
    */
   async getStatus(printerUri: string): Promise<PrinterStatus> {
+    // Local Windows printer — query via PowerShell
+    if (this.isLocalWindowsPrinter(printerUri)) {
+      return this.getWindowsPrinterStatus(printerUri)
+    }
+
+    // IPP printer — use Get-Printer-Attributes
     const uri = parseIppUri(printerUri)
     const reqId = this.nextRequestId()
 
@@ -667,9 +771,49 @@ export class IppBackend implements PrinterBackend {
   }
 
   /**
-   * Pauses an IPP printer using the Pause-Printer operation.
+   * Queries a local Windows printer's status via PowerShell.
+   */
+  private async getWindowsPrinterStatus(printerUri: string): Promise<PrinterStatus> {
+    const printerName = this.getWindowsPrinterName(printerUri)
+
+    try {
+      const { exec: nodeExec } = require('child_process')
+      const { promisify: nodePromisify } = require('util')
+      const execAsync = nodePromisify(nodeExec)
+
+      const escapedName = printerName.replace(/'/g, "''")
+      const { stdout } = await execAsync(
+        `powershell -NoProfile -Command "Get-Printer -Name '${escapedName}' | Select-Object PrinterStatus | ConvertTo-Json -Compress"`,
+        { timeout: 5000 }
+      )
+
+      if (!stdout || stdout.trim().length === 0) {
+        return 'disconnected'
+      }
+
+      const result = JSON.parse(stdout.trim())
+      // PrinterStatus values: 0=Normal, 1=Paused, 2=Error, 3=Deleting, 4=PendingDeletion
+      switch (result.PrinterStatus) {
+        case 0: return 'ready'
+        case 1: return 'paused'
+        case 2: return 'error'
+        default: return 'disconnected'
+      }
+    } catch {
+      return 'disconnected'
+    }
+  }
+
+  /**
+   * Pauses a printer.
+   * For IPP printers: uses Pause-Printer operation.
+   * For local Windows printers (win://): uses PowerShell Set-Printer.
    */
   async pause(printerUri: string): Promise<boolean> {
+    if (this.isLocalWindowsPrinter(printerUri)) {
+      return this.pauseWindowsPrinter(printerUri)
+    }
+
     const uri = parseIppUri(printerUri)
     const reqId = this.nextRequestId()
 
@@ -692,9 +836,36 @@ export class IppBackend implements PrinterBackend {
   }
 
   /**
-   * Resumes an IPP printer using the Resume-Printer operation.
+   * Pauses a local Windows printer via PowerShell.
+   */
+  private async pauseWindowsPrinter(printerUri: string): Promise<boolean> {
+    const printerName = this.getWindowsPrinterName(printerUri)
+    try {
+      const { exec: nodeExec } = require('child_process')
+      const { promisify: nodePromisify } = require('util')
+      const execAsync = nodePromisify(nodeExec)
+
+      const escapedName = printerName.replace(/'/g, "''")
+      await execAsync(
+        `powershell -NoProfile -Command "Stop-Printer -Name '${escapedName}'"`,
+        { timeout: 5000 }
+      )
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Resumes a printer.
+   * For IPP printers: uses Resume-Printer operation.
+   * For local Windows printers (win://): uses PowerShell Restart-Printer.
    */
   async resume(printerUri: string): Promise<boolean> {
+    if (this.isLocalWindowsPrinter(printerUri)) {
+      return this.resumeWindowsPrinter(printerUri)
+    }
+
     const uri = parseIppUri(printerUri)
     const reqId = this.nextRequestId()
 
@@ -717,14 +888,33 @@ export class IppBackend implements PrinterBackend {
   }
 
   /**
-   * Discovers IPP printers on the local network by scanning the subnet.
+   * Resumes a local Windows printer via PowerShell.
+   */
+  private async resumeWindowsPrinter(printerUri: string): Promise<boolean> {
+    const printerName = this.getWindowsPrinterName(printerUri)
+    try {
+      const { exec: nodeExec } = require('child_process')
+      const { promisify: nodePromisify } = require('util')
+      const execAsync = nodePromisify(nodeExec)
+
+      const escapedName = printerName.replace(/'/g, "''")
+      await execAsync(
+        `powershell -NoProfile -Command "Restart-Printer -Name '${escapedName}'"`,
+        { timeout: 5000 }
+      )
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Discovers printers available on the system using two strategies:
+   * 1. Local printers via PowerShell Get-Printer (USB, local network, spooler-registered)
+   * 2. Network printers via IPP subnet scan (probes hosts from ARP table)
    *
-   * Uses the discoverWindowsPrinters function from printer-discovery.ts which:
-   * 1. Gets list of hosts from the ARP table (recently communicated-with hosts)
-   * 2. Probes each host on common IPP ports (631) and paths (/ipp/print, /ipp/printer, /)
-   * 3. Records hosts that respond with valid IPP responses as printers
-   *
-   * The HTTP probe sends a minimal Get-Printer-Attributes request to detect printers.
+   * Uses the discoverWindowsPrinters function from printer-discovery.ts which
+   * merges both sources and deduplicates.
    */
   async discover(): Promise<DiscoveredPrinter[]> {
     // Build a DiscoveryHttpProbe compatible with our transport
@@ -748,13 +938,13 @@ export class IppBackend implements PrinterBackend {
       }
     }
 
-    // Build a DiscoveryCommandExecutor for ARP table scanning
+    // Build a DiscoveryCommandExecutor for ARP table scanning and PowerShell
     const executor: DiscoveryCommandExecutor = {
       exec: (command: string) => {
         const { exec: nodeExec } = require('child_process')
         const { promisify: nodePromisify } = require('util')
         const execPromise = nodePromisify(nodeExec)
-        return execPromise(command, { timeout: 10000 })
+        return execPromise(command, { timeout: 15000 })
       }
     }
 
@@ -762,12 +952,18 @@ export class IppBackend implements PrinterBackend {
   }
 
   /**
-   * Cancels a specific print job by its numeric ID using Cancel-Job operation.
+   * Cancels a specific print job.
+   * For IPP printers: uses Cancel-Job operation.
+   * For local Windows printers (win://): uses PowerShell Remove-PrintJob.
    *
    * @param printerUri - The printer URI where the job is queued
    * @param jobId - The job ID as a string (will be parsed to integer)
    */
   async cancelJob(printerUri: string, jobId: string): Promise<boolean> {
+    if (this.isLocalWindowsPrinter(printerUri)) {
+      return this.cancelWindowsJob(printerUri, jobId)
+    }
+
     const uri = parseIppUri(printerUri)
     const reqId = this.nextRequestId()
     const numericJobId = parseInt(jobId, 10)
@@ -789,6 +985,30 @@ export class IppBackend implements PrinterBackend {
 
       const response = parseIppResponse(responseData)
       return response.statusCode <= 0x00ff
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Cancels a print job on a local Windows printer via PowerShell.
+   */
+  private async cancelWindowsJob(printerUri: string, jobId: string): Promise<boolean> {
+    const printerName = this.getWindowsPrinterName(printerUri)
+    const numericJobId = parseInt(jobId, 10)
+    if (isNaN(numericJobId)) return false
+
+    try {
+      const { exec: nodeExec } = require('child_process')
+      const { promisify: nodePromisify } = require('util')
+      const execAsync = nodePromisify(nodeExec)
+
+      const escapedName = printerName.replace(/'/g, "''")
+      await execAsync(
+        `powershell -NoProfile -Command "Remove-PrintJob -PrinterName '${escapedName}' -ID ${numericJobId}"`,
+        { timeout: 5000 }
+      )
+      return true
     } catch {
       return false
     }

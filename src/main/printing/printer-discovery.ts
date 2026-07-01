@@ -396,7 +396,91 @@ export async function discoverLinuxPrinters(
   return results
 }
 
-// ─── Windows Discovery (IPP subnet scan) ──────────────────────────────────────
+// ─── Windows Local Printer Discovery (PowerShell) ─────────────────────────────
+
+/**
+ * Result from PowerShell Get-Printer command.
+ */
+export interface WindowsLocalPrinter {
+  Name: string
+  PortName: string
+  PrinterStatus: number
+  Shared: boolean
+  DriverName: string
+  Type: number
+}
+
+/**
+ * Discovers locally installed printers on Windows using PowerShell Get-Printer.
+ * This finds USB, network, and virtual printers registered in the OS spooler.
+ *
+ * Filters out virtual/software printers (Microsoft Print to PDF, XPS Writer, etc.)
+ *
+ * @param executor - Command executor (injectable for testing)
+ * @returns Array of discovered printers (local/USB printers)
+ */
+export async function discoverWindowsLocalPrinters(
+  executor: DiscoveryCommandExecutor = defaultDiscoveryExecutor
+): Promise<DiscoveredPrinter[]> {
+  const results: DiscoveredPrinter[] = []
+
+  try {
+    const { stdout } = await executor.exec(
+      'powershell -NoProfile -Command "Get-Printer | Select-Object Name, PortName, PrinterStatus, Shared, DriverName, Type | ConvertTo-Json -Compress"'
+    )
+
+    if (!stdout || stdout.trim().length === 0) {
+      return results
+    }
+
+    let printers: WindowsLocalPrinter[]
+    const parsed = JSON.parse(stdout.trim())
+    // PowerShell returns a single object (not array) if there's only one printer
+    printers = Array.isArray(parsed) ? parsed : [parsed]
+
+    // Virtual / software printers to exclude
+    const VIRTUAL_PRINTER_NAMES = [
+      'microsoft print to pdf',
+      'microsoft xps document writer',
+      'fax',
+      'send to onenote',
+      'onenote for windows 10',
+      'onenote (desktop)'
+    ]
+
+    for (const p of printers) {
+      if (!p.Name) continue
+
+      // Skip virtual/software printers
+      const nameLower = p.Name.toLowerCase()
+      if (VIRTUAL_PRINTER_NAMES.some((vp) => nameLower.includes(vp))) continue
+
+      // Type 4 = Local connection (including USB)
+      // Type 0 = Default / Local
+      // We include all non-virtual printers regardless of type
+
+      // Build a URI using the win: scheme for local Windows printers
+      const uri = `win://${encodeURIComponent(p.Name)}`
+
+      const portInfo = p.PortName ? ` (${p.PortName})` : ''
+      const driverInfo = p.DriverName ? ` - ${p.DriverName}` : ''
+      const info = `${p.Name}${portInfo}${driverInfo}`
+
+      results.push({
+        name: p.Name,
+        uri,
+        accepting: p.PrinterStatus === 0 || p.PrinterStatus === 1, // 0=Normal, 1=Paused but exists
+        info
+      })
+    }
+  } catch (err) {
+    console.warn('[PrinterDiscovery] PowerShell Get-Printer failed:', err)
+  }
+
+  return results
+}
+
+// ─── Windows Discovery (IPP subnet scan + local printers) ─────────────────────
 
 /**
  * Configuration for Windows subnet scanning.
@@ -453,7 +537,45 @@ export async function getSubnetTargets(
 }
 
 /**
- * Discovers IPP printers on Windows by probing known hosts on the local subnet.
+ * Discovers printers on Windows by combining two strategies:
+ * 1. Local printers: PowerShell Get-Printer (finds USB, local network, and spooler-registered printers)
+ * 2. Network printers: IPP subnet scan (probes hosts from ARP table on port 631)
+ *
+ * The local discovery is fast and reliable for USB printers. The network scan
+ * adds any IPP printers that might not be registered in Windows but are on the network.
+ *
+ * @param config - Scan configuration (targets, ports, timeout)
+ * @param executor - Command executor (injectable for testing)
+ * @param probe - HTTP probe (injectable for testing)
+ * @returns Array of discovered printers (local + network, deduplicated)
+ */
+export async function discoverWindowsPrinters(
+  config: SubnetScanConfig = {},
+  executor: DiscoveryCommandExecutor = defaultDiscoveryExecutor,
+  probe: DiscoveryHttpProbe = defaultHttpProbe
+): Promise<DiscoveredPrinter[]> {
+  // 1. Discover local printers via PowerShell (fast, includes USB)
+  const localPrinters = await discoverWindowsLocalPrinters(executor)
+
+  // 2. Discover network printers via IPP subnet scan
+  const networkPrinters = await discoverWindowsNetworkPrinters(config, executor, probe)
+
+  // 3. Merge results, deduplicating by name (local printers take precedence)
+  const seenNames = new Set<string>(localPrinters.map((p) => p.name.toLowerCase()))
+  const merged = [...localPrinters]
+
+  for (const netPrinter of networkPrinters) {
+    if (!seenNames.has(netPrinter.name.toLowerCase())) {
+      seenNames.add(netPrinter.name.toLowerCase())
+      merged.push(netPrinter)
+    }
+  }
+
+  return merged
+}
+
+/**
+ * Discovers IPP printers on the network by probing known hosts on the local subnet.
  *
  * Strategy:
  * 1. Get list of hosts from ARP table (recently communicated-with hosts)
@@ -463,9 +585,9 @@ export async function getSubnetTargets(
  * @param config - Scan configuration (targets, ports, timeout)
  * @param executor - Command executor (injectable for testing)
  * @param probe - HTTP probe (injectable for testing)
- * @returns Array of discovered printers
+ * @returns Array of discovered network printers
  */
-export async function discoverWindowsPrinters(
+export async function discoverWindowsNetworkPrinters(
   config: SubnetScanConfig = {},
   executor: DiscoveryCommandExecutor = defaultDiscoveryExecutor,
   probe: DiscoveryHttpProbe = defaultHttpProbe

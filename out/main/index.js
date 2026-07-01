@@ -824,6 +824,47 @@ async function discoverLinuxPrinters(executor = defaultDiscoveryExecutor) {
   }
   return results;
 }
+async function discoverWindowsLocalPrinters(executor = defaultDiscoveryExecutor) {
+  const results = [];
+  try {
+    const { stdout } = await executor.exec(
+      'powershell -NoProfile -Command "Get-Printer | Select-Object Name, PortName, PrinterStatus, Shared, DriverName, Type | ConvertTo-Json -Compress"'
+    );
+    if (!stdout || stdout.trim().length === 0) {
+      return results;
+    }
+    let printers;
+    const parsed = JSON.parse(stdout.trim());
+    printers = Array.isArray(parsed) ? parsed : [parsed];
+    const VIRTUAL_PRINTER_NAMES = [
+      "microsoft print to pdf",
+      "microsoft xps document writer",
+      "fax",
+      "send to onenote",
+      "onenote for windows 10",
+      "onenote (desktop)"
+    ];
+    for (const p of printers) {
+      if (!p.Name) continue;
+      const nameLower = p.Name.toLowerCase();
+      if (VIRTUAL_PRINTER_NAMES.some((vp) => nameLower.includes(vp))) continue;
+      const uri = `win://${encodeURIComponent(p.Name)}`;
+      const portInfo = p.PortName ? ` (${p.PortName})` : "";
+      const driverInfo = p.DriverName ? ` - ${p.DriverName}` : "";
+      const info = `${p.Name}${portInfo}${driverInfo}`;
+      results.push({
+        name: p.Name,
+        uri,
+        accepting: p.PrinterStatus === 0 || p.PrinterStatus === 1,
+        // 0=Normal, 1=Paused but exists
+        info
+      });
+    }
+  } catch (err) {
+    console.warn("[PrinterDiscovery] PowerShell Get-Printer failed:", err);
+  }
+  return results;
+}
 const DEFAULT_IPP_PORTS = [631];
 const DEFAULT_IPP_PATHS = ["/ipp/print", "/ipp/printer", "/"];
 const DEFAULT_PROBE_TIMEOUT = 2e3;
@@ -845,6 +886,19 @@ async function getSubnetTargets(executor = defaultDiscoveryExecutor) {
   return [...new Set(targets)];
 }
 async function discoverWindowsPrinters(config = {}, executor = defaultDiscoveryExecutor, probe = defaultHttpProbe) {
+  const localPrinters = await discoverWindowsLocalPrinters(executor);
+  const networkPrinters = await discoverWindowsNetworkPrinters(config, executor, probe);
+  const seenNames = new Set(localPrinters.map((p) => p.name.toLowerCase()));
+  const merged = [...localPrinters];
+  for (const netPrinter of networkPrinters) {
+    if (!seenNames.has(netPrinter.name.toLowerCase())) {
+      seenNames.add(netPrinter.name.toLowerCase());
+      merged.push(netPrinter);
+    }
+  }
+  return merged;
+}
+async function discoverWindowsNetworkPrinters(config = {}, executor = defaultDiscoveryExecutor, probe = defaultHttpProbe) {
   const ports = config.ports ?? DEFAULT_IPP_PORTS;
   const paths = config.paths ?? DEFAULT_IPP_PATHS;
   const timeoutMs = config.timeoutMs ?? DEFAULT_PROBE_TIMEOUT;
@@ -1371,16 +1425,84 @@ class IppBackend {
     return this.requestId++;
   }
   /**
-   * Sends a PDF buffer to the specified IPP printer.
+   * Checks if a printer URI refers to a local Windows printer (win:// scheme).
+   */
+  isLocalWindowsPrinter(printerUri) {
+    return printerUri.startsWith("win://");
+  }
+  /**
+   * Extracts the printer name from a win:// URI.
+   * win://Canon%20PIXMA%20MG3600 → "Canon PIXMA MG3600"
+   */
+  getWindowsPrinterName(printerUri) {
+    const encoded = printerUri.replace("win://", "");
+    return decodeURIComponent(encoded);
+  }
+  /**
+   * Prints a PDF to a local Windows printer using PowerShell and the Windows spooler.
+   * Uses Out-Printer which sends content through the Windows printing subsystem.
+   * For PDF files, we use Start-Process with the -Verb Print action which leverages
+   * the registered PDF handler on the system.
+   */
+  async printViaWindowsSpooler(printerName, pdfBuffer, options) {
+    const { exec: nodeExec } = require("child_process");
+    const { promisify: nodePromisify } = require("util");
+    const { writeFileSync, unlinkSync, mkdirSync } = require("fs");
+    const { join } = require("path");
+    const { tmpdir } = require("os");
+    const execAsync2 = nodePromisify(nodeExec);
+    const tempDir = join(tmpdir(), "stamp-sales-print");
+    try {
+      mkdirSync(tempDir, { recursive: true });
+    } catch {
+    }
+    const jobName = options.jobName ?? `print_${Date.now()}`;
+    const tempFile = join(tempDir, `${jobName}_${Date.now()}.pdf`);
+    try {
+      writeFileSync(tempFile, pdfBuffer);
+      const copies = options.copies ?? 1;
+      const escapedPrinterName = printerName.replace(/'/g, "''");
+      const escapedPath = tempFile.replace(/'/g, "''");
+      const psCommand = `powershell -NoProfile -Command "$printer = '${escapedPrinterName}'; $file = '${escapedPath}'; $copies = ${copies}; for ($$i = 0; $$i -lt $copies; $$i++) { Start-Process -FilePath $file -Verb Print -ArgumentList '/p /h /d:$printer' -Wait -WindowStyle Hidden }"`;
+      await execAsync2(psCommand, { timeout: 3e4 });
+      setTimeout(() => {
+        try {
+          unlinkSync(tempFile);
+        } catch {
+        }
+      }, 1e4);
+      return { success: true, jobId: jobName };
+    } catch (err) {
+      try {
+        unlinkSync(tempFile);
+      } catch {
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      return { success: false, error: `Windows print failed: ${message}` };
+    }
+  }
+  /**
+   * Sends a PDF buffer to the specified printer.
+   * Routes to either IPP (network printers) or Windows spooler (local/USB printers)
+   * based on the URI scheme.
    *
-   * Workflow:
+   * Workflow for IPP (ipp:// URIs):
    * 1. Parse the printer URI to get hostname/port/path
    * 2. Build IPP Print-Job request with options (media, orientation, copies)
    * 3. Concatenate IPP request header + PDF document data
    * 4. Send via HTTP POST to the printer
    * 5. Parse response for job ID and status
+   *
+   * Workflow for local printers (win:// URIs):
+   * 1. Extract printer name from URI
+   * 2. Write PDF to temp file
+   * 3. Print via PowerShell using Windows spooler
    */
   async print(printerUri, pdfBuffer, options) {
+    if (this.isLocalWindowsPrinter(printerUri)) {
+      const printerName = this.getWindowsPrinterName(printerUri);
+      return this.printViaWindowsSpooler(printerName, pdfBuffer, options);
+    }
     const uri = parseIppUri(printerUri);
     const reqId = this.nextRequestId();
     try {
@@ -1414,9 +1536,14 @@ class IppBackend {
     }
   }
   /**
-   * Queries the current status of an IPP printer using Get-Printer-Attributes.
+   * Queries the current status of a printer.
+   * For IPP printers: uses Get-Printer-Attributes.
+   * For local Windows printers (win://): uses PowerShell Get-Printer.
    */
   async getStatus(printerUri) {
+    if (this.isLocalWindowsPrinter(printerUri)) {
+      return this.getWindowsPrinterStatus(printerUri);
+    }
     const uri = parseIppUri(printerUri);
     const reqId = this.nextRequestId();
     try {
@@ -1438,9 +1565,46 @@ class IppBackend {
     }
   }
   /**
-   * Pauses an IPP printer using the Pause-Printer operation.
+   * Queries a local Windows printer's status via PowerShell.
+   */
+  async getWindowsPrinterStatus(printerUri) {
+    const printerName = this.getWindowsPrinterName(printerUri);
+    try {
+      const { exec: nodeExec } = require("child_process");
+      const { promisify: nodePromisify } = require("util");
+      const execAsync2 = nodePromisify(nodeExec);
+      const escapedName = printerName.replace(/'/g, "''");
+      const { stdout } = await execAsync2(
+        `powershell -NoProfile -Command "Get-Printer -Name '${escapedName}' | Select-Object PrinterStatus | ConvertTo-Json -Compress"`,
+        { timeout: 5e3 }
+      );
+      if (!stdout || stdout.trim().length === 0) {
+        return "disconnected";
+      }
+      const result = JSON.parse(stdout.trim());
+      switch (result.PrinterStatus) {
+        case 0:
+          return "ready";
+        case 1:
+          return "paused";
+        case 2:
+          return "error";
+        default:
+          return "disconnected";
+      }
+    } catch {
+      return "disconnected";
+    }
+  }
+  /**
+   * Pauses a printer.
+   * For IPP printers: uses Pause-Printer operation.
+   * For local Windows printers (win://): uses PowerShell Set-Printer.
    */
   async pause(printerUri) {
+    if (this.isLocalWindowsPrinter(printerUri)) {
+      return this.pauseWindowsPrinter(printerUri);
+    }
     const uri = parseIppUri(printerUri);
     const reqId = this.nextRequestId();
     try {
@@ -1459,9 +1623,33 @@ class IppBackend {
     }
   }
   /**
-   * Resumes an IPP printer using the Resume-Printer operation.
+   * Pauses a local Windows printer via PowerShell.
+   */
+  async pauseWindowsPrinter(printerUri) {
+    const printerName = this.getWindowsPrinterName(printerUri);
+    try {
+      const { exec: nodeExec } = require("child_process");
+      const { promisify: nodePromisify } = require("util");
+      const execAsync2 = nodePromisify(nodeExec);
+      const escapedName = printerName.replace(/'/g, "''");
+      await execAsync2(
+        `powershell -NoProfile -Command "Stop-Printer -Name '${escapedName}'"`,
+        { timeout: 5e3 }
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  /**
+   * Resumes a printer.
+   * For IPP printers: uses Resume-Printer operation.
+   * For local Windows printers (win://): uses PowerShell Restart-Printer.
    */
   async resume(printerUri) {
+    if (this.isLocalWindowsPrinter(printerUri)) {
+      return this.resumeWindowsPrinter(printerUri);
+    }
     const uri = parseIppUri(printerUri);
     const reqId = this.nextRequestId();
     try {
@@ -1480,14 +1668,31 @@ class IppBackend {
     }
   }
   /**
-   * Discovers IPP printers on the local network by scanning the subnet.
+   * Resumes a local Windows printer via PowerShell.
+   */
+  async resumeWindowsPrinter(printerUri) {
+    const printerName = this.getWindowsPrinterName(printerUri);
+    try {
+      const { exec: nodeExec } = require("child_process");
+      const { promisify: nodePromisify } = require("util");
+      const execAsync2 = nodePromisify(nodeExec);
+      const escapedName = printerName.replace(/'/g, "''");
+      await execAsync2(
+        `powershell -NoProfile -Command "Restart-Printer -Name '${escapedName}'"`,
+        { timeout: 5e3 }
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  /**
+   * Discovers printers available on the system using two strategies:
+   * 1. Local printers via PowerShell Get-Printer (USB, local network, spooler-registered)
+   * 2. Network printers via IPP subnet scan (probes hosts from ARP table)
    *
-   * Uses the discoverWindowsPrinters function from printer-discovery.ts which:
-   * 1. Gets list of hosts from the ARP table (recently communicated-with hosts)
-   * 2. Probes each host on common IPP ports (631) and paths (/ipp/print, /ipp/printer, /)
-   * 3. Records hosts that respond with valid IPP responses as printers
-   *
-   * The HTTP probe sends a minimal Get-Printer-Attributes request to detect printers.
+   * Uses the discoverWindowsPrinters function from printer-discovery.ts which
+   * merges both sources and deduplicates.
    */
   async discover() {
     const probe = {
@@ -1511,18 +1716,23 @@ class IppBackend {
         const { exec: nodeExec } = require("child_process");
         const { promisify: nodePromisify } = require("util");
         const execPromise = nodePromisify(nodeExec);
-        return execPromise(command, { timeout: 1e4 });
+        return execPromise(command, { timeout: 15e3 });
       }
     };
     return discoverWindowsPrinters({}, executor, probe);
   }
   /**
-   * Cancels a specific print job by its numeric ID using Cancel-Job operation.
+   * Cancels a specific print job.
+   * For IPP printers: uses Cancel-Job operation.
+   * For local Windows printers (win://): uses PowerShell Remove-PrintJob.
    *
    * @param printerUri - The printer URI where the job is queued
    * @param jobId - The job ID as a string (will be parsed to integer)
    */
   async cancelJob(printerUri, jobId) {
+    if (this.isLocalWindowsPrinter(printerUri)) {
+      return this.cancelWindowsJob(printerUri, jobId);
+    }
     const uri = parseIppUri(printerUri);
     const reqId = this.nextRequestId();
     const numericJobId = parseInt(jobId, 10);
@@ -1540,6 +1750,27 @@ class IppBackend {
       );
       const response = parseIppResponse(responseData);
       return response.statusCode <= 255;
+    } catch {
+      return false;
+    }
+  }
+  /**
+   * Cancels a print job on a local Windows printer via PowerShell.
+   */
+  async cancelWindowsJob(printerUri, jobId) {
+    const printerName = this.getWindowsPrinterName(printerUri);
+    const numericJobId = parseInt(jobId, 10);
+    if (isNaN(numericJobId)) return false;
+    try {
+      const { exec: nodeExec } = require("child_process");
+      const { promisify: nodePromisify } = require("util");
+      const execAsync2 = nodePromisify(nodeExec);
+      const escapedName = printerName.replace(/'/g, "''");
+      await execAsync2(
+        `powershell -NoProfile -Command "Remove-PrintJob -PrinterName '${escapedName}' -ID ${numericJobId}"`,
+        { timeout: 5e3 }
+      );
+      return true;
     } catch {
       return false;
     }
@@ -2265,6 +2496,34 @@ function registerPrinterHandlers() {
       errorMessage: job.errorMessage ?? void 0
     }));
   });
+  handleIpc("printer:discover", async () => {
+    const printerManager2 = getPrinterManager();
+    return printerManager2.discover();
+  });
+  handleIpc(
+    "printer:assign",
+    async (target, uri) => {
+      const typedTarget = target;
+      const typedUri = uri;
+      if (!["printer1", "printer2", "ticket"].includes(typedTarget)) {
+        return { success: false, error: `Invalid target: ${typedTarget}` };
+      }
+      if (!typedUri || typeof typedUri !== "string") {
+        return { success: false, error: "Invalid printer URI" };
+      }
+      const printerManager2 = getPrinterManager();
+      printerManager2.setAssignments({ [typedTarget]: typedUri });
+      console.log(`[Printer] Reassigned ${typedTarget} → ${typedUri}`);
+      return { success: true };
+    }
+  );
+  handleIpc(
+    "printer:getAssignments",
+    () => {
+      const printerManager2 = getPrinterManager();
+      return printerManager2.getAssignments();
+    }
+  );
 }
 function calcSellos1(q) {
   return q.tarifaAS1 + q.tarifaA2S1 + q.tarifaBS1 + q.tarifaCS1 + q.tarifaAT1 * 4 + q.tarifa4T1 * 4;

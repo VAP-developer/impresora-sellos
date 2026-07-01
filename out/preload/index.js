@@ -38,7 +38,10 @@ const api = {
     print: (config, quantities, profile) => electron.ipcRenderer.invoke("printer:print", config, quantities, profile),
     pause: () => electron.ipcRenderer.invoke("printer:pause"),
     resume: () => electron.ipcRenderer.invoke("printer:resume"),
-    getQueue: () => electron.ipcRenderer.invoke("printer:getQueue")
+    getQueue: () => electron.ipcRenderer.invoke("printer:getQueue"),
+    discover: () => electron.ipcRenderer.invoke("printer:discover"),
+    assign: (target, uri) => electron.ipcRenderer.invoke("printer:assign", target, uri),
+    getAssignments: () => electron.ipcRenderer.invoke("printer:getAssignments")
   },
   sync: {
     getStatus: () => electron.ipcRenderer.invoke("sync:getStatus"),

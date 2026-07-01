@@ -13980,6 +13980,15 @@ async function resumePrinter() {
 async function getPrintQueue() {
   return getAPI().printer.getQueue();
 }
+async function discoverPrinters() {
+  return getAPI().printer.discover();
+}
+async function assignPrinter(target, uri) {
+  return getAPI().printer.assign(target, uri);
+}
+async function getPrinterAssignments() {
+  return getAPI().printer.getAssignments();
+}
 async function cancelSale(input) {
   return getAPI().sale.cancel(input);
 }
@@ -14093,8 +14102,11 @@ const useConfigStore = create((set, get) => ({
 const usePrinterStore = create((set) => ({
   printers: [],
   queue: [],
+  discovered: [],
+  assignments: {},
   loading: false,
   printing: false,
+  discovering: false,
   error: null,
   fetchStatus: async () => {
     set({ loading: true, error: null });
@@ -14153,6 +14165,44 @@ const usePrinterStore = create((set) => ({
       const message = err instanceof Error ? err.message : "Failed to resume printer";
       set({ error: message, loading: false });
       throw err;
+    }
+  },
+  discover: async () => {
+    set({ discovering: true, error: null });
+    try {
+      const discovered = await discoverPrinters();
+      set({ discovered, discovering: false });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to discover printers";
+      set({ error: message, discovering: false });
+    }
+  },
+  assign: async (target, uri) => {
+    set({ loading: true, error: null });
+    try {
+      const result = await assignPrinter(target, uri);
+      if (!result.success) {
+        set({ error: result.error ?? "Failed to assign printer", loading: false });
+        return false;
+      }
+      const [assignments, printers] = await Promise.all([
+        getPrinterAssignments(),
+        getPrinterStatus()
+      ]);
+      set({ assignments, printers, loading: false });
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to assign printer";
+      set({ error: message, loading: false });
+      return false;
+    }
+  },
+  fetchAssignments: async () => {
+    try {
+      const assignments = await getPrinterAssignments();
+      set({ assignments });
+    } catch (err) {
+      console.error("[PrinterStore] Failed to fetch assignments:", err);
     }
   },
   clearError: () => {
@@ -21536,6 +21586,185 @@ function formatLabelCode(codigo, now) {
   const producto = formatProducto(codigo.producto);
   return `${modo}${mes}${pais}${annio} ${maquina}-${clienteStr}-${producto}`;
 }
+const STATUS_COLORS = {
+  ready: "bg-green-500",
+  busy: "bg-yellow-500 animate-pulse",
+  error: "bg-red-500",
+  disconnected: "bg-gray-400",
+  paused: "bg-blue-400"
+};
+const STATUS_LABELS = {
+  ready: "Lista",
+  busy: "En uso",
+  error: "Error",
+  disconnected: "Desconectada",
+  paused: "Pausada"
+};
+function PrinterTargetRow({ target, label }) {
+  const printers = usePrinterStore((s) => s.printers);
+  const discovered = usePrinterStore((s) => s.discovered);
+  const assignments = usePrinterStore((s) => s.assignments);
+  const assign = usePrinterStore((s) => s.assign);
+  const loading = usePrinterStore((s) => s.loading);
+  const currentPrinter = printers.find((p) => p.target === target);
+  const currentUri = assignments[target] ?? currentPrinter?.uri ?? "";
+  const status = currentPrinter?.status ?? "disconnected";
+  const handleChange = reactExports.useCallback(
+    async (e) => {
+      const newUri = e.target.value;
+      if (newUri && newUri !== currentUri) {
+        await assign(target, newUri);
+      }
+    },
+    [target, currentUri, assign]
+  );
+  const options = discovered.filter((d) => d.accepting);
+  const currentInList = options.some((d) => d.uri === currentUri);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 py-1", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "span",
+      {
+        className: `w-3 h-3 rounded-full shrink-0 ${STATUS_COLORS[status] ?? "bg-gray-400"}`,
+        title: STATUS_LABELS[status] ?? status,
+        "aria-label": `Estado: ${STATUS_LABELS[status] ?? status}`
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold text-gray-700 w-20 shrink-0", children: label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "select",
+      {
+        className: "flex-1 text-xs border border-gray-300 rounded px-1 py-0.5\n                   bg-white text-gray-800 truncate\n                   focus:outline-none focus:ring-1 focus:ring-blue-400\n                   disabled:opacity-50 disabled:cursor-not-allowed",
+        value: currentUri,
+        onChange: handleChange,
+        disabled: loading,
+        "aria-label": `Seleccionar impresora para ${label}`,
+        children: [
+          !currentInList && currentUri && /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: currentUri, children: currentPrinter?.name ?? currentUri }),
+          !currentUri && /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "Sin asignar" }),
+          options.map((printer) => /* @__PURE__ */ jsxRuntimeExports.jsxs("option", { value: printer.uri, children: [
+            printer.name,
+            " ",
+            printer.info ? `(${printer.info})` : ""
+          ] }, printer.uri))
+        ]
+      }
+    ),
+    status === "busy" && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded font-medium animate-pulse", children: "EN USO" }),
+    status === "error" && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] bg-red-100 text-red-800 px-1.5 py-0.5 rounded font-medium", children: "ERROR" })
+  ] });
+}
+function PrinterSelector() {
+  const discover = usePrinterStore((s) => s.discover);
+  const fetchStatus = usePrinterStore((s) => s.fetchStatus);
+  const fetchAssignments = usePrinterStore((s) => s.fetchAssignments);
+  const discovering = usePrinterStore((s) => s.discovering);
+  const discovered = usePrinterStore((s) => s.discovered);
+  const [expanded, setExpanded] = reactExports.useState(false);
+  reactExports.useEffect(() => {
+    fetchStatus();
+    fetchAssignments();
+  }, [fetchStatus, fetchAssignments]);
+  reactExports.useEffect(() => {
+    if (!expanded) return void 0;
+    const interval = setInterval(() => {
+      fetchStatus();
+    }, 5e3);
+    return () => clearInterval(interval);
+  }, [expanded, fetchStatus]);
+  const handleDiscover = reactExports.useCallback(async () => {
+    await discover();
+  }, [discover]);
+  const handleToggle = reactExports.useCallback(() => {
+    setExpanded((prev) => {
+      if (!prev) {
+        if (discovered.length === 0) {
+          discover();
+        }
+      }
+      return !prev;
+    });
+  }, [discover, discovered.length]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-gray-50 border border-gray-200 rounded p-2 w-full", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "button",
+      {
+        type: "button",
+        className: "flex items-center gap-2 w-full text-left cursor-pointer\n                   hover:bg-gray-100 rounded px-1 py-0.5 transition-colors\n                   focus:outline-none focus:ring-1 focus:ring-blue-400",
+        onClick: handleToggle,
+        "aria-expanded": expanded,
+        "aria-controls": "printer-selector-panel",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "svg",
+            {
+              xmlns: "http://www.w3.org/2000/svg",
+              viewBox: "0 0 24 24",
+              fill: "none",
+              stroke: "currentColor",
+              strokeWidth: "2",
+              className: "w-4 h-4 text-gray-600",
+              "aria-hidden": "true",
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("polyline", { points: "6 9 6 2 18 2 18 9" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: "6", y: "14", width: "12", height: "8" })
+              ]
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-bold text-gray-700 flex-1", children: "Seleccionar Impresoras" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "svg",
+            {
+              xmlns: "http://www.w3.org/2000/svg",
+              viewBox: "0 0 24 24",
+              fill: "none",
+              stroke: "currentColor",
+              strokeWidth: "2",
+              className: `w-3 h-3 text-gray-500 transition-transform ${expanded ? "rotate-180" : ""}`,
+              "aria-hidden": "true",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsx("polyline", { points: "6 9 12 15 18 9" })
+            }
+          )
+        ]
+      }
+    ),
+    expanded && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { id: "printer-selector-panel", className: "mt-2 space-y-1", role: "region", "aria-label": "Selector de impresoras", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(PrinterTargetRow, { target: "printer1", label: "Sellos Mod.1" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(PrinterTargetRow, { target: "printer2", label: "Sellos Mod.2" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(PrinterTargetRow, { target: "ticket", label: "Tickets" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex justify-center pt-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          className: "inline-flex items-center gap-1 px-2 py-1 bg-gray-200 hover:bg-gray-300\n                         text-gray-700 rounded text-[11px] font-medium cursor-pointer\n                         transition-colors focus:outline-none focus:ring-1 focus:ring-gray-400\n                         disabled:opacity-50 disabled:cursor-not-allowed",
+          onClick: handleDiscover,
+          disabled: discovering,
+          "aria-label": "Buscar impresoras disponibles",
+          children: discovering ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { className: "w-3 h-3 animate-spin", viewBox: "0 0 24 24", fill: "none", "aria-hidden": "true", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "3", className: "opacity-25" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M4 12a8 8 0 018-8", stroke: "currentColor", strokeWidth: "3", strokeLinecap: "round", className: "opacity-75" })
+            ] }),
+            "Buscando..."
+          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", className: "w-3 h-3", "aria-hidden": "true", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "11", cy: "11", r: "8" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("line", { x1: "21", y1: "21", x2: "16.65", y2: "16.65" })
+            ] }),
+            "Buscar impresoras"
+          ] })
+        }
+      ) }),
+      discovered.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-[10px] text-gray-500 text-center", children: [
+        discovered.length,
+        " impresora",
+        discovered.length !== 1 ? "s" : "",
+        " encontrada",
+        discovered.length !== 1 ? "s" : ""
+      ] })
+    ] })
+  ] });
+}
 function ModelPreview({
   modelName,
   label,
@@ -21693,6 +21922,7 @@ function StampModels() {
         }
       )
     ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col items-center px-2 self-start mt-2", style: { minWidth: "260px" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(PrinterSelector, {}) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       ModelPreview,
       {

@@ -365,6 +365,14 @@ describe('discoverWindowsPrinters', () => {
   beforeEach(() => {
     executor = createMockExecutor()
     probe = createMockProbe()
+    // By default, PowerShell Get-Printer returns empty (no local printers)
+    executor.exec.mockImplementation((command: string) => {
+      if (command.includes('Get-Printer')) {
+        return Promise.resolve({ stdout: '[]', stderr: '' })
+      }
+      // ARP returns empty by default
+      return Promise.resolve({ stdout: '', stderr: '' })
+    })
   })
 
   it('discovers printers by probing targets on IPP port', async () => {
@@ -414,7 +422,12 @@ describe('discoverWindowsPrinters', () => {
   })
 
   it('returns empty array when no targets are found and ARP fails', async () => {
-    executor.exec.mockRejectedValue(new Error('arp failed'))
+    executor.exec.mockImplementation((command: string) => {
+      if (command.includes('Get-Printer')) {
+        return Promise.resolve({ stdout: '[]', stderr: '' })
+      }
+      return Promise.reject(new Error('arp failed'))
+    })
 
     const printers = await discoverWindowsPrinters({}, executor, probe)
 
@@ -437,9 +450,17 @@ describe('discoverWindowsPrinters', () => {
   })
 
   it('auto-detects targets from ARP table when no targets specified', async () => {
-    executor.exec.mockResolvedValue({
-      stdout: '192.168.1.10  aa-bb-cc  dynamic\n192.168.1.20  dd-ee-ff  dynamic',
-      stderr: ''
+    executor.exec.mockImplementation((command: string) => {
+      if (command.includes('Get-Printer')) {
+        return Promise.resolve({ stdout: '[]', stderr: '' })
+      }
+      if (command.includes('arp')) {
+        return Promise.resolve({
+          stdout: '192.168.1.10  aa-bb-cc  dynamic\n192.168.1.20  dd-ee-ff  dynamic',
+          stderr: ''
+        })
+      }
+      return Promise.resolve({ stdout: '', stderr: '' })
     })
 
     probe.probe.mockImplementation(
@@ -530,5 +551,111 @@ describe('discoverWindowsPrinters', () => {
     const printers = await discoverWindowsPrinters(config, executor, probe)
 
     expect(printers).toEqual([])
+  })
+
+  it('discovers local USB printers via PowerShell Get-Printer', async () => {
+    const canonPrinter = {
+      Name: 'Canon PIXMA MG3600 series',
+      PortName: 'USB001',
+      PrinterStatus: 0,
+      Shared: false,
+      DriverName: 'Canon PIXMA MG3600 series',
+      Type: 4
+    }
+
+    executor.exec.mockImplementation((command: string) => {
+      if (command.includes('Get-Printer')) {
+        return Promise.resolve({ stdout: JSON.stringify([canonPrinter]), stderr: '' })
+      }
+      return Promise.resolve({ stdout: '', stderr: '' })
+    })
+
+    const printers = await discoverWindowsPrinters({}, executor, probe)
+
+    expect(printers).toHaveLength(1)
+    expect(printers[0].name).toBe('Canon PIXMA MG3600 series')
+    expect(printers[0].uri).toBe('win://Canon%20PIXMA%20MG3600%20series')
+    expect(printers[0].accepting).toBe(true)
+    expect(printers[0].info).toContain('USB001')
+    expect(printers[0].info).toContain('Canon PIXMA MG3600 series')
+  })
+
+  it('filters out virtual printers (Microsoft Print to PDF, XPS Writer)', async () => {
+    const printers = [
+      { Name: 'Canon PIXMA', PortName: 'USB001', PrinterStatus: 0, Shared: false, DriverName: 'Canon', Type: 4 },
+      { Name: 'Microsoft Print to PDF', PortName: 'PORTPROMPT:', PrinterStatus: 0, Shared: false, DriverName: 'Microsoft', Type: 4 },
+      { Name: 'Microsoft XPS Document Writer', PortName: 'PORTPROMPT:', PrinterStatus: 0, Shared: false, DriverName: 'Microsoft', Type: 4 },
+      { Name: 'Fax', PortName: 'SHRFAX:', PrinterStatus: 0, Shared: false, DriverName: 'Microsoft', Type: 4 }
+    ]
+
+    executor.exec.mockImplementation((command: string) => {
+      if (command.includes('Get-Printer')) {
+        return Promise.resolve({ stdout: JSON.stringify(printers), stderr: '' })
+      }
+      return Promise.resolve({ stdout: '', stderr: '' })
+    })
+
+    const result = await discoverWindowsPrinters({}, executor, probe)
+
+    expect(result).toHaveLength(1)
+    expect(result[0].name).toBe('Canon PIXMA')
+  })
+
+  it('merges local and network printers without duplicates', async () => {
+    const localPrinter = {
+      Name: 'Shared Printer',
+      PortName: 'IP_192.168.1.50',
+      PrinterStatus: 0,
+      Shared: false,
+      DriverName: 'Generic',
+      Type: 0
+    }
+
+    executor.exec.mockImplementation((command: string) => {
+      if (command.includes('Get-Printer')) {
+        return Promise.resolve({ stdout: JSON.stringify([localPrinter]), stderr: '' })
+      }
+      return Promise.resolve({ stdout: '', stderr: '' })
+    })
+
+    // Network scan finds same printer by a different name  
+    probe.probe.mockResolvedValue(null)
+
+    const config: SubnetScanConfig = {
+      targets: ['192.168.1.50'],
+      ports: [631],
+      paths: ['/ipp/print'],
+      timeoutMs: 500
+    }
+
+    const result = await discoverWindowsPrinters(config, executor, probe)
+
+    // Only local printer should show (network scan found nothing)
+    expect(result).toHaveLength(1)
+    expect(result[0].name).toBe('Shared Printer')
+  })
+
+  it('handles PowerShell returning a single object (not array)', async () => {
+    const singlePrinter = {
+      Name: 'Solo Printer',
+      PortName: 'USB002',
+      PrinterStatus: 0,
+      Shared: false,
+      DriverName: 'Solo Driver',
+      Type: 4
+    }
+
+    executor.exec.mockImplementation((command: string) => {
+      if (command.includes('Get-Printer')) {
+        // PowerShell returns single object, not array, when only 1 printer
+        return Promise.resolve({ stdout: JSON.stringify(singlePrinter), stderr: '' })
+      }
+      return Promise.resolve({ stdout: '', stderr: '' })
+    })
+
+    const result = await discoverWindowsPrinters({}, executor, probe)
+
+    expect(result).toHaveLength(1)
+    expect(result[0].name).toBe('Solo Printer')
   })
 })
