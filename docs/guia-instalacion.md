@@ -31,7 +31,19 @@ nvm use
 npm install
 
 # 2. Reconstruir better-sqlite3 para Electron
-npm run rebuild
+npm run build:linux
+
+# 3. Desplegar la aplicación
+
+# Opcion A
+chmod +x "dist/Stamp Sales-1.0.0.AppImage"
+"./dist/Stamp Sales-1.0.0.AppImage"
+
+# Opción B
+sudo dpkg -i dist/stamp-sales-app_1.0.0_amd64.deb
+
+# Opción C
+./dist/linux-unpacked/stamp-sales-app
 ```
 
 ### 1.2 Generar paquete Linux (.deb / AppImage)
@@ -83,7 +95,7 @@ chmod +x dist/StampSales-1.0.0.AppImage
 ### 2.1 Instalar dependencias de cross-compile
 
 ```bash
-# Wine es necesario para firmar y generar el .exe desde Linux
+# Extra - Wine es necesario para firmar y generar el .exe desde Linux
 sudo apt-get install wine64
 
 # Instalar dependencias del proyecto

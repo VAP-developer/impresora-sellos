@@ -19,6 +19,7 @@ import { useConfigStore } from '@renderer/stores/config.store'
 import { usePrinterStore } from '@renderer/stores/printer.store'
 import { formatLabelCode } from '@renderer/lib/code-formatter'
 import * as ipc from '@renderer/lib/ipc-client'
+import PrinterSelector from './PrinterSelector'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -239,6 +240,11 @@ export default function StampModels(): JSX.Element {
           localidad={localidad}
           codePreview={codePreview}
         />
+      </div>
+
+      {/* Center: Printer selector panel */}
+      <div className="flex flex-col items-center px-2 self-start mt-2" style={{ minWidth: '260px' }}>
+        <PrinterSelector />
       </div>
 
       {/* Modelo 2 (right / printer 2) */}

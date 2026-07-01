@@ -166,6 +166,23 @@ export async function getPrintQueue(): Promise<PrintJob[]> {
   return getAPI().printer.getQueue()
 }
 
+export type DiscoveredPrinter = Awaited<ReturnType<ElectronAPI['printer']['discover']>>[number]
+
+export async function discoverPrinters(): Promise<DiscoveredPrinter[]> {
+  return getAPI().printer.discover()
+}
+
+export async function assignPrinter(
+  target: 'printer1' | 'printer2' | 'ticket',
+  uri: string
+): Promise<{ success: boolean; error?: string }> {
+  return getAPI().printer.assign(target, uri)
+}
+
+export async function getPrinterAssignments(): Promise<Record<string, string | undefined>> {
+  return getAPI().printer.getAssignments()
+}
+
 // === Sync ===
 
 export async function getSyncStatus(): Promise<{

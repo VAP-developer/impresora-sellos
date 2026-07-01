@@ -143,6 +143,13 @@ export interface PrinterInfo {
   uri: string
 }
 
+export interface DiscoveredPrinter {
+  name: string
+  uri: string
+  accepting: boolean
+  info?: string
+}
+
 export interface PrintJob {
   id: number
   orderId?: number
@@ -245,6 +252,9 @@ export interface ElectronAPI {
     pause(): Promise<void>
     resume(): Promise<void>
     getQueue(): Promise<PrintJob[]>
+    discover(): Promise<DiscoveredPrinter[]>
+    assign(target: 'printer1' | 'printer2' | 'ticket', uri: string): Promise<{ success: boolean; error?: string }>
+    getAssignments(): Promise<Record<string, string | undefined>>
   }
   sync: {
     getStatus(): Promise<{ connected: boolean; lastSync: string | null; pending: number }>
@@ -301,7 +311,10 @@ const api: ElectronAPI = {
       ipcRenderer.invoke('printer:print', config, quantities, profile),
     pause: () => ipcRenderer.invoke('printer:pause'),
     resume: () => ipcRenderer.invoke('printer:resume'),
-    getQueue: () => ipcRenderer.invoke('printer:getQueue')
+    getQueue: () => ipcRenderer.invoke('printer:getQueue'),
+    discover: () => ipcRenderer.invoke('printer:discover'),
+    assign: (target, uri) => ipcRenderer.invoke('printer:assign', target, uri),
+    getAssignments: () => ipcRenderer.invoke('printer:getAssignments')
   },
   sync: {
     getStatus: () => ipcRenderer.invoke('sync:getStatus'),

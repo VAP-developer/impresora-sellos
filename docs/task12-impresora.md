@@ -1661,3 +1661,144 @@ Si solo se tiene una impresora de sellos, se puede asignar la misma URI a `print
 - **Tarea 12.7**: Property-based tests para enrutamiento determinista (Property 9)
 - **Tarea 12.8**: Test manual en Windows con impresora Epson real
 - **Integración IPC**: Actualizar `printer:getStatus` en `printer.handlers.ts` para usar `PrinterManager.discover()` y devolver impresoras reales
+
+---
+
+## Selección de impresoras desde la vista Kiosko (12.9)
+
+### Resumen
+
+Se añadió una funcionalidad en la vista **Kiosko** que permite al vendedor:
+1. Ver qué impresora está asignada a cada rol (Sellos Modelo 1, Sellos Modelo 2, Tickets)
+2. Ver el estado actual de cada impresora con un indicador visual
+3. Cambiar la impresora asignada a un rol por otra disponible en la red
+4. Descubrir impresoras disponibles con un botón de búsqueda
+
+Esto soluciona el caso de uso: "si la impresora 1 está ocupada o con error, quiero poder redirigir los trabajos a otra impresora sin esperar".
+
+---
+
+### Archivos creados / modificados
+
+| Archivo | Acción | Descripción |
+|---------|--------|-------------|
+| `src/renderer/src/components/kiosko/PrinterSelector.tsx` | **Creado** | Componente selector de impresoras con dropdown por target |
+| `src/main/ipc/printer.handlers.ts` | **Modificado** | 3 nuevos canales IPC: `printer:discover`, `printer:assign`, `printer:getAssignments` |
+| `src/preload/index.ts` | **Modificado** | Exposición de los nuevos canales + tipo `DiscoveredPrinter` |
+| `src/renderer/src/lib/ipc-client.ts` | **Modificado** | Funciones `discoverPrinters()`, `assignPrinter()`, `getPrinterAssignments()` |
+| `src/renderer/src/stores/printer.store.ts` | **Modificado** | Nuevo estado y acciones: `discovered`, `assignments`, `discover()`, `assign()`, `fetchAssignments()` |
+| `src/renderer/src/components/kiosko/StampModels.tsx` | **Modificado** | Integra el `PrinterSelector` entre los dos modelos |
+
+---
+
+### Nuevos canales IPC
+
+| Canal | Dirección | Parámetros | Retorno | Descripción |
+|-------|-----------|------------|---------|-------------|
+| `printer:discover` | renderer → main | — | `DiscoveredPrinter[]` | Busca impresoras disponibles en la red/sistema |
+| `printer:assign` | renderer → main | `target: PrinterTarget, uri: string` | `{ success, error? }` | Reasigna un rol a otra impresora |
+| `printer:getAssignments` | renderer → main | — | `Record<string, string \| undefined>` | Devuelve asignaciones actuales (target → URI) |
+
+---
+
+### Estructura visual del componente
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│   Modelo 1          │  Seleccionar Impresoras ▼   │         Modelo 2       │
+│   [imagen]          │                              │         [imagen]       │
+│                     │  ● Sellos Mod.1  [Epson1 ▼]  │                       │
+│                     │  ● Sellos Mod.2  [Epson2 ▼]  │                       │
+│                     │  ● Tickets       [POS-80 ▼]  │                       │
+│                     │                              │                       │
+│                     │  [🔍 Buscar impresoras]      │                       │
+│                     │  3 impresoras encontradas    │                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Indicadores de estado
+
+Cada fila de impresora muestra un punto de color que indica su estado actual:
+
+| Color | Estado | Significado |
+|-------|--------|-------------|
+| 🟢 Verde | `ready` | Lista para imprimir |
+| 🟡 Amarillo (pulsante) | `busy` | En uso — hay trabajos activos |
+| 🔴 Rojo | `error` | Error de comunicación o impresión |
+| ⚪ Gris | `disconnected` | No se puede conectar |
+| 🔵 Azul | `paused` | Pausada manualmente |
+
+Además, cuando una impresora tiene estado `busy`, se muestra un badge **"EN USO"** con animación de pulso. Si tiene estado `error`, muestra badge **"ERROR"**.
+
+---
+
+### Flujo de uso
+
+```
+Usuario abre panel "Seleccionar Impresoras"
+         │
+         ▼
+Se buscan impresoras automáticamente (si es la primera vez)
+Se cargan estado actual + asignaciones
+         │
+         ▼
+Usuario ve que "Sellos Mod.1" tiene indicador amarillo (EN USO)
+         │
+         ▼
+Usuario cambia el dropdown a otra impresora
+         │
+         ▼
+renderer: ipc.assignPrinter('printer1', 'ipp://nueva-impresora/ipp/print')
+         │
+         ▼
+main: printerManager.setAssignments({ printer1: nuevoUri })
+         │
+         ▼
+Se refresca estado + asignaciones
+         │
+         ▼
+Siguiente venta usará la nueva impresora para modelo 1
+         │
+         ▼
+Si el usuario vuelve a la impresora original y sigue busy → indicador lo muestra
+```
+
+---
+
+### Polling de estado
+
+Cuando el panel está expandido, se hace polling del estado de las impresoras cada **5 segundos** para mantener los indicadores actualizados. El polling se detiene cuando el panel se colapsa.
+
+---
+
+### Decisiones de diseño
+
+#### ¿Por qué un panel colapsable?
+
+La selección de impresoras no es una acción frecuente (solo se usa cuando hay un problema). Mantenerlo colapsado evita ruido visual en la pantalla principal de venta, que debe ser limpia y rápida.
+
+#### ¿Por qué se ubica entre los dos modelos?
+
+Es el punto natural: las impresoras están asociadas a los modelos (printer1 ↔ modelo 1, printer2 ↔ modelo 2). Ubicar el selector en el centro refuerza visualmente esta relación.
+
+#### ¿Por qué no se persiste la asignación en base de datos?
+
+La reasignación es temporal y operacional (resolver un problema puntual). Al reiniciar la app, el `PrinterManager` se crea sin asignaciones y se descubren de nuevo. Si en el futuro se necesita persistencia, basta con guardar las URIs en la tabla `config` y cargarlas en `initServices()`.
+
+#### ¿Por qué se usa `discover()` del backend?
+
+El descubrimiento real (avahi-browse en Linux, subnet scan en Windows) ya estaba implementado en la tarea 12.6. Solo faltaba exponerlo al renderer vía IPC. Reutilizar esa infraestructura evita duplicación.
+
+---
+
+### Requisitos validados
+
+| Requisito | Aspecto cubierto |
+|-----------|-----------------|
+| Req 8.1 | Enrutamiento correcto: al cambiar la asignación, los trabajos van a la nueva URI |
+| Req 8.6 | Compatible con pausa: impresora pausada se muestra con indicador azul |
+| Req 9.4 | Misma interfaz de descubrimiento independiente de plataforma |
+| UX | Indicador visual de "en uso" para informar antes de seleccionar |
+

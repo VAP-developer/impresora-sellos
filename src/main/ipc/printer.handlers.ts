@@ -10,7 +10,7 @@
 import { handleIpc } from './handlers'
 import { getPrinterManager, getPrintQueueService } from '../services'
 import { PrintQueueRepository } from '../database/repositories/print-queue.repository'
-import type { PrinterTarget } from '../printing/printer-manager'
+import type { PrinterTarget, DiscoveredPrinter } from '../printing/printer-manager'
 
 // === Printer Types (matching preload interface) ===
 
@@ -123,4 +123,51 @@ export function registerPrinterHandlers(): void {
       errorMessage: job.errorMessage ?? undefined
     }))
   })
+
+  /**
+   * Discovers available printers on the network/system.
+   * Returns a list of DiscoveredPrinter objects with name, URI, and accepting state.
+   */
+  handleIpc('printer:discover', async (): Promise<DiscoveredPrinter[]> => {
+    const printerManager = getPrinterManager()
+    return printerManager.discover()
+  })
+
+  /**
+   * Reassigns a printer target to a different printer URI.
+   * Used to switch which physical printer handles a given role (printer1, printer2, ticket).
+   *
+   * @param target - The role to reassign ('printer1' | 'printer2' | 'ticket')
+   * @param uri - The new printer URI (from discovery results)
+   */
+  handleIpc(
+    'printer:assign',
+    async (target: unknown, uri: unknown): Promise<{ success: boolean; error?: string }> => {
+      const typedTarget = target as PrinterTarget
+      const typedUri = uri as string
+
+      if (!['printer1', 'printer2', 'ticket'].includes(typedTarget)) {
+        return { success: false, error: `Invalid target: ${typedTarget}` }
+      }
+      if (!typedUri || typeof typedUri !== 'string') {
+        return { success: false, error: 'Invalid printer URI' }
+      }
+
+      const printerManager = getPrinterManager()
+      printerManager.setAssignments({ [typedTarget]: typedUri })
+      console.log(`[Printer] Reassigned ${typedTarget} → ${typedUri}`)
+      return { success: true }
+    }
+  )
+
+  /**
+   * Returns the current printer assignments (target → URI mapping).
+   */
+  handleIpc(
+    'printer:getAssignments',
+    (): Record<string, string | undefined> => {
+      const printerManager = getPrinterManager()
+      return printerManager.getAssignments()
+    }
+  )
 }

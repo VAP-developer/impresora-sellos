@@ -3,7 +3,8 @@
  *
  * Zustand store for printer state management.
  * Tracks connected printers, their statuses, the print queue,
- * and provides actions for printing, pausing, resuming, and polling.
+ * discovered printers, current assignments, and provides actions
+ * for printing, pausing, resuming, discovering, and reassigning.
  */
 
 import { create } from 'zustand'
@@ -11,16 +12,25 @@ import type { PrinterInfo, PrintJob } from '@renderer/types/printer'
 import type { AppConfig } from '@renderer/types/config'
 import type { KioskoQuantities } from '@renderer/stores/kiosko.store'
 import * as ipc from '@renderer/lib/ipc-client'
+import type { DiscoveredPrinter } from '@renderer/lib/ipc-client'
+
+export type PrinterTarget = 'printer1' | 'printer2' | 'ticket'
 
 export interface PrinterState {
   /** List of detected printers and their current status. */
   printers: PrinterInfo[]
   /** Current print queue (pending/printing/error jobs). */
   queue: PrintJob[]
+  /** Discovered printers available on the network/system. */
+  discovered: DiscoveredPrinter[]
+  /** Current printer assignments (target → URI). */
+  assignments: Record<string, string | undefined>
   /** Whether a printer operation is in progress. */
   loading: boolean
   /** Whether a print job is currently being sent. */
   printing: boolean
+  /** Whether printer discovery is in progress. */
+  discovering: boolean
   /** Error message from the last failed operation. */
   error: string | null
 
@@ -41,6 +51,15 @@ export interface PrinterState {
   /** Resume all printers (resends pending jobs). */
   resume: () => Promise<void>
 
+  /** Discover available printers on the network/system. */
+  discover: () => Promise<void>
+
+  /** Assign a discovered printer to a target role. */
+  assign: (target: PrinterTarget, uri: string) => Promise<boolean>
+
+  /** Fetch current printer assignments. */
+  fetchAssignments: () => Promise<void>
+
   /** Clear any error state. */
   clearError: () => void
 }
@@ -48,8 +67,11 @@ export interface PrinterState {
 export const usePrinterStore = create<PrinterState>((set) => ({
   printers: [],
   queue: [],
+  discovered: [],
+  assignments: {},
   loading: false,
   printing: false,
+  discovering: false,
   error: null,
 
   fetchStatus: async () => {
@@ -116,6 +138,48 @@ export const usePrinterStore = create<PrinterState>((set) => ({
       const message = err instanceof Error ? err.message : 'Failed to resume printer'
       set({ error: message, loading: false })
       throw err
+    }
+  },
+
+  discover: async () => {
+    set({ discovering: true, error: null })
+    try {
+      const discovered = await ipc.discoverPrinters()
+      set({ discovered, discovering: false })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to discover printers'
+      set({ error: message, discovering: false })
+    }
+  },
+
+  assign: async (target, uri) => {
+    set({ loading: true, error: null })
+    try {
+      const result = await ipc.assignPrinter(target, uri)
+      if (!result.success) {
+        set({ error: result.error ?? 'Failed to assign printer', loading: false })
+        return false
+      }
+      // Refresh assignments and status after reassignment
+      const [assignments, printers] = await Promise.all([
+        ipc.getPrinterAssignments(),
+        ipc.getPrinterStatus()
+      ])
+      set({ assignments, printers, loading: false })
+      return true
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to assign printer'
+      set({ error: message, loading: false })
+      return false
+    }
+  },
+
+  fetchAssignments: async () => {
+    try {
+      const assignments = await ipc.getPrinterAssignments()
+      set({ assignments })
+    } catch (err) {
+      console.error('[PrinterStore] Failed to fetch assignments:', err)
     }
   },
 
