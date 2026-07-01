@@ -132,12 +132,12 @@ export default function PrinterSelector(): JSX.Element {
     fetchAssignments()
   }, [fetchStatus, fetchAssignments])
 
-  // Poll printer status every 5 seconds when expanded
+  // Poll printer status every 30 seconds when expanded (reduced to minimize UI disruption)
   useEffect(() => {
     if (!expanded) return undefined
     const interval = setInterval(() => {
       fetchStatus()
-    }, 5000)
+    }, 30000)
     return () => clearInterval(interval)
   }, [expanded, fetchStatus])
 

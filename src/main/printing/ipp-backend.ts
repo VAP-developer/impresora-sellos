@@ -602,56 +602,86 @@ export class IppBackend implements PrinterBackend {
   }
 
   /**
-   * Prints a PDF to a local Windows printer using PowerShell and the Windows spooler.
-   * Uses Out-Printer which sends content through the Windows printing subsystem.
-   * For PDF files, we use Start-Process with the -Verb Print action which leverages
-   * the registered PDF handler on the system.
+   * Prints a PDF to a local Windows printer using Electron's built-in printing API.
+   *
+   * Creates a hidden BrowserWindow, loads the PDF via file:// protocol, and uses
+   * webContents.print() with silent mode to send directly to the named printer
+   * via the OS spooler. This avoids any dependency on external PDF viewers
+   * and prints completely silently without any visible window or dialog.
    */
   private async printViaWindowsSpooler(
     printerName: string,
     pdfBuffer: Buffer,
     options: PrintOptions
   ): Promise<PrintResult> {
-    const { exec: nodeExec } = require('child_process')
-    const { promisify: nodePromisify } = require('util')
+    const { BrowserWindow } = require('electron')
     const { writeFileSync, unlinkSync, mkdirSync } = require('fs')
     const { join } = require('path')
     const { tmpdir } = require('os')
-    const execAsync = nodePromisify(nodeExec)
 
-    // Write PDF to a temp file
+    const jobName = options.jobName ?? `print_${Date.now()}`
+    const copies = options.copies ?? 1
+
+    // Write PDF to a temp file (Chromium needs a file:// URL for reliable PDF loading)
     const tempDir = join(tmpdir(), 'stamp-sales-print')
     try {
       mkdirSync(tempDir, { recursive: true })
     } catch {
       // dir already exists
     }
-
-    const jobName = options.jobName ?? `print_${Date.now()}`
     const tempFile = join(tempDir, `${jobName}_${Date.now()}.pdf`)
 
     try {
       writeFileSync(tempFile, pdfBuffer)
 
-      const copies = options.copies ?? 1
-      // Escape single quotes for PowerShell by doubling them
-      const escapedPrinterName = printerName.replace(/'/g, "''")
-      const escapedPath = tempFile.replace(/'/g, "''")
+      // Create a hidden window to render and print the PDF
+      const printWindow = new BrowserWindow({
+        show: false,
+        width: 800,
+        height: 600,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+          plugins: true // Enable PDF plugin for proper rendering
+        }
+      })
 
-      // Use Start-Process with -Verb PrintTo to send the PDF directly to the named printer.
-      // PrintTo verb accepts the printer name as an argument and prints without user interaction.
-      for (let i = 0; i < copies; i++) {
-        const psCommand =
-          `powershell -NoProfile -Command "Start-Process -FilePath '${escapedPath}' -Verb PrintTo -ArgumentList '${escapedPrinterName}' -Wait -WindowStyle Hidden"`
-        await execAsync(psCommand, { timeout: 60000 })
+      try {
+        // Load the PDF via file:// protocol (more reliable than data: URLs for PDFs)
+        const fileUrl = `file://${tempFile.replace(/\\/g, '/')}`
+        await printWindow.loadURL(fileUrl)
+
+        // Wait for the PDF to be fully rendered by Chromium's PDF viewer
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+
+        // Print silently to the specified printer
+        for (let i = 0; i < copies; i++) {
+          await new Promise<void>((resolve, reject) => {
+            printWindow.webContents.print(
+              {
+                silent: true,
+                deviceName: printerName,
+                printBackground: true
+              },
+              (success, failureReason) => {
+                if (success) {
+                  resolve()
+                } else {
+                  reject(new Error(failureReason || 'Print failed'))
+                }
+              }
+            )
+          })
+        }
+
+        return { success: true, jobId: jobName }
+      } finally {
+        // Always close the hidden window and clean up temp file
+        printWindow.close()
+        setTimeout(() => {
+          try { unlinkSync(tempFile) } catch { /* ignore */ }
+        }, 5000)
       }
-
-      // Clean up temp file after a delay to let the spooler read it
-      setTimeout(() => {
-        try { unlinkSync(tempFile) } catch { /* ignore */ }
-      }, 15000)
-
-      return { success: true, jobId: jobName }
     } catch (err: unknown) {
       // Clean up on error
       try { unlinkSync(tempFile) } catch { /* ignore */ }
