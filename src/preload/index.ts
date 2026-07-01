@@ -154,9 +154,65 @@ export interface PrintJob {
   errorMessage?: string
 }
 
+// === Sale Types ===
+
+export interface SaleResult {
+  success: true
+  sesionId: number
+  sellos1: number
+  sellos2: number
+  tickets: number
+  orders: OrderLine[]
+  /** Total number of PDFs generated (stamps + tickets), undefined if PDF generation not yet run */
+  pdfCount?: number
+  /** Number of stamp PDFs generated */
+  stampCount?: number
+  /** Number of ticket PDFs generated */
+  ticketCount?: number
+  /** Error message if PDF generation failed (sale data still committed) */
+  pdfError?: string
+  /** IDs of jobs created in the print queue */
+  printJobIds?: number[]
+}
+
+export interface SaleError {
+  success: false
+  error: string
+}
+
+export type SaleOutcome = SaleResult | SaleError
+
+// === Cancel Sale Types ===
+
+export interface CancelSaleInput {
+  /** Number of stamps consumed from rollo1 in the sale being cancelled */
+  sellos1: number
+  /** Number of stamps consumed from rollo2 in the sale being cancelled */
+  sellos2: number
+  /** Number of tickets consumed in the sale being cancelled */
+  tickets: number
+}
+
+export interface CancelSaleResult {
+  success: true
+  /** The session ID after decrementing (the reverted value) */
+  sesionId: number
+}
+
+export interface CancelSaleError {
+  success: false
+  error: string
+}
+
+export type CancelSaleOutcome = CancelSaleResult | CancelSaleError
+
 // === ElectronAPI Interface ===
 
 export interface ElectronAPI {
+  sale: {
+    execute(config: AppConfig, quantities: KioskoQuantities, profile: string): Promise<SaleOutcome>
+    cancel(input: CancelSaleInput): Promise<CancelSaleOutcome>
+  }
   config: {
     get(): Promise<AppConfig>
     updateMaquina(data: {
@@ -194,11 +250,20 @@ export interface ElectronAPI {
     getStatus(): Promise<{ connected: boolean; lastSync: string | null; pending: number }>
     triggerSync(): Promise<void>
   }
+  autoLaunch: {
+    get(): Promise<boolean>
+    set(enabled: boolean): Promise<boolean>
+  }
 }
 
 // === IPC API Implementation ===
 
 const api: ElectronAPI = {
+  sale: {
+    execute: (config, quantities, profile) =>
+      ipcRenderer.invoke('sale:execute', config, quantities, profile),
+    cancel: (input) => ipcRenderer.invoke('sale:cancel', input)
+  },
   config: {
     get: () => ipcRenderer.invoke('config:get'),
     updateMaquina: (data) => ipcRenderer.invoke('config:updateMaquina', data),
@@ -241,6 +306,10 @@ const api: ElectronAPI = {
   sync: {
     getStatus: () => ipcRenderer.invoke('sync:getStatus'),
     triggerSync: () => ipcRenderer.invoke('sync:triggerSync')
+  },
+  autoLaunch: {
+    get: () => ipcRenderer.invoke('autoLaunch:get'),
+    set: (enabled) => ipcRenderer.invoke('autoLaunch:set', enabled)
   }
 }
 

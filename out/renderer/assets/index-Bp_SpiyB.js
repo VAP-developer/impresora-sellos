@@ -13980,6 +13980,9 @@ async function resumePrinter() {
 async function getPrintQueue() {
   return getAPI().printer.getQueue();
 }
+async function cancelSale(input) {
+  return getAPI().sale.cancel(input);
+}
 let unsubscribeOnChange = null;
 const useConfigStore = create((set, get) => ({
   config: null,
@@ -22245,34 +22248,15 @@ function CartControls({
     }
     setPrinting(true);
     try {
-      await updateSesionError();
-      await updateRollosRevert(lastSale.sellos1, lastSale.sellos2, lastSale.tickets);
-      const errorOrder = {
-        event: "ELIMINAR ANTERIOR",
-        venue: " ",
-        machine: "error de impresión",
-        vendType: " ",
-        productName: " ",
-        transactionDate: "",
-        quantity: 0,
-        quantitySet: 0,
-        totalStamps: 0,
-        currency: " ",
-        value: 0,
-        paymentStatus: "Error",
-        sesionId: config.codigo.cliente,
-        etiquetasRollo1: 0,
-        etiquetasRollo2: 0,
-        etiquetaMes: " ",
-        tituloEvento: "Error",
-        feria: config.sello?.feria ?? "",
-        lugar: config.sello?.lugar ?? "",
-        fecha: "Error",
-        mes: "Error",
-        annio: "Error",
-        documento: "Error"
-      };
-      await insertOrders([errorOrder]);
+      const result = await cancelSale({
+        sellos1: lastSale.sellos1,
+        sellos2: lastSale.sellos2,
+        tickets: lastSale.tickets
+      });
+      if (!result.success) {
+        window.alert(result.error);
+        return;
+      }
       clearLastSale();
       reset();
       onPrintError?.();
@@ -24009,6 +23993,16 @@ function MaquinaView() {
             onClick: handleGuardar,
             disabled: saving,
             children: saving ? "Guardando..." : "Guardar"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            className: "bg-blue-600 text-white px-4 py-2 rounded font-semibold hover:bg-blue-700\n                         focus:outline-none focus:ring-2 focus:ring-blue-400",
+            onClick: () => navigate("/subir-imagen"),
+            "aria-label": "Subir imagen de fondo para sellos",
+            children: "Subir Imagen"
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsx(

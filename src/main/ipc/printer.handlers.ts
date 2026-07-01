@@ -1,5 +1,16 @@
+/**
+ * printer.handlers.ts
+ *
+ * IPC handlers for printer management.
+ * Uses the shared PrinterManager and PrintQueueService singletons from services.ts.
+ *
+ * Validates: Requirements 8.5 (retry), 8.6 (pause), 8.7 (resume)
+ */
+
 import { handleIpc } from './handlers'
+import { getPrinterManager, getPrintQueueService } from '../services'
 import { PrintQueueRepository } from '../database/repositories/print-queue.repository'
+import type { PrinterTarget } from '../printing/printer-manager'
 
 // === Printer Types (matching preload interface) ===
 
@@ -27,71 +38,77 @@ export interface PrintJobInfo {
  *
  * Channels:
  * - printer:getStatus — Returns status of connected printers (PrinterInfo[])
- * - printer:print — Executes printing (generates PDFs + sends to printers)
- * - printer:pause — Pauses the printer (stops sending jobs)
- * - printer:resume — Resumes the printer (resends pending jobs)
+ * - printer:print — Stub (printing is triggered via sale:execute flow)
+ * - printer:pause — Pauses all printers (stops sending jobs)
+ * - printer:resume — Resumes all printers (retries error jobs)
  * - printer:getQueue — Returns the current print queue (PrintJob[])
- *
- * NOTE: The actual printing module (printer-manager.ts, pdf-generator.ts,
- * print-queue.service.ts) is not yet implemented (Task 12).
- * These handlers use stub/placeholder implementations that return sensible defaults.
  */
 export function registerPrinterHandlers(): void {
   const queueRepo = new PrintQueueRepository()
 
   /**
    * Returns the status of connected printers.
-   * TODO: Integrate with printer-manager.ts (Task 12) to detect real printers
-   * via CUPS (Linux) or IPP (Windows) and return their actual status.
+   * Uses the real PrinterManager to query assigned printers.
    */
-  handleIpc('printer:getStatus', (): PrinterInfo[] => {
-    // TODO: Replace with actual printer discovery from printer-manager.ts (Task 12)
-    // This should use avahi-browse (Linux) or IPP scanning (Windows) to find printers
-    return []
+  handleIpc('printer:getStatus', async (): Promise<PrinterInfo[]> => {
+    const printerManager = getPrinterManager()
+    const statuses = await printerManager.getStatus()
+    return statuses.map((info) => ({
+      id: info.id,
+      name: info.name,
+      target: info.target,
+      status: info.status,
+      uri: info.uri
+    }))
   })
 
   /**
-   * Executes printing: generates PDFs and sends them to the appropriate printers.
-   * Takes config, quantities, and profile as arguments.
-   * TODO: Integrate with pdf-generator.ts (Task 11) and print-queue.service.ts (Task 12)
-   * to generate actual PDFs and send them to printers.
+   * Printing is triggered via the sale:execute flow.
+   * This handler remains as a no-op for backward compatibility.
    */
-  handleIpc('printer:print', (_config: unknown, _quantities: unknown, _profile: unknown): void => {
-    // TODO: Implement actual printing logic (Tasks 11 & 12):
-    // 1. Generate PDFs using pdf-generator.ts (stamp labels + tickets)
-    // 2. Enqueue jobs in print_queue table via PrintQueueRepository
-    // 3. Send PDFs to printers via printer-manager.ts
-    // 4. Update job status as they complete
-    console.log('[Printer] print called — stub (printing module not yet implemented)')
+  handleIpc(
+    'printer:print',
+    (_config: unknown, _quantities: unknown, _profile: unknown): void => {
+      // Printing is now handled by the sale flow:
+      // sale:execute → generateSalePdfs → printQueueService.enqueue → background processing
+      console.log(
+        '[Printer] print called — printing is handled via sale:execute flow'
+      )
+    }
+  )
+
+  /**
+   * Pauses all printers — stops sending new jobs to physical printers.
+   * Jobs remain in the queue and will be processed when resumed.
+   * Validates: Req 8.6
+   */
+  handleIpc('printer:pause', async (): Promise<void> => {
+    const printerManager = getPrinterManager()
+    await printerManager.pauseAll()
+    console.log('[Printer] All printers paused')
   })
 
   /**
-   * Pauses the printer (stops sending new jobs to the physical printer).
-   * TODO: Integrate with printer-manager.ts (Task 12) to call cupsdisable (Linux)
-   * or equivalent IPP pause command (Windows).
+   * Resumes all printers — resends pending and retries error jobs.
+   * Validates: Req 8.7
    */
-  handleIpc('printer:pause', (): void => {
-    // TODO: Replace with actual printer pause via printer-manager.ts (Task 12)
-    // Should call cupsdisable on Linux or IPP Pause-Printer on Windows
-    console.log('[Printer] pause called — stub (printing module not yet implemented)')
-  })
+  handleIpc('printer:resume', async (): Promise<void> => {
+    const printerManager = getPrinterManager()
+    await printerManager.resumeAll()
 
-  /**
-   * Resumes the printer (resends pending jobs).
-   * TODO: Integrate with printer-manager.ts (Task 12) to call cupsenable (Linux)
-   * or equivalent IPP resume command (Windows), then re-process pending queue.
-   */
-  handleIpc('printer:resume', (): void => {
-    // TODO: Replace with actual printer resume via printer-manager.ts (Task 12)
-    // Should call cupsenable on Linux or IPP Resume-Printer on Windows
-    // Then retry all pending/error jobs via print-queue.service.ts
-    console.log('[Printer] resume called — stub (printing module not yet implemented)')
+    // Retry error jobs for all targets that were just resumed
+    const queueService = getPrintQueueService()
+    const targets: PrinterTarget[] = ['printer1', 'printer2', 'ticket']
+    for (const target of targets) {
+      queueService.retryErrorsByTarget(target)
+    }
+
+    console.log('[Printer] All printers resumed, error jobs retried')
   })
 
   /**
    * Returns the current print queue from the database.
-   * This handler already uses the real PrintQueueRepository since the
-   * queue table exists. Returns jobs mapped to the PrintJobInfo interface.
+   * Maps jobs to the PrintJobInfo interface for the renderer.
    */
   handleIpc('printer:getQueue', (): PrintJobInfo[] => {
     const jobs = queueRepo.getAll()

@@ -20,6 +20,7 @@ const mockPrint = vi.fn()
 const mockUpdateSesionError = vi.fn()
 const mockUpdateRollosRevert = vi.fn()
 const mockInsertOrders = vi.fn()
+const mockCancelSale = vi.fn()
 vi.mock('@renderer/lib/ipc-client', () => ({
   getConfig: vi.fn(),
   updateMaquina: vi.fn(),
@@ -41,7 +42,9 @@ vi.mock('@renderer/lib/ipc-client', () => ({
   resumePrinter: vi.fn(),
   getPrintQueue: vi.fn(),
   getSyncStatus: vi.fn(),
-  triggerSync: vi.fn()
+  triggerSync: vi.fn(),
+  cancelSale: (...args: unknown[]) => mockCancelSale(...args),
+  executeSale: vi.fn()
 }))
 
 // Mock stores - we need to control their state
@@ -123,6 +126,7 @@ describe('CartControls – Imprimir Normal (Task 7.6)', () => {
     mockUpdateSesionError.mockResolvedValue(undefined)
     mockUpdateRollosRevert.mockResolvedValue(undefined)
     mockInsertOrders.mockResolvedValue(undefined)
+    mockCancelSale.mockResolvedValue({ success: true, sesionId: 1 })
     alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
 
     // Reset stores to clean state
@@ -534,6 +538,7 @@ describe('CartControls – Error Impresión (Task 7.7)', () => {
     mockUpdateSesionError.mockResolvedValue(undefined)
     mockUpdateRollosRevert.mockResolvedValue(undefined)
     mockInsertOrders.mockResolvedValue(undefined)
+    mockCancelSale.mockResolvedValue({ success: true, sesionId: 1 })
     alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
     confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
 
@@ -580,9 +585,7 @@ describe('CartControls – Error Impresión (Task 7.7)', () => {
       const errorBtn = screen.getByLabelText('Error impresión - anular última venta')
       await user.click(errorBtn)
 
-      expect(mockUpdateSesionError).not.toHaveBeenCalled()
-      expect(mockUpdateRollosRevert).not.toHaveBeenCalled()
-      expect(mockInsertOrders).not.toHaveBeenCalled()
+      expect(mockCancelSale).not.toHaveBeenCalled()
     })
   })
 
@@ -602,13 +605,12 @@ describe('CartControls – Error Impresión (Task 7.7)', () => {
         expect(alertSpy).toHaveBeenCalledWith('¡¡NINGUNA venta encontrada!!')
       })
 
-      expect(mockUpdateSesionError).not.toHaveBeenCalled()
-      expect(mockUpdateRollosRevert).not.toHaveBeenCalled()
+      expect(mockCancelSale).not.toHaveBeenCalled()
     })
   })
 
   describe('Req 10.2: Revert session increment', () => {
-    it('calls updateSesionError to decrement client ID', async () => {
+    it('calls cancelSale with correct sellos1/sellos2/tickets', async () => {
       const user = userEvent.setup()
       const config = buildTestConfig()
       setConfig(config)
@@ -620,13 +622,18 @@ describe('CartControls – Error Impresión (Task 7.7)', () => {
       await user.click(errorBtn)
 
       await waitFor(() => {
-        expect(mockUpdateSesionError).toHaveBeenCalledTimes(1)
+        expect(mockCancelSale).toHaveBeenCalledTimes(1)
+        expect(mockCancelSale).toHaveBeenCalledWith({
+          sellos1: 10,
+          sellos2: 5,
+          tickets: 4
+        })
       })
     })
   })
 
   describe('Req 10.3: Restore roll and ticket quantities', () => {
-    it('calls updateRollosRevert with last sale quantities', async () => {
+    it('calls cancelSale with last sale quantities', async () => {
       const user = userEvent.setup()
       const config = buildTestConfig()
       setConfig(config)
@@ -638,13 +645,17 @@ describe('CartControls – Error Impresión (Task 7.7)', () => {
       await user.click(errorBtn)
 
       await waitFor(() => {
-        expect(mockUpdateRollosRevert).toHaveBeenCalledWith(13, 8, 6)
+        expect(mockCancelSale).toHaveBeenCalledWith({
+          sellos1: 13,
+          sellos2: 8,
+          tickets: 6
+        })
       })
     })
   })
 
   describe('Req 10.4: Insert audit order record', () => {
-    it('inserts order with event="ELIMINAR ANTERIOR"', async () => {
+    it('calls cancelSale which atomically inserts audit record', async () => {
       const user = userEvent.setup()
       const config = buildTestConfig()
       setConfig(config)
@@ -656,16 +667,12 @@ describe('CartControls – Error Impresión (Task 7.7)', () => {
       await user.click(errorBtn)
 
       await waitFor(() => {
-        expect(mockInsertOrders).toHaveBeenCalledTimes(1)
-        expect(mockInsertOrders).toHaveBeenCalledWith([
-          expect.objectContaining({
-            event: 'ELIMINAR ANTERIOR',
-            machine: 'error de impresión',
-            paymentStatus: 'Error',
-            quantity: 0,
-            value: 0
-          })
-        ])
+        expect(mockCancelSale).toHaveBeenCalledTimes(1)
+        expect(mockCancelSale).toHaveBeenCalledWith({
+          sellos1: 5,
+          sellos2: 3,
+          tickets: 4
+        })
       })
     })
   })
@@ -683,7 +690,7 @@ describe('CartControls – Error Impresión (Task 7.7)', () => {
       await user.click(errorBtn)
 
       await waitFor(() => {
-        expect(mockInsertOrders).toHaveBeenCalled()
+        expect(mockCancelSale).toHaveBeenCalled()
       })
 
       const state = useKioskoStore.getState()
@@ -705,7 +712,7 @@ describe('CartControls – Error Impresión (Task 7.7)', () => {
       await user.click(errorBtn)
 
       await waitFor(() => {
-        expect(mockInsertOrders).toHaveBeenCalled()
+        expect(mockCancelSale).toHaveBeenCalled()
       })
 
       const state = useKioskoStore.getState()
@@ -719,7 +726,7 @@ describe('CartControls – Error Impresión (Task 7.7)', () => {
       const config = buildTestConfig()
       setConfig(config)
       useKioskoStore.getState().recordLastSale(5, 3, 4)
-      mockUpdateSesionError.mockRejectedValueOnce(new Error('IPC error'))
+      mockCancelSale.mockRejectedValueOnce(new Error('IPC error'))
 
       render(<CartControls />)
 
@@ -737,9 +744,9 @@ describe('CartControls – Error Impresión (Task 7.7)', () => {
       setConfig(config)
       useKioskoStore.getState().recordLastSale(5, 3, 4)
 
-      let resolveRevert: () => void
-      mockUpdateSesionError.mockImplementation(
-        () => new Promise<void>((resolve) => { resolveRevert = resolve })
+      let resolveCancel: (value: { success: true; sesionId: number }) => void
+      mockCancelSale.mockImplementation(
+        () => new Promise<{ success: true; sesionId: number }>((resolve) => { resolveCancel = resolve })
       )
 
       render(<CartControls />)
@@ -752,7 +759,7 @@ describe('CartControls – Error Impresión (Task 7.7)', () => {
       })
 
       await act(async () => {
-        resolveRevert!()
+        resolveCancel!({ success: true, sesionId: 1 })
       })
 
       await waitFor(() => {
@@ -771,6 +778,7 @@ describe('CartControls – Profile Buttons: Filatelia, Protocolo, SPDE (Task 7.8
     mockUpdateSesionError.mockResolvedValue(undefined)
     mockUpdateRollosRevert.mockResolvedValue(undefined)
     mockInsertOrders.mockResolvedValue(undefined)
+    mockCancelSale.mockResolvedValue({ success: true, sesionId: 1 })
     alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
 
     // Reset stores to clean state

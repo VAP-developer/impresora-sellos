@@ -3,6 +3,8 @@ import { registerConfigHandlers } from './config.handlers'
 import { registerOrdersHandlers } from './orders.handlers'
 import { registerImagesHandlers } from './images.handlers'
 import { registerPrinterHandlers } from './printer.handlers'
+import { registerSaleHandlers } from './sale.handlers'
+import { registerAutoLaunchHandlers } from './auto-launch.handlers'
 
 /**
  * Centralized IPC handler registry.
@@ -21,6 +23,8 @@ export function registerAllHandlers(): void {
   registerOrdersHandlers()
   registerImagesHandlers()
   registerPrinterHandlers()
+  registerSaleHandlers()
+  registerAutoLaunchHandlers()
 }
 
 /**

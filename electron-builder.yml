@@ -1,0 +1,77 @@
+appId: com.stamp-sales.desktop
+productName: Stamp Sales
+directories:
+  buildResources: build
+  output: dist
+files:
+  - out/**/*
+  - resources/**/*
+  - "!node_modules/**/{test,__tests__,tests}/**"
+  - "!node_modules/**/*.map"
+extraResources:
+  - from: resources/fonts
+    to: fonts
+    filter:
+      - "**/*"
+  - from: resources/images
+    to: images
+    filter:
+      - "**/*"
+  - from: src/main/database/migrations
+    to: migrations
+    filter:
+      - "*.sql"
+asarUnpack:
+  - "node_modules/better-sqlite3/**"
+linux:
+  target:
+    - target: deb
+      arch:
+        - x64
+    - target: AppImage
+      arch:
+        - x64
+  category: Office
+  icon: build/icon.png
+  maintainer: Stamp Sales Team
+  synopsis: Stamp sales desktop application for philatelic fairs
+  description: >
+    Offline-first desktop application for selling ATM postal stamps
+    at philatelic fairs. Replaces ATM machines with a portable kit.
+deb:
+  depends:
+    - libgtk-3-0
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - xdg-utils
+    - libatspi2.0-0
+    - libuuid1
+    - libsecret-1-0
+appImage:
+  license: UNLICENSED
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.png
+  artifactName: "StampSales-Setup-${version}.${ext}"
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Stamp Sales
+  installerIcon: build/icon.png
+  uninstallerIcon: build/icon.png
+  installerHeaderIcon: build/icon.png
+  deleteAppDataOnUninstall: false
+  include: build/installer.nsh
+  runAfterFinish: true
+  installerLanguages:
+    - Spanish
+    - English
+  language: 3082

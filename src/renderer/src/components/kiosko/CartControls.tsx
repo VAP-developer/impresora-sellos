@@ -22,7 +22,6 @@ import { useConfigStore } from '@renderer/stores/config.store'
 import { useKioskoStore } from '@renderer/stores/kiosko.store'
 import { calcUsedRollo1, calcUsedRollo2, calcUsedTickets } from '@renderer/lib/tariff-calc'
 import * as ipc from '@renderer/lib/ipc-client'
-import type { OrderLine } from '@renderer/types/order'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -211,10 +210,8 @@ export default function CartControls({
    * Flow:
    * 1. Ask for confirmation (window.confirm)
    * 2. Check if there is a previous sale to revert (lastSale.sellos1 or sellos2 > 0)
-   * 3. Call IPC updateSesionError to decrement session ID (cliente -1)
-   * 4. Call IPC updateRollosRevert to restore roll/ticket quantities
-   * 5. Insert an audit order record with event="ELIMINAR ANTERIOR"
-   * 6. Clear lastSale record and reset quantities
+   * 3. Call atomic IPC sale:cancel to revert session, rollos, and insert audit record
+   * 4. Clear lastSale record and reset quantities
    *
    * Validates: Requirements 10.1, 10.2, 10.3, 10.4, 10.5
    */
@@ -238,42 +235,19 @@ export default function CartControls({
     setPrinting(true)
 
     try {
-      // 3. Decrement session ID (revert the increment from last sale)
-      await ipc.updateSesionError()
+      // 3. Atomic cancellation: revert session + rollos + insert audit record
+      const result = await ipc.cancelSale({
+        sellos1: lastSale.sellos1,
+        sellos2: lastSale.sellos2,
+        tickets: lastSale.tickets
+      })
 
-      // 4. Revert roll and ticket quantities
-      await ipc.updateRollosRevert(lastSale.sellos1, lastSale.sellos2, lastSale.tickets)
-
-      // 5. Insert audit order record with event="ELIMINAR ANTERIOR"
-      const errorOrder: OrderLine = {
-        event: 'ELIMINAR ANTERIOR',
-        venue: ' ',
-        machine: 'error de impresión',
-        vendType: ' ',
-        productName: ' ',
-        transactionDate: '',
-        quantity: 0,
-        quantitySet: 0,
-        totalStamps: 0,
-        currency: ' ',
-        value: 0,
-        paymentStatus: 'Error',
-        sesionId: config.codigo.cliente,
-        etiquetasRollo1: 0,
-        etiquetasRollo2: 0,
-        etiquetaMes: ' ',
-        tituloEvento: 'Error',
-        feria: config.sello?.feria ?? '',
-        lugar: config.sello?.lugar ?? '',
-        fecha: 'Error',
-        mes: 'Error',
-        annio: 'Error',
-        documento: 'Error'
+      if (!result.success) {
+        window.alert(result.error)
+        return
       }
 
-      await ipc.insertOrders([errorOrder])
-
-      // 6. Clear last sale record and reset quantities
+      // 4. Clear last sale record and reset quantities
       clearLastSale()
       reset()
 

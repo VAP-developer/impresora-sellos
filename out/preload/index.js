@@ -1,6 +1,10 @@
 "use strict";
 const electron = require("electron");
 const api = {
+  sale: {
+    execute: (config, quantities, profile) => electron.ipcRenderer.invoke("sale:execute", config, quantities, profile),
+    cancel: (input) => electron.ipcRenderer.invoke("sale:cancel", input)
+  },
   config: {
     get: () => electron.ipcRenderer.invoke("config:get"),
     updateMaquina: (data) => electron.ipcRenderer.invoke("config:updateMaquina", data),
@@ -39,6 +43,10 @@ const api = {
   sync: {
     getStatus: () => electron.ipcRenderer.invoke("sync:getStatus"),
     triggerSync: () => electron.ipcRenderer.invoke("sync:triggerSync")
+  },
+  autoLaunch: {
+    get: () => electron.ipcRenderer.invoke("autoLaunch:get"),
+    set: (enabled) => electron.ipcRenderer.invoke("autoLaunch:set", enabled)
   }
 };
 if (process.contextIsolated) {

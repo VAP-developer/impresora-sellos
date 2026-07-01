@@ -179,3 +179,39 @@ export async function getSyncStatus(): Promise<{
 export async function triggerSync(): Promise<void> {
   return getAPI().sync.triggerSync()
 }
+
+// === Sale ===
+
+export type SaleOutcome = Awaited<ReturnType<ElectronAPI['sale']['execute']>>
+export type CancelSaleOutcome = Awaited<ReturnType<ElectronAPI['sale']['cancel']>>
+export type CancelSaleInput = Parameters<ElectronAPI['sale']['cancel']>[0]
+
+export async function executeSale(
+  config: AppConfig,
+  quantities: KioskoQuantities,
+  profile: string
+): Promise<SaleOutcome> {
+  return getAPI().sale.execute(config, quantities, profile)
+}
+
+export async function cancelSale(input: CancelSaleInput): Promise<CancelSaleOutcome> {
+  return getAPI().sale.cancel(input)
+}
+
+// === Auto Launch ===
+
+/**
+ * Get the current auto-launch setting (Windows only).
+ * Returns false on non-Windows platforms.
+ */
+export async function getAutoLaunchEnabled(): Promise<boolean> {
+  return getAPI().autoLaunch.get()
+}
+
+/**
+ * Enable or disable auto-launch on Windows startup.
+ * Returns the new state after applying the change.
+ */
+export async function setAutoLaunchEnabled(enabled: boolean): Promise<boolean> {
+  return getAPI().autoLaunch.set(enabled)
+}

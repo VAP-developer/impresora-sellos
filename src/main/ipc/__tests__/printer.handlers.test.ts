@@ -20,6 +20,16 @@ vi.mock('../../database/connection', () => ({
   getDatabase: vi.fn()
 }))
 
+// Mock pdf-generator to prevent import chain to stamp-renderer
+vi.mock('../../printing/pdf-generator', () => ({
+  generateSalePdfs: vi.fn()
+}))
+
+// Mock the print-queue.service to prevent import chain to printer-manager/pdf-generator
+vi.mock('../../printing/print-queue.service', () => ({
+  PrintQueueService: vi.fn()
+}))
+
 // Create the mock repo instance for PrintQueueRepository
 const mockQueueRepo = {
   insert: vi.fn(),
@@ -43,6 +53,41 @@ vi.mock('../../database/repositories/print-queue.repository', () => ({
   PrintQueueRepository: vi.fn(function () {
     return mockQueueRepo
   })
+}))
+
+// Mock the services module
+const mockPrinterManager = {
+  getStatus: vi.fn().mockResolvedValue([]),
+  pauseAll: vi.fn().mockResolvedValue(undefined),
+  resumeAll: vi.fn().mockResolvedValue(undefined),
+  isPaused: vi.fn().mockReturnValue(false),
+  print: vi.fn(),
+  pause: vi.fn(),
+  resume: vi.fn(),
+  discover: vi.fn(),
+  getAssignments: vi.fn(),
+  setAssignments: vi.fn(),
+  getUriForTarget: vi.fn()
+}
+
+const mockPrintQueueService = {
+  enqueue: vi.fn(),
+  start: vi.fn(),
+  stop: vi.fn(),
+  processQueue: vi.fn(),
+  isRunning: vi.fn(),
+  getStatus: vi.fn(),
+  getQueue: vi.fn(),
+  retryErrorsByTarget: vi.fn(),
+  getPendingByTarget: vi.fn(),
+  purgeCompleted: vi.fn(),
+  clearBufferCache: vi.fn(),
+  getBufferCacheSize: vi.fn()
+}
+
+vi.mock('../../services', () => ({
+  getPrinterManager: vi.fn(() => mockPrinterManager),
+  getPrintQueueService: vi.fn(() => mockPrintQueueService)
 }))
 
 import { ipcMain } from 'electron'
@@ -79,7 +124,34 @@ describe('ipc/printer.handlers', () => {
   })
 
   describe('printer:getStatus', () => {
-    it('should return an empty array (stub implementation)', async () => {
+    it('should return printer info from PrinterManager', async () => {
+      mockPrinterManager.getStatus.mockResolvedValue([
+        {
+          id: 'printer1_ipp://192.168.1.10',
+          name: 'ipp://192.168.1.10',
+          target: 'printer1',
+          status: 'ready',
+          uri: 'ipp://192.168.1.10'
+        }
+      ])
+
+      const result = await invokeHandler('printer:getStatus')
+
+      expect(mockPrinterManager.getStatus).toHaveBeenCalledOnce()
+      expect(result).toEqual([
+        {
+          id: 'printer1_ipp://192.168.1.10',
+          name: 'ipp://192.168.1.10',
+          target: 'printer1',
+          status: 'ready',
+          uri: 'ipp://192.168.1.10'
+        }
+      ])
+    })
+
+    it('should return empty array when no printers are assigned', async () => {
+      mockPrinterManager.getStatus.mockResolvedValue([])
+
       const result = await invokeHandler('printer:getStatus')
 
       expect(result).toEqual([])
@@ -87,7 +159,7 @@ describe('ipc/printer.handlers', () => {
   })
 
   describe('printer:print', () => {
-    it('should accept config, quantities, and profile without throwing (stub)', async () => {
+    it('should accept config, quantities, and profile without throwing', async () => {
       const config = { ticket: {}, codigo: {}, sello: {}, precios: {} }
       const quantities = {
         tarifaAS1: 2, tarifaA2S1: 0, tarifaBS1: 0, tarifaCS1: 0,
@@ -97,7 +169,6 @@ describe('ipc/printer.handlers', () => {
       }
       const profile = 'FERIA'
 
-      // Should not throw - it's a stub
       await expect(
         invokeHandler('printer:print', config, quantities, profile)
       ).resolves.not.toThrow()
@@ -105,14 +176,21 @@ describe('ipc/printer.handlers', () => {
   })
 
   describe('printer:pause', () => {
-    it('should execute without throwing (stub implementation)', async () => {
-      await expect(invokeHandler('printer:pause')).resolves.not.toThrow()
+    it('should call printerManager.pauseAll()', async () => {
+      await invokeHandler('printer:pause')
+
+      expect(mockPrinterManager.pauseAll).toHaveBeenCalledOnce()
     })
   })
 
   describe('printer:resume', () => {
-    it('should execute without throwing (stub implementation)', async () => {
-      await expect(invokeHandler('printer:resume')).resolves.not.toThrow()
+    it('should call printerManager.resumeAll() and retry error jobs', async () => {
+      await invokeHandler('printer:resume')
+
+      expect(mockPrinterManager.resumeAll).toHaveBeenCalledOnce()
+      expect(mockPrintQueueService.retryErrorsByTarget).toHaveBeenCalledWith('printer1')
+      expect(mockPrintQueueService.retryErrorsByTarget).toHaveBeenCalledWith('printer2')
+      expect(mockPrintQueueService.retryErrorsByTarget).toHaveBeenCalledWith('ticket')
     })
   })
 

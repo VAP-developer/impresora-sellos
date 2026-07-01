@@ -126,25 +126,25 @@
 
 ## Task 12: Modulo de Impresion
 
-- [ ] 12.1 Crear src/main/printing/printer-manager.ts con interfaz abstracta PrinterBackend
-- [ ] 12.2 Implementar CupsBackend (Linux/Ubuntu) con comandos lp, cupsdisable, cupsenable
-- [ ] 12.3 Implementar IppBackend (Windows) con protocolo IPP sobre HTTP
-- [ ] 12.4 Implementar auto-deteccion de backend segun SO
-- [ ] 12.5 Crear src/main/printing/print-queue.service.ts (procesa cola con reintentos)
-- [ ] 12.6 Implementar descubrimiento de impresoras (avahi-browse en Linux, escaneo IPP en Windows)
-- [ ] 12.7 Escribir tests con mock de impresora (Property 9: enrutamiento correcto)
+- [x] 12.1 Crear src/main/printing/printer-manager.ts con interfaz abstracta PrinterBackend
+- [x] 12.2 Implementar CupsBackend (Linux/Ubuntu) con comandos lp, cupsdisable, cupsenable
+- [x] 12.3 Implementar IppBackend (Windows) con protocolo IPP sobre HTTP
+- [x] 12.4 Implementar auto-deteccion de backend segun SO
+- [x] 12.5 Crear src/main/printing/print-queue.service.ts (procesa cola con reintentos)
+- [x] 12.6 Implementar descubrimiento de impresoras (avahi-browse en Linux, escaneo IPP en Windows)
+- [x] 12.7 Escribir tests con mock de impresora (Property 9: enrutamiento correcto)
 - [ ] 12.8 Verificar impresion real con impresora Epson en Windows (test manual)
 
 ## Task 13: Logica de Venta Completa (Integracion)
 
-- [ ] 13.1 Implementar flujo completo de venta en main process: transaccion atomica (sesion + rollos + ordenes)
-- [ ] 13.2 Integrar generacion de PDFs en el flujo de venta
-- [ ] 13.3 Integrar envio a impresoras en el flujo de venta
-- [ ] 13.4 Implementar anulacion de venta (revert sesion + rollos + registro auditoria)
-- [ ] 13.5 Escribir property-based tests para atomicidad (Property 10)
-- [ ] 13.6 Escribir property-based tests para round-trip venta/anulacion (Property 4)
-- [ ] 13.7 Escribir property-based tests para decremento de rollos (Property 5)
-- [ ] 13.8 Verificar flujo completo end-to-end: click en Kiosko -> PDFs generados -> enviados a impresora
+- [x] 13.1 Implementar flujo completo de venta en main process: transaccion atomica (sesion + rollos + ordenes)
+- [x] 13.2 Integrar generacion de PDFs en el flujo de venta
+- [x] 13.3 Integrar envio a impresoras en el flujo de venta
+- [x] 13.4 Implementar anulacion de venta (revert sesion + rollos + registro auditoria)
+- [x] 13.5 Escribir property-based tests para atomicidad (Property 10)
+- [x] 13.6 Escribir property-based tests para round-trip venta/anulacion (Property 4)
+- [x] 13.7 Escribir property-based tests para decremento de rollos (Property 5)
+- [x] 13.8 Verificar flujo completo end-to-end: click en Kiosko -> PDFs generados -> enviados a impresora
 
 ## Task 14: Sincronizacion Cloud (Opcional)
 
@@ -157,11 +157,11 @@
 
 ## Task 15: Build y Empaquetado
 
-- [ ] 15.1 Configurar electron-builder para generar .deb/AppImage (Linux dev)
-- [ ] 15.2 Configurar electron-builder para generar .exe NSIS (Windows produccion)
-- [ ] 15.3 Configurar auto-arranque con Windows (registro o shortcut en Startup)
-- [ ] 15.4 Empaquetar fuentes y recursos en la build final
-- [ ] 15.5 Verificar instalacion limpia en Windows desde el .exe generado
+- [x] 15.1 Configurar electron-builder para generar .deb/AppImage (Linux dev)
+- [x] 15.2 Configurar electron-builder para generar .exe NSIS (Windows produccion)
+- [x] 15.3 Configurar auto-arranque con Windows (registro o shortcut en Startup)
+- [x] 15.4 Empaquetar fuentes y recursos en la build final
+- [x] 15.5 Verificar instalacion limpia en Windows desde el .exe generado
 - [ ] 15.6 Verificar que la app arranca en < 3 segundos en Windows
 
 ## Task 16: Tests Finales y Property-Based Testing

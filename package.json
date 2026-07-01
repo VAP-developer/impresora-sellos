@@ -2,6 +2,7 @@
   "name": "stamp-sales-app",
   "version": "1.0.0",
   "description": "Stamp Sales Desktop App",
+  "author": "Stamp Sales Team",
   "main": "./out/main/index.js",
   "engines": {
     "node": ">=20.0.0"
@@ -9,6 +10,8 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "build:linux": "electron-vite build && electron-builder --linux",
+    "build:win": "electron-vite build && electron-builder --win",
     "preview": "electron-vite preview",
     "postinstall": "electron-vite build",
     "rebuild": "npx @electron/rebuild -f -w better-sqlite3",
@@ -50,6 +53,7 @@
     "@vitejs/plugin-react": "~4.3.0",
     "autoprefixer": "~10.4.0",
     "electron": "~30.0.0",
+    "electron-builder": "^26.15.3",
     "electron-vite": "~4.0.0",
     "eslint": "^10.6.0",
     "fast-check": "^4.8.0",

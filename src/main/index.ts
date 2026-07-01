@@ -4,6 +4,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { initDatabase, closeDatabase } from './database/connection'
 import { ConfigRepository } from './database/repositories/config.repository'
 import { registerAllHandlers } from './ipc/handlers'
+import { initServices, shutdownServices } from './services'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -46,6 +47,9 @@ app.whenReady().then(() => {
   // Register all IPC handlers for renderer communication
   registerAllHandlers()
 
+  // Initialize services (start print queue background processing)
+  initServices()
+
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
@@ -64,5 +68,6 @@ app.on('window-all-closed', () => {
 })
 
 app.on('will-quit', () => {
+  shutdownServices()
   closeDatabase()
 })
