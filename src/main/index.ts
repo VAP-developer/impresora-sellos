@@ -1,5 +1,6 @@
 import { app, shell, BrowserWindow } from 'electron'
 import { dirname, join } from 'path'
+import { existsSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { initDatabase, closeDatabase } from './database/connection'
 import { ConfigRepository } from './database/repositories/config.repository'
@@ -48,10 +49,17 @@ app.whenReady().then(() => {
 
   // Synchronize fair images from bbdd-ferias/ folder into SQLite
   try {
-    const basePath = join(
-      app.isPackaged ? dirname(app.getPath('exe')) : app.getAppPath(),
-      'bbdd-ferias'
-    )
+    let basePath: string
+    if (app.isPackaged) {
+      // In packaged mode, check first next to the executable (user-managed),
+      // then fall back to extraResources inside the package
+      const exeDirPath = join(dirname(app.getPath('exe')), 'bbdd-ferias')
+      const resourcesPath = join(process.resourcesPath, 'bbdd-ferias')
+      basePath = existsSync(exeDirPath) ? exeDirPath : resourcesPath
+    } else {
+      // Dev mode: use project root
+      basePath = join(app.getAppPath(), 'bbdd-ferias')
+    }
     console.log('[sync-images] Starting image synchronization from:', basePath)
     const syncResult = syncImages(basePath)
     setLastSyncResult(syncResult)

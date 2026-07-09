@@ -4,6 +4,7 @@ import { ImageSyncRepository } from '../database/repositories/image-sync.reposit
 import { buildImageName, syncImages } from '../images/sync-images'
 import type { SyncResult } from '../images/sync-images'
 import { join, dirname } from 'path'
+import { existsSync } from 'fs'
 import { app } from 'electron'
 
 // Module-level storage for the last sync result.
@@ -96,10 +97,14 @@ export function registerImagesHandlers(): void {
   })
 
   handleIpc('images:resync', () => {
-    const basePath = join(
-      app.isPackaged ? dirname(app.getPath('exe')) : app.getAppPath(),
-      'bbdd-ferias'
-    )
+    let basePath: string
+    if (app.isPackaged) {
+      const exeDirPath = join(dirname(app.getPath('exe')), 'bbdd-ferias')
+      const resourcesPath = join(process.resourcesPath, 'bbdd-ferias')
+      basePath = existsSync(exeDirPath) ? exeDirPath : resourcesPath
+    } else {
+      basePath = join(app.getAppPath(), 'bbdd-ferias')
+    }
     const result = syncImages(basePath)
     lastSyncResult = result
     return result

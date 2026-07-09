@@ -1,9 +1,9 @@
 "use strict";
 const electron = require("electron");
 const path = require("path");
+const fs = require("fs");
 const utils = require("@electron-toolkit/utils");
 const Database = require("better-sqlite3");
-const fs = require("fs");
 const os = require("os");
 const child_process = require("child_process");
 const util = require("util");
@@ -923,10 +923,14 @@ function registerImagesHandlers() {
     return lastSyncResult;
   });
   handleIpc("images:resync", () => {
-    const basePath = path.join(
-      electron.app.isPackaged ? path.dirname(electron.app.getPath("exe")) : electron.app.getAppPath(),
-      "bbdd-ferias"
-    );
+    let basePath;
+    if (electron.app.isPackaged) {
+      const exeDirPath = path.join(path.dirname(electron.app.getPath("exe")), "bbdd-ferias");
+      const resourcesPath = path.join(process.resourcesPath, "bbdd-ferias");
+      basePath = fs.existsSync(exeDirPath) ? exeDirPath : resourcesPath;
+    } else {
+      basePath = path.join(electron.app.getAppPath(), "bbdd-ferias");
+    }
     const result = syncImages(basePath);
     lastSyncResult = result;
     return result;
@@ -4276,10 +4280,14 @@ electron.app.whenReady().then(() => {
   const configRepo = new ConfigRepository();
   configRepo.initConfig();
   try {
-    const basePath = path.join(
-      electron.app.isPackaged ? path.dirname(electron.app.getPath("exe")) : electron.app.getAppPath(),
-      "bbdd-ferias"
-    );
+    let basePath;
+    if (electron.app.isPackaged) {
+      const exeDirPath = path.join(path.dirname(electron.app.getPath("exe")), "bbdd-ferias");
+      const resourcesPath = path.join(process.resourcesPath, "bbdd-ferias");
+      basePath = fs.existsSync(exeDirPath) ? exeDirPath : resourcesPath;
+    } else {
+      basePath = path.join(electron.app.getAppPath(), "bbdd-ferias");
+    }
     console.log("[sync-images] Starting image synchronization from:", basePath);
     const syncResult = syncImages(basePath);
     setLastSyncResult(syncResult);
