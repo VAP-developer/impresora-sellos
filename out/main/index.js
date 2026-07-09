@@ -2965,7 +2965,6 @@ async function renderStampEspecialStrip(codigos, especial, tarifa) {
 const MM_TO_PT = 72 / 25.4;
 const TICKET_WIDTH_MM = 78;
 const TICKET_WIDTH = TICKET_WIDTH_MM * MM_TO_PT;
-const TICKET_BASE_HEIGHT_MM = 126;
 function registerFonts(doc) {
   const fontsPath = getFontsPath();
   const regularPath = path.join(fontsPath, "franklin_gothic.ttf");
@@ -3037,17 +3036,17 @@ function collectPdf(doc) {
     doc.on("error", reject);
   });
 }
-function calcTicketHeight(numItems) {
-  const heightMm = calcTicketHeightMm(numItems);
-  return heightMm * MM_TO_PT;
-}
 function calcTicketHeightMm(numItems) {
-  const eitems = 3 * numItems - 17;
-  return TICKET_BASE_HEIGHT_MM + eitems;
+  const HEADER_HEIGHT_MM = 62;
+  const FOOTER_HEIGHT_MM = 30;
+  const ITEM_HEIGHT_MM = 3;
+  return HEADER_HEIGHT_MM + numItems * ITEM_HEIGHT_MM + FOOTER_HEIGHT_MM;
 }
 function calcTicketCajaHeightMm(numItems) {
-  const eitems = 3.5 * numItems - 12;
-  return TICKET_BASE_HEIGHT_MM + eitems - 6;
+  const HEADER_HEIGHT_MM = 72;
+  const FOOTER_HEIGHT_MM = 22;
+  const ITEM_HEIGHT_MM = 3.5;
+  return HEADER_HEIGHT_MM + numItems * ITEM_HEIGHT_MM + FOOTER_HEIGHT_MM;
 }
 async function genTicket(params) {
   const {
@@ -3069,8 +3068,11 @@ async function genTicket(params) {
     l3
   } = params;
   const nitems = countActiveItems(items);
-  const eitems = 3 * nitems - 12;
-  const pageHeight = calcTicketHeight(nitems);
+  const HEADER_HEIGHT_MM = 62;
+  const FOOTER_HEIGHT_MM = 30;
+  const ITEM_HEIGHT_MM = 3;
+  const pageHeightMm = HEADER_HEIGHT_MM + nitems * ITEM_HEIGHT_MM + FOOTER_HEIGHT_MM;
+  const pageHeight = pageHeightMm * MM_TO_PT;
   const doc = new PDFDocument({
     size: [TICKET_WIDTH, pageHeight],
     margin: 0,
@@ -3079,32 +3081,36 @@ async function genTicket(params) {
   const result = collectPdf(doc);
   registerFonts(doc);
   const pageWidth = TICKET_WIDTH;
-  const pageHeightMm = pageHeight / MM_TO_PT;
-  const c1 = pageHeightMm - (71 + eitems);
-  const c2 = pageHeightMm - (86 + eitems);
-  const c5 = pageHeightMm - (50 + eitems);
-  drawImageCentered(doc, "image2.jpg", c1 * MM_TO_PT, 30 * MM_TO_PT, pageWidth);
-  const bgX = 5 * MM_TO_PT;
-  const bgY = (c5 + 10) * MM_TO_PT;
-  drawImage(doc, "fondoticketori.png", bgX, bgY, 20 * MM_TO_PT);
-  drawCentered(doc, feria, FONTS.bold, 12, c2 * MM_TO_PT, pageWidth);
-  drawCentered(doc, lugar, FONTS.bold, 10, (c2 + 6) * MM_TO_PT, pageWidth);
-  drawCentered(doc, empresa, FONTS.bold, 7.5, (c2 + 10) * MM_TO_PT, pageWidth);
-  drawCentered(doc, cif, FONTS.bold, 7.5, (c2 + 14) * MM_TO_PT, pageWidth);
-  drawCentered(doc, cp, FONTS.bold, 7.5, (c2 + 18) * MM_TO_PT, pageWidth);
-  drawCentered(doc, "Fecha", FONTS.condensed, 8, (c2 + 22) * MM_TO_PT, pageWidth);
-  drawCentered(doc, fechaTicket, FONTS.condensed, 8, (c2 + 25) * MM_TO_PT, pageWidth);
-  const c3 = pageHeightMm - (56 + eitems);
-  drawLeft(doc, modoTicket, FONTS.bold, 6.5, 5 * MM_TO_PT, c3 * MM_TO_PT);
-  const c4 = pageHeightMm - (51 + eitems);
-  drawLeft(doc, "Producto", FONTS.condensed, 8, 5 * MM_TO_PT, c4 * MM_TO_PT);
-  drawLeft(doc, "Cant.", FONTS.condensed, 8, 45 * MM_TO_PT, c4 * MM_TO_PT);
-  drawLeft(doc, "Precio", FONTS.condensed, 8, 55 * MM_TO_PT, c4 * MM_TO_PT);
-  drawLeft(doc, "Importe", FONTS.condensed, 8, 65 * MM_TO_PT, c4 * MM_TO_PT);
-  drawLine(doc, 5 * MM_TO_PT, c5 * MM_TO_PT, pageWidth - 2 * 5 * MM_TO_PT);
+  let y = 2;
+  drawImageCentered(doc, "image2.jpg", y * MM_TO_PT, 30 * MM_TO_PT, pageWidth);
+  y += 12;
+  const bgY = y + 2;
+  drawImage(doc, "fondoticketori.png", 5 * MM_TO_PT, bgY * MM_TO_PT, 20 * MM_TO_PT);
+  drawCentered(doc, feria, FONTS.bold, 12, y * MM_TO_PT, pageWidth);
+  y += 5;
+  drawCentered(doc, lugar, FONTS.bold, 10, y * MM_TO_PT, pageWidth);
+  y += 4;
+  drawCentered(doc, empresa, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
+  y += 3;
+  drawCentered(doc, cif, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
+  y += 3;
+  drawCentered(doc, cp, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
+  y += 4;
+  drawCentered(doc, "Fecha", FONTS.condensed, 8, y * MM_TO_PT, pageWidth);
+  y += 3;
+  drawCentered(doc, fechaTicket, FONTS.condensed, 8, y * MM_TO_PT, pageWidth);
+  y += 4;
+  drawLeft(doc, modoTicket, FONTS.bold, 6.5, 5 * MM_TO_PT, y * MM_TO_PT);
+  y += 4;
+  drawLeft(doc, "Producto", FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT);
+  drawLeft(doc, "Cant.", FONTS.condensed, 8, 45 * MM_TO_PT, y * MM_TO_PT);
+  drawLeft(doc, "Precio", FONTS.condensed, 8, 55 * MM_TO_PT, y * MM_TO_PT);
+  drawLeft(doc, "Importe", FONTS.condensed, 8, 65 * MM_TO_PT, y * MM_TO_PT);
+  y += 3;
+  drawLine(doc, 5 * MM_TO_PT, y * MM_TO_PT, pageWidth - 2 * 5 * MM_TO_PT);
+  y += 2;
   let totalProductos = 0;
   let totalImporte = 0;
-  let yBottomMm = 46 + eitems;
   for (let index = 0; index < items.length; index++) {
     const item = items[index];
     if (item.cantidad > 0) {
@@ -3116,32 +3122,31 @@ async function genTicket(params) {
       const quantity = String(item.cantidad);
       const price = formatPrice(producto.precio);
       const total = formatPrice(item.cantidad * producto.precio);
-      const yTop = (pageHeightMm - yBottomMm) * MM_TO_PT;
-      drawLeft(doc, itemName, FONTS.condensed, 8, 5 * MM_TO_PT, yTop);
-      drawRight(doc, quantity, FONTS.condensed, 8, 50 * MM_TO_PT, yTop);
-      drawRight(doc, price, FONTS.condensed, 8, 62 * MM_TO_PT, yTop);
-      drawRight(doc, total, FONTS.condensed, 8, 73 * MM_TO_PT, yTop);
-      yBottomMm -= 3;
+      drawLeft(doc, itemName, FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT);
+      drawRight(doc, quantity, FONTS.condensed, 8, 50 * MM_TO_PT, y * MM_TO_PT);
+      drawRight(doc, price, FONTS.condensed, 8, 62 * MM_TO_PT, y * MM_TO_PT);
+      drawRight(doc, total, FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT);
+      y += ITEM_HEIGHT_MM;
     }
   }
-  const totalLineY = (pageHeightMm - 34) * MM_TO_PT;
-  drawLine(doc, 30 * MM_TO_PT, totalLineY, pageWidth - 30 * MM_TO_PT - 5 * MM_TO_PT);
-  const totalRowY = (pageHeightMm - 30) * MM_TO_PT;
-  drawLeft(doc, "Total:", FONTS.condensed, 8, 35 * MM_TO_PT, totalRowY);
-  drawRight(doc, String(totalProductos), FONTS.condensed, 8, 50 * MM_TO_PT, totalRowY);
-  drawRight(doc, formatPrice(totalImporte), FONTS.condensed, 8, 73 * MM_TO_PT, totalRowY);
-  const bottomLineY = (pageHeightMm - 26) * MM_TO_PT;
-  drawLine(doc, 5 * MM_TO_PT, bottomLineY, pageWidth - 2 * 5 * MM_TO_PT);
+  y += 2;
+  drawLine(doc, 30 * MM_TO_PT, y * MM_TO_PT, pageWidth - 30 * MM_TO_PT - 5 * MM_TO_PT);
+  y += 3;
+  drawLeft(doc, "Total:", FONTS.condensed, 8, 35 * MM_TO_PT, y * MM_TO_PT);
+  drawRight(doc, String(totalProductos), FONTS.condensed, 8, 50 * MM_TO_PT, y * MM_TO_PT);
+  drawRight(doc, formatPrice(totalImporte), FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT);
+  y += 4;
+  drawLine(doc, 5 * MM_TO_PT, y * MM_TO_PT, pageWidth - 2 * 5 * MM_TO_PT);
+  y += 4;
   const clienteStr = formatClientId(idCliente);
   const sessionText = `${nombreMaquina} - Sesión: ${clienteStr}`;
-  const sessionY = (pageHeightMm - 20) * MM_TO_PT;
-  drawCentered(doc, sessionText, FONTS.condensed, 9, sessionY, pageWidth);
-  const l1Y = (pageHeightMm - 13) * MM_TO_PT;
-  const l2Y = (pageHeightMm - 9) * MM_TO_PT;
-  const l3Y = (pageHeightMm - 5) * MM_TO_PT;
-  drawCentered(doc, l1, FONTS.bold, 7.5, l1Y, pageWidth);
-  drawCentered(doc, l2, FONTS.bold, 7.5, l2Y, pageWidth);
-  drawCentered(doc, l3, FONTS.bold, 7.5, l3Y, pageWidth);
+  drawCentered(doc, sessionText, FONTS.condensed, 9, y * MM_TO_PT, pageWidth);
+  y += 5;
+  drawCentered(doc, l1, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
+  y += 4;
+  drawCentered(doc, l2, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
+  y += 4;
+  drawCentered(doc, l3, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
   doc.end();
   return result;
 }
@@ -3157,8 +3162,10 @@ async function genTicketCaja(params) {
     modelo2Ticket
   } = params;
   const nitems = countActiveItems(items);
-  const eitems = 3.5 * nitems - 12;
-  const pageHeightMm = TICKET_BASE_HEIGHT_MM + eitems - 6;
+  const HEADER_HEIGHT_MM = 72;
+  const FOOTER_HEIGHT_MM = 22;
+  const ITEM_HEIGHT_MM = 3.5;
+  const pageHeightMm = HEADER_HEIGHT_MM + nitems * ITEM_HEIGHT_MM + FOOTER_HEIGHT_MM;
   const pageHeight = pageHeightMm * MM_TO_PT;
   const doc = new PDFDocument({
     size: [TICKET_WIDTH, pageHeight],
@@ -3168,36 +3175,33 @@ async function genTicketCaja(params) {
   const result = collectPdf(doc);
   registerFonts(doc);
   const pageWidth = TICKET_WIDTH;
-  const c1 = pageHeightMm - (71 + eitems - 6);
-  const c2 = pageHeightMm - (86 + eitems - 6);
-  const c3 = pageHeightMm - (56 + eitems - 6);
-  const c4 = pageHeightMm - (51 + eitems - 6);
-  const c5 = pageHeightMm - (50 + eitems - 6);
-  drawImageCentered(doc, "image2.jpg", c1 * MM_TO_PT, 30 * MM_TO_PT, pageWidth);
-  const bgX = 5 * MM_TO_PT;
-  const bgY = (c5 + 10) * MM_TO_PT;
-  drawImage(doc, "fondoticketcop-nada.png", bgX, bgY, 20 * MM_TO_PT);
-  drawCentered(doc, feria, FONTS.bold, 12, c2 * MM_TO_PT, pageWidth);
-  drawCentered(doc, "", FONTS.condensed, 8, (c2 + 12) * MM_TO_PT, pageWidth);
-  drawLeft(doc, modoTicket, FONTS.bold, 6.5, 5 * MM_TO_PT, c3 * MM_TO_PT);
-  const payFieldY1 = (c2 + 9) * MM_TO_PT;
-  drawLeft(doc, "TARJETA P.:", FONTS.bold, 12, 20 * MM_TO_PT, payFieldY1);
-  drawLine(doc, 55 * MM_TO_PT, payFieldY1 + 12, pageWidth - 55 * MM_TO_PT - 5 * MM_TO_PT);
-  const payFieldY2 = (c2 + 15) * MM_TO_PT;
-  drawLeft(doc, "TP TUSELLO:", FONTS.bold, 12, 20 * MM_TO_PT, payFieldY2);
-  drawLine(doc, 55 * MM_TO_PT, payFieldY2 + 12, pageWidth - 55 * MM_TO_PT - 5 * MM_TO_PT);
-  const payFieldY3 = (c2 + 21) * MM_TO_PT;
-  drawLeft(doc, "ATM SOBRE:", FONTS.bold, 12, 20 * MM_TO_PT, payFieldY3);
-  drawLine(doc, 55 * MM_TO_PT, payFieldY3 + 12, pageWidth - 55 * MM_TO_PT - 5 * MM_TO_PT);
-  const payFieldY4 = (c2 + 27) * MM_TO_PT;
-  drawLeft(doc, "ATM Tarifa A:", FONTS.bold, 12, 20 * MM_TO_PT, payFieldY4);
-  drawLine(doc, 55 * MM_TO_PT, payFieldY4 + 12, pageWidth - 55 * MM_TO_PT - 5 * MM_TO_PT);
-  drawLeft(doc, "Producto", FONTS.condensed, 8, 5 * MM_TO_PT, c4 * MM_TO_PT);
-  drawLeft(doc, "Cantidad", FONTS.condensed, 8, 30 * MM_TO_PT, c4 * MM_TO_PT);
-  drawLine(doc, 5 * MM_TO_PT, c5 * MM_TO_PT, pageWidth - 2 * 5 * MM_TO_PT);
+  let y = 2;
+  drawImageCentered(doc, "image2.jpg", y * MM_TO_PT, 30 * MM_TO_PT, pageWidth);
+  y += 12;
+  drawImage(doc, "fondoticketcop-nada.png", 5 * MM_TO_PT, (y + 2) * MM_TO_PT, 20 * MM_TO_PT);
+  drawCentered(doc, feria, FONTS.bold, 12, y * MM_TO_PT, pageWidth);
+  y += 5;
+  drawLeft(doc, modoTicket, FONTS.bold, 6.5, 5 * MM_TO_PT, y * MM_TO_PT);
+  y += 4;
+  drawLeft(doc, "TARJETA P.:", FONTS.bold, 12, 20 * MM_TO_PT, y * MM_TO_PT);
+  drawLine(doc, 55 * MM_TO_PT, y * MM_TO_PT + 12, pageWidth - 55 * MM_TO_PT - 5 * MM_TO_PT);
+  y += 6;
+  drawLeft(doc, "TP TUSELLO:", FONTS.bold, 12, 20 * MM_TO_PT, y * MM_TO_PT);
+  drawLine(doc, 55 * MM_TO_PT, y * MM_TO_PT + 12, pageWidth - 55 * MM_TO_PT - 5 * MM_TO_PT);
+  y += 6;
+  drawLeft(doc, "ATM SOBRE:", FONTS.bold, 12, 20 * MM_TO_PT, y * MM_TO_PT);
+  drawLine(doc, 55 * MM_TO_PT, y * MM_TO_PT + 12, pageWidth - 55 * MM_TO_PT - 5 * MM_TO_PT);
+  y += 6;
+  drawLeft(doc, "ATM Tarifa A:", FONTS.bold, 12, 20 * MM_TO_PT, y * MM_TO_PT);
+  drawLine(doc, 55 * MM_TO_PT, y * MM_TO_PT + 12, pageWidth - 55 * MM_TO_PT - 5 * MM_TO_PT);
+  y += 7;
+  drawLeft(doc, "Producto", FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT);
+  drawLeft(doc, "Cantidad", FONTS.condensed, 8, 30 * MM_TO_PT, y * MM_TO_PT);
+  y += 3;
+  drawLine(doc, 5 * MM_TO_PT, y * MM_TO_PT, pageWidth - 2 * 5 * MM_TO_PT);
+  y += 2;
   let totalProductos = 0;
   let totalImporte = 0;
-  let yBottomMm = 46 + eitems - 6;
   let inicioMod2 = false;
   for (let index = 0; index < items.length; index++) {
     const item = items[index];
@@ -3206,11 +3210,9 @@ async function genTicketCaja(params) {
       const isModel2 = item.idProducto.slice(-1) === "2";
       const modeloTicket = isModel2 ? modelo2Ticket : modelo1Ticket;
       if (isModel2 && !inicioMod2) {
-        yBottomMm += 1.7;
-        const sepY = (pageHeightMm - yBottomMm) * MM_TO_PT;
-        drawLine(doc, 5 * MM_TO_PT, sepY, pageWidth - 2 * 5 * MM_TO_PT);
+        drawLine(doc, 5 * MM_TO_PT, y * MM_TO_PT, pageWidth - 2 * 5 * MM_TO_PT);
         inicioMod2 = true;
-        yBottomMm -= 3.5;
+        y += 2;
       }
       totalProductos += item.cantidad;
       totalImporte += item.cantidad * producto.precio;
@@ -3218,30 +3220,29 @@ async function genTicketCaja(params) {
       const quantity = String(item.cantidad);
       const price = formatPrice(producto.precio);
       const total = formatPrice(item.cantidad * producto.precio);
-      const yTop = (pageHeightMm - yBottomMm) * MM_TO_PT;
-      drawLeft(doc, itemName, FONTS.condensed, 8, 5 * MM_TO_PT, yTop);
-      drawRight(doc, quantity, FONTS.condensed, 8, 50 * MM_TO_PT, yTop);
-      drawRight(doc, price, FONTS.condensed, 8, 62 * MM_TO_PT, yTop);
-      drawRight(doc, total, FONTS.condensed, 8, 73 * MM_TO_PT, yTop);
-      yBottomMm -= 3.5;
+      drawLeft(doc, itemName, FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT);
+      drawRight(doc, quantity, FONTS.condensed, 8, 50 * MM_TO_PT, y * MM_TO_PT);
+      drawRight(doc, price, FONTS.condensed, 8, 62 * MM_TO_PT, y * MM_TO_PT);
+      drawRight(doc, total, FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT);
+      y += ITEM_HEIGHT_MM;
     }
   }
-  const totalLineY = (pageHeightMm - 27) * MM_TO_PT;
-  drawLine(doc, 30 * MM_TO_PT, totalLineY, pageWidth - 30 * MM_TO_PT - 5 * MM_TO_PT);
-  const totalRowY = (pageHeightMm - 23) * MM_TO_PT;
-  drawLeft(doc, "Total:", FONTS.condensed, 8, 35 * MM_TO_PT, totalRowY);
-  drawRight(doc, String(totalProductos), FONTS.condensed, 8, 50 * MM_TO_PT, totalRowY);
-  drawRight(doc, formatPrice(totalImporte), FONTS.condensed, 8, 73 * MM_TO_PT, totalRowY);
-  const bottomLineY = (pageHeightMm - 21) * MM_TO_PT;
-  drawLine(doc, 5 * MM_TO_PT, bottomLineY, pageWidth - 2 * 5 * MM_TO_PT);
+  y += 2;
+  drawLine(doc, 30 * MM_TO_PT, y * MM_TO_PT, pageWidth - 30 * MM_TO_PT - 5 * MM_TO_PT);
+  y += 3;
+  drawLeft(doc, "Total:", FONTS.condensed, 8, 35 * MM_TO_PT, y * MM_TO_PT);
+  drawRight(doc, String(totalProductos), FONTS.condensed, 8, 50 * MM_TO_PT, y * MM_TO_PT);
+  drawRight(doc, formatPrice(totalImporte), FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT);
+  y += 4;
+  drawLine(doc, 5 * MM_TO_PT, y * MM_TO_PT, pageWidth - 2 * 5 * MM_TO_PT);
+  y += 4;
   const clienteStr = formatClientId(idCliente);
   const sessionText = `${nombreMaquina} - Sesión: ${clienteStr}`;
-  const sessionY = (pageHeightMm - 15) * MM_TO_PT;
-  drawCentered(doc, sessionText, FONTS.bold, 7.5, sessionY, pageWidth);
-  const pasoY = (pageHeightMm - 9) * MM_TO_PT;
-  drawCentered(doc, "PARA RECOGER SU PEDIDO", FONTS.bold, 7.5, pasoY, pageWidth);
-  const cajaY = (pageHeightMm - 5) * MM_TO_PT;
-  drawCentered(doc, "PASE POR CAJA y ENTREGUE ESTE RESGUARDO", FONTS.bold, 7.5, cajaY, pageWidth);
+  drawCentered(doc, sessionText, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
+  y += 4;
+  drawCentered(doc, "PARA RECOGER SU PEDIDO", FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
+  y += 4;
+  drawCentered(doc, "PASE POR CAJA y ENTREGUE ESTE RESGUARDO", FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
   doc.end();
   return result;
 }
@@ -3264,8 +3265,10 @@ async function genTicketMaster(params) {
     l3
   } = params;
   const nitems = countActiveItems(items);
-  const eitems = 3.5 * nitems - 12;
-  const pageHeightMm = TICKET_BASE_HEIGHT_MM + eitems - 6;
+  const HEADER_HEIGHT_MM = 66;
+  const FOOTER_HEIGHT_MM = 30;
+  const ITEM_HEIGHT_MM = 3;
+  const pageHeightMm = HEADER_HEIGHT_MM + nitems * ITEM_HEIGHT_MM + FOOTER_HEIGHT_MM;
   const pageHeight = pageHeightMm * MM_TO_PT;
   const doc = new PDFDocument({
     size: [TICKET_WIDTH, pageHeight],
@@ -3275,63 +3278,66 @@ async function genTicketMaster(params) {
   const result = collectPdf(doc);
   registerFonts(doc);
   const pageWidth = TICKET_WIDTH;
-  const c1 = pageHeightMm - (71 + eitems - 6);
-  const c2 = pageHeightMm - (86 + eitems - 6);
-  const c3 = pageHeightMm - (56 + eitems);
-  const c4 = pageHeightMm - (51 + eitems - 3);
-  drawImageCentered(doc, "image2.jpg", c1 * MM_TO_PT, 30 * MM_TO_PT, pageWidth);
-  drawImage(doc, "fondoticketcop.png", 5 * MM_TO_PT, c1 * MM_TO_PT + 45, 70 * MM_TO_PT);
-  drawCentered(doc, feria, FONTS.bold, 12, c2 * MM_TO_PT, pageWidth);
-  drawCentered(doc, lugar, FONTS.bold, 10, (c2 + 6) * MM_TO_PT, pageWidth);
-  drawCentered(doc, empresa, FONTS.bold, 7.5, (c2 + 10) * MM_TO_PT, pageWidth);
-  drawCentered(doc, cif, FONTS.bold, 7.5, (c2 + 14) * MM_TO_PT, pageWidth);
-  drawCentered(doc, cp, FONTS.bold, 7.5, (c2 + 18) * MM_TO_PT, pageWidth);
-  drawCentered(doc, fechaTicket, FONTS.condensed, 8, (c2 + 22) * MM_TO_PT, pageWidth);
-  const masterY = (c3 + 4) * MM_TO_PT;
-  drawLeft(doc, "MASTER SET", FONTS.bold, 9.5, 5 * MM_TO_PT, masterY);
-  const modoY = (c3 + 6) * MM_TO_PT;
-  drawLeft(doc, modoTicket, FONTS.bold, 6.5, 5 * MM_TO_PT, modoY);
-  drawLeft(doc, "Producto", FONTS.condensed, 8, 5 * MM_TO_PT, c4 * MM_TO_PT);
-  drawLeft(doc, "Cant.", FONTS.condensed, 8, 45 * MM_TO_PT, c4 * MM_TO_PT);
-  drawLeft(doc, "Precio", FONTS.condensed, 8, 55 * MM_TO_PT, c4 * MM_TO_PT);
-  drawLeft(doc, "Importe", FONTS.condensed, 8, 65 * MM_TO_PT, c4 * MM_TO_PT);
-  const headerLineY = c4 * MM_TO_PT + 1 * MM_TO_PT;
-  drawLine(doc, 5 * MM_TO_PT, headerLineY, pageWidth - 2 * 5 * MM_TO_PT);
+  let y = 2;
+  drawImageCentered(doc, "image2.jpg", y * MM_TO_PT, 30 * MM_TO_PT, pageWidth);
+  y += 12;
+  drawImage(doc, "fondoticketcop.png", 5 * MM_TO_PT, y * MM_TO_PT, 70 * MM_TO_PT);
+  drawCentered(doc, feria, FONTS.bold, 12, y * MM_TO_PT, pageWidth);
+  y += 5;
+  drawCentered(doc, lugar, FONTS.bold, 10, y * MM_TO_PT, pageWidth);
+  y += 4;
+  drawCentered(doc, empresa, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
+  y += 3;
+  drawCentered(doc, cif, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
+  y += 3;
+  drawCentered(doc, cp, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
+  y += 4;
+  drawCentered(doc, fechaTicket, FONTS.condensed, 8, y * MM_TO_PT, pageWidth);
+  y += 4;
+  drawLeft(doc, "MASTER SET", FONTS.bold, 9.5, 5 * MM_TO_PT, y * MM_TO_PT);
+  y += 3;
+  drawLeft(doc, modoTicket, FONTS.bold, 6.5, 5 * MM_TO_PT, y * MM_TO_PT);
+  y += 4;
+  drawLeft(doc, "Producto", FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT);
+  drawLeft(doc, "Cant.", FONTS.condensed, 8, 45 * MM_TO_PT, y * MM_TO_PT);
+  drawLeft(doc, "Precio", FONTS.condensed, 8, 55 * MM_TO_PT, y * MM_TO_PT);
+  drawLeft(doc, "Importe", FONTS.condensed, 8, 65 * MM_TO_PT, y * MM_TO_PT);
+  y += 3;
+  drawLine(doc, 5 * MM_TO_PT, y * MM_TO_PT, pageWidth - 2 * 5 * MM_TO_PT);
+  y += 2;
   const MASTER_SET_PRICE = 31.05;
   let totalItems = 0;
-  let yBottomMm = 43 + eitems;
   for (let index = 0; index < items.length; index++) {
     const item = items[index];
     if (item.cantidad > 0) {
       const modeloTicket = item.idProducto.slice(-1) === "1" ? modelo1Ticket : modelo2Ticket;
       totalItems++;
       const itemName = modeloTicket + " Master Set";
-      const yTop = (pageHeightMm - yBottomMm) * MM_TO_PT;
-      drawLeft(doc, itemName, FONTS.condensed, 8, 5 * MM_TO_PT, yTop);
-      drawRight(doc, "1", FONTS.condensed, 8, 50 * MM_TO_PT, yTop);
-      drawRight(doc, formatPrice(MASTER_SET_PRICE), FONTS.condensed, 8, 62 * MM_TO_PT, yTop);
-      drawRight(doc, formatPrice(MASTER_SET_PRICE), FONTS.condensed, 8, 73 * MM_TO_PT, yTop);
-      yBottomMm -= 3;
+      drawLeft(doc, itemName, FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT);
+      drawRight(doc, "1", FONTS.condensed, 8, 50 * MM_TO_PT, y * MM_TO_PT);
+      drawRight(doc, formatPrice(MASTER_SET_PRICE), FONTS.condensed, 8, 62 * MM_TO_PT, y * MM_TO_PT);
+      drawRight(doc, formatPrice(MASTER_SET_PRICE), FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT);
+      y += ITEM_HEIGHT_MM;
     }
   }
-  const totalLineY = (pageHeightMm - 32) * MM_TO_PT;
-  drawLine(doc, 30 * MM_TO_PT, totalLineY, pageWidth - 30 * MM_TO_PT - 5 * MM_TO_PT);
+  y += 2;
+  drawLine(doc, 30 * MM_TO_PT, y * MM_TO_PT, pageWidth - 30 * MM_TO_PT - 5 * MM_TO_PT);
+  y += 3;
   const masterTotal = totalItems * MASTER_SET_PRICE;
-  const totalY = (pageHeightMm - yBottomMm + 4) * MM_TO_PT;
-  drawLeft(doc, `Total:     ${totalItems}`, FONTS.condensed, 8, 40 * MM_TO_PT, totalY);
-  drawLeft(doc, formatPrice(masterTotal), FONTS.condensed, 8, 65 * MM_TO_PT, totalY);
-  const bottomLineY = (pageHeightMm - 26) * MM_TO_PT;
-  drawLine(doc, 5 * MM_TO_PT, bottomLineY, pageWidth - 2 * 5 * MM_TO_PT);
+  drawLeft(doc, `Total:     ${totalItems}`, FONTS.condensed, 8, 40 * MM_TO_PT, y * MM_TO_PT);
+  drawLeft(doc, formatPrice(masterTotal), FONTS.condensed, 8, 65 * MM_TO_PT, y * MM_TO_PT);
+  y += 4;
+  drawLine(doc, 5 * MM_TO_PT, y * MM_TO_PT, pageWidth - 2 * 5 * MM_TO_PT);
+  y += 4;
   const clienteStr = formatClientId(idCliente);
   const sessionText = `${nombreMaquina} - Sesión: ${clienteStr}`;
-  const sessionY = (pageHeightMm - 20) * MM_TO_PT;
-  drawCentered(doc, sessionText, FONTS.condensed, 9, sessionY, pageWidth);
-  const l1Y = (pageHeightMm - 13) * MM_TO_PT;
-  const l2Y = (pageHeightMm - 9) * MM_TO_PT;
-  const l3Y = (pageHeightMm - 5) * MM_TO_PT;
-  drawCentered(doc, l1, FONTS.bold, 7.5, l1Y, pageWidth);
-  drawCentered(doc, l2, FONTS.bold, 7.5, l2Y, pageWidth);
-  drawCentered(doc, l3, FONTS.bold, 7.5, l3Y, pageWidth);
+  drawCentered(doc, sessionText, FONTS.condensed, 9, y * MM_TO_PT, pageWidth);
+  y += 5;
+  drawCentered(doc, l1, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
+  y += 4;
+  drawCentered(doc, l2, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
+  y += 4;
+  drawCentered(doc, l3, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
   doc.end();
   return result;
 }
@@ -3438,7 +3444,7 @@ const TARIFF_DEFS = [
 async function generateSalePdfs(config, quantities, profile, imagesRepo) {
   const repo = new ImagesRepository();
   const pdfs = [];
-  let productoCounter = config.codigo.producto;
+  let productoCounter = 1;
   const eventoIndex = config.sello.elevento;
   const evento = config.sello.eventos?.[eventoIndex];
   const stampFecha = evento?.fecha ?? "";
@@ -3714,17 +3720,6 @@ function registerSaleHandlers() {
           typedProfile
         );
         pdfCache.set(result.sesionId, pdfResult.pdfs);
-        try {
-          const currentConfig = configRepo.get();
-          if (currentConfig) {
-            currentConfig.codigo.producto = pdfResult.nextProducto;
-            configRepo.set(currentConfig);
-            notifyConfigChanged(currentConfig);
-          }
-        } catch (persistErr) {
-          const persistError = persistErr instanceof Error ? persistErr.message : String(persistErr);
-          console.error("[Sale] Failed to persist product counter:", persistError);
-        }
         let printJobIds = [];
         try {
           const queueService = getPrintQueueService();

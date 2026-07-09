@@ -224,11 +224,11 @@ describe('calcTicketHeight', () => {
     expect(h12).toBeGreaterThan(h5)
   })
 
-  it('matches legacy formula for known values', () => {
-    // Legacy: page_height = (126 + 3*nitems - 17) * mm
-    // For nitems=4: (126 + 12 - 17) = 121mm
+  it('matches expected formula for known values', () => {
+    // New formula: page_height = (62 + 3*nitems + 30) * mm
+    // For nitems=4: (62 + 12 + 30) = 104mm
     const MM_TO_PT = 72 / 25.4
-    const expected = 121 * MM_TO_PT
+    const expected = 104 * MM_TO_PT
     expect(calcTicketHeight(4)).toBeCloseTo(expected, 1)
   })
 })

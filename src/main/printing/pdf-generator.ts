@@ -279,8 +279,8 @@ export async function generateSalePdfs(
   const repo = imagesRepo ?? new ImagesRepository()
   const pdfs: GeneratedPdf[] = []
 
-  // Product counter starts from config value and increments per stamp generated
-  let productoCounter = config.codigo.producto
+  // Product counter starts at 1 for each new sale (resets per client/order)
+  let productoCounter = 1
 
   // Get active event data for stamp text
   const eventoIndex = config.sello.elevento
