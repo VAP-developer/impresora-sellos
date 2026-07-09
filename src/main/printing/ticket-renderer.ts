@@ -198,7 +198,7 @@ function registerFonts(doc: PDFKit.PDFDocument): void {
 /**
  * Counts the number of items with cantidad > 0.
  */
-function countActiveItems(items: TicketItem[]): number {
+export function countActiveItems(items: TicketItem[]): number {
   return items.filter((item) => item.cantidad > 0).length
 }
 
@@ -329,23 +329,40 @@ function collectPdf(doc: PDFKit.PDFDocument): Promise<Buffer> {
 /**
  * Calculates the page height for a ticket based on number of active items.
  * Replicates legacy formula: page_height = (126 + eitems) * mm
- * where eitems = 3*nitems - 12 (for genTicket, offset -17 total from page_height adjustment)
+ * where eitems = 3*nitems - 17 (for genTicket)
+ *
+ * @returns Height in points (for PDFDocument page size)
  */
 export function calcTicketHeight(numItems: number): number {
-  // Legacy: eitems = 3*nitems - 17 (includes the -5 page_height base adjustment)
-  const eitems = 3 * numItems - 17
-  const heightMm = TICKET_BASE_HEIGHT_MM + eitems
+  const heightMm = calcTicketHeightMm(numItems)
   return heightMm * MM_TO_PT
+}
+
+/**
+ * Calculates the page height in mm for a ticket based on number of active items.
+ */
+export function calcTicketHeightMm(numItems: number): number {
+  const eitems = 3 * numItems - 17
+  return TICKET_BASE_HEIGHT_MM + eitems
 }
 
 /**
  * Calculates the page height for genTicketCaja/genTicketMaster (slightly different formula).
  * Legacy: eitems = 3.5*nitems - 12, then various offsets (-6 for c1-c5)
+ *
+ * @returns Height in points (for PDFDocument page size)
  */
 export function calcTicketCajaHeight(numItems: number): number {
-  const eitems = 3.5 * numItems - 12
-  const heightMm = TICKET_BASE_HEIGHT_MM + eitems - 6
+  const heightMm = calcTicketCajaHeightMm(numItems)
   return heightMm * MM_TO_PT
+}
+
+/**
+ * Calculates the page height in mm for genTicketCaja/genTicketMaster.
+ */
+export function calcTicketCajaHeightMm(numItems: number): number {
+  const eitems = 3.5 * numItems - 12
+  return TICKET_BASE_HEIGHT_MM + eitems - 6
 }
 
 // ─────────────────────────────────────────────

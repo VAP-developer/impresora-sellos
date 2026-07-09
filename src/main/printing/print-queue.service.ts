@@ -66,8 +66,8 @@ export class PrintQueueService {
   private printerManager: PrinterManager
   private options: Required<PrintQueueServiceOptions>
 
-  /** In-memory buffer cache for jobs awaiting printing (jobId → PDF buffer) */
-  private bufferCache: Map<number, Buffer> = new Map()
+  /** In-memory buffer cache for jobs awaiting printing (jobId → PDF buffer + metadata) */
+  private bufferCache: Map<number, { buffer: Buffer; ticketHeightMm?: number }> = new Map()
 
   /** Whether the background processing loop is running */
   private running = false
@@ -108,7 +108,7 @@ export class PrintQueueService {
         pdfType: pdf.pdfType,
         filePath: null
       })
-      this.bufferCache.set(id, pdf.buffer)
+      this.bufferCache.set(id, { buffer: pdf.buffer, ticketHeightMm: pdf.ticketHeightMm })
       jobIds.push(id)
     }
 
@@ -165,12 +165,14 @@ export class PrintQueueService {
    * @returns true if the job completed successfully
    */
   private async processJob(job: PrintJob): Promise<boolean> {
-    const buffer = this.bufferCache.get(job.id)
-    if (!buffer) {
+    const cached = this.bufferCache.get(job.id)
+    if (!cached) {
       // No buffer in cache — mark as error (PDF was lost, likely after restart)
       this.repository.markError(job.id, 'PDF buffer not found in cache (possible restart)')
       return false
     }
+
+    const { buffer } = cached
 
     // Mark as printing
     this.repository.markPrinting(job.id)
@@ -204,11 +206,15 @@ export class PrintQueueService {
    * Builds the appropriate PrintOptions for a given job based on its type.
    * Stamps use DC55x25 media with landscape orientation.
    * Tickets use variable-height custom media with portrait orientation.
+   * The ticket height is taken from the cached PDF metadata (actual generated height),
+   * falling back to the configured default if not available.
    */
   private buildPrintOptions(job: PrintJob): PrintOptions {
     if (job.printerTarget === 'ticket') {
+      const cached = this.bufferCache.get(job.id)
+      const heightMm = cached?.ticketHeightMm ?? this.options.defaultTicketHeightMm
       return {
-        media: buildTicketMedia(this.options.defaultTicketHeightMm),
+        media: buildTicketMedia(heightMm),
         orientation: TICKET_ORIENTATION,
         jobName: `${job.pdfType}_${job.id}`
       }

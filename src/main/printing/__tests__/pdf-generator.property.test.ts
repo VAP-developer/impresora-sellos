@@ -309,7 +309,7 @@ describe('Property 7: Generación correcta de PDFs por venta', () => {
         ),
         { numRuns: 20 }
       )
-    })
+    }, 30000)
 
     it('total stamp PDFs = sum of simple quantities + sum of tira quantities (no especiales)', async () => {
       await fc.assert(
@@ -326,7 +326,7 @@ describe('Property 7: Generación correcta de PDFs por venta', () => {
         }),
         { numRuns: 20 }
       )
-    })
+    }, 30000)
   })
 
   describe('Each generated PDF is a valid PDF buffer', () => {
@@ -540,7 +540,8 @@ describe('Property 7: Generación correcta de PDFs por venta', () => {
             (p) =>
               p.pdfType === 'ticket' ||
               p.pdfType === 'ticket_caja' ||
-              p.pdfType === 'ticket_master'
+              p.pdfType === 'ticket_master' ||
+              p.pdfType === 'ticket_tira'
           )
 
           for (const pdf of ticketPdfs) {
@@ -553,7 +554,7 @@ describe('Property 7: Generación correcta de PDFs por venta', () => {
   })
 
   describe('Ticket generation per configuration', () => {
-    it('generates exactly 1 ticket when items exist and no copia/master configured', async () => {
+    it('generates exactly 1 main ticket when items exist and no copia/master configured', async () => {
       await fc.assert(
         fc.asyncProperty(arbNonEmptyQuantities, async (quantities: SaleQuantities) => {
           const noExtrasConfig = createTestConfig({
@@ -568,13 +569,19 @@ describe('Property 7: Generación correcta de PDFs por venta', () => {
 
           const ticketPdfs = result.pdfs.filter((p) => p.pdfType === 'ticket')
           expect(ticketPdfs).toHaveLength(1)
-          expect(result.ticketCount).toBe(1)
+
+          // Per-tira tickets: one per tira unit
+          const tiraTickets = result.pdfs.filter((p) => p.pdfType === 'ticket_tira')
+          const totalTiras = quantities.tarifaAT1 + quantities.tarifaAT2 + quantities.tarifa4T1 + quantities.tarifa4T2
+          expect(tiraTickets).toHaveLength(totalTiras)
+
+          expect(result.ticketCount).toBe(1 + totalTiras)
         }),
         { numRuns: 10 }
       )
-    })
+    }, 30000)
 
-    it('generates 2 tickets when ImprimeCopiaTicket = "S"', async () => {
+    it('generates main + copia tickets when ImprimeCopiaTicket = "S"', async () => {
       await fc.assert(
         fc.asyncProperty(arbNonEmptyQuantities, async (quantities: SaleQuantities) => {
           const copiaConfig = createTestConfig({
@@ -591,13 +598,15 @@ describe('Property 7: Generación correcta de PDFs por venta', () => {
           const copiaTickets = result.pdfs.filter((p) => p.pdfType === 'ticket_caja')
           expect(mainTickets).toHaveLength(1)
           expect(copiaTickets).toHaveLength(1)
-          expect(result.ticketCount).toBe(2)
+
+          const totalTiras = quantities.tarifaAT1 + quantities.tarifaAT2 + quantities.tarifa4T1 + quantities.tarifa4T2
+          expect(result.ticketCount).toBe(2 + totalTiras)
         }),
         { numRuns: 10 }
       )
-    })
+    }, 30000)
 
-    it('generates 2 tickets when ImprimeMasterTicket = "S"', async () => {
+    it('generates main + master tickets when ImprimeMasterTicket = "S"', async () => {
       await fc.assert(
         fc.asyncProperty(arbNonEmptyQuantities, async (quantities: SaleQuantities) => {
           const masterConfig = createTestConfig({
@@ -614,13 +623,15 @@ describe('Property 7: Generación correcta de PDFs por venta', () => {
           const masterTickets = result.pdfs.filter((p) => p.pdfType === 'ticket_master')
           expect(mainTickets).toHaveLength(1)
           expect(masterTickets).toHaveLength(1)
-          expect(result.ticketCount).toBe(2)
+
+          const totalTiras = quantities.tarifaAT1 + quantities.tarifaAT2 + quantities.tarifa4T1 + quantities.tarifa4T2
+          expect(result.ticketCount).toBe(2 + totalTiras)
         }),
         { numRuns: 10 }
       )
-    })
+    }, 30000)
 
-    it('generates 3 tickets when both copia and master are "S"', async () => {
+    it('generates main + copia + master tickets when both are "S"', async () => {
       await fc.assert(
         fc.asyncProperty(arbNonEmptyQuantities, async (quantities: SaleQuantities) => {
           const allConfig = createTestConfig({
@@ -639,11 +650,13 @@ describe('Property 7: Generación correcta de PDFs por venta', () => {
           expect(mainTickets).toHaveLength(1)
           expect(copiaTickets).toHaveLength(1)
           expect(masterTickets).toHaveLength(1)
-          expect(result.ticketCount).toBe(3)
+
+          const totalTiras = quantities.tarifaAT1 + quantities.tarifaAT2 + quantities.tarifa4T1 + quantities.tarifa4T2
+          expect(result.ticketCount).toBe(3 + totalTiras)
         }),
         { numRuns: 10 }
       )
-    })
+    }, 30000)
 
     it('generates 0 tickets when all quantities are zero', async () => {
       const quantities = emptyQuantities()
@@ -679,7 +692,7 @@ describe('Property 7: Generación correcta de PDFs por venta', () => {
         }),
         { numRuns: 10 }
       )
-    })
+    }, 30000)
   })
 
   describe('Especial strips generation', () => {

@@ -2198,7 +2198,7 @@ class PrintQueueService {
   repository;
   printerManager;
   options;
-  /** In-memory buffer cache for jobs awaiting printing (jobId → PDF buffer) */
+  /** In-memory buffer cache for jobs awaiting printing (jobId → PDF buffer + metadata) */
   bufferCache = /* @__PURE__ */ new Map();
   /** Whether the background processing loop is running */
   running = false;
@@ -2229,7 +2229,7 @@ class PrintQueueService {
         pdfType: pdf.pdfType,
         filePath: null
       });
-      this.bufferCache.set(id, pdf.buffer);
+      this.bufferCache.set(id, { buffer: pdf.buffer, ticketHeightMm: pdf.ticketHeightMm });
       jobIds.push(id);
     }
     return jobIds;
@@ -2274,11 +2274,12 @@ class PrintQueueService {
    * @returns true if the job completed successfully
    */
   async processJob(job) {
-    const buffer = this.bufferCache.get(job.id);
-    if (!buffer) {
+    const cached = this.bufferCache.get(job.id);
+    if (!cached) {
       this.repository.markError(job.id, "PDF buffer not found in cache (possible restart)");
       return false;
     }
+    const { buffer } = cached;
     this.repository.markPrinting(job.id);
     try {
       const options = this.buildPrintOptions(job);
@@ -2307,11 +2308,15 @@ class PrintQueueService {
    * Builds the appropriate PrintOptions for a given job based on its type.
    * Stamps use DC55x25 media with landscape orientation.
    * Tickets use variable-height custom media with portrait orientation.
+   * The ticket height is taken from the cached PDF metadata (actual generated height),
+   * falling back to the configured default if not available.
    */
   buildPrintOptions(job) {
     if (job.printerTarget === "ticket") {
+      const cached = this.bufferCache.get(job.id);
+      const heightMm = cached?.ticketHeightMm ?? this.options.defaultTicketHeightMm;
       return {
-        media: buildTicketMedia(this.options.defaultTicketHeightMm),
+        media: buildTicketMedia(heightMm),
         orientation: TICKET_ORIENTATION,
         jobName: `${job.pdfType}_${job.id}`
       };
@@ -3033,9 +3038,16 @@ function collectPdf(doc) {
   });
 }
 function calcTicketHeight(numItems) {
-  const eitems = 3 * numItems - 17;
-  const heightMm = TICKET_BASE_HEIGHT_MM + eitems;
+  const heightMm = calcTicketHeightMm(numItems);
   return heightMm * MM_TO_PT;
+}
+function calcTicketHeightMm(numItems) {
+  const eitems = 3 * numItems - 17;
+  return TICKET_BASE_HEIGHT_MM + eitems;
+}
+function calcTicketCajaHeightMm(numItems) {
+  const eitems = 3.5 * numItems - 12;
+  return TICKET_BASE_HEIGHT_MM + eitems - 6;
 }
 async function genTicket(params) {
   const {
@@ -3342,7 +3354,7 @@ function formatCliente(cliente) {
 function formatProducto(producto) {
   return producto.toString().padStart(3, "0");
 }
-function buildLabelCode(config) {
+function buildLabelCode(config, productoId) {
   const { codigo } = config;
   const modo = codigo.modo;
   const mes = formatMes(codigo.mes);
@@ -3350,7 +3362,7 @@ function buildLabelCode(config) {
   const annio = formatAnnio(codigo.annio);
   const maquina = codigo.maquina;
   const cliente = formatCliente(codigo.cliente);
-  const producto = formatProducto(codigo.producto);
+  const producto = formatProducto(productoId);
   return `${modo}${mes}${pais}${annio} ${maquina}-${cliente}-${producto}`;
 }
 function buildTicketTitle(profile, baseTitle) {
@@ -3426,7 +3438,7 @@ const TARIFF_DEFS = [
 async function generateSalePdfs(config, quantities, profile, imagesRepo) {
   const repo = new ImagesRepository();
   const pdfs = [];
-  const labelCode = buildLabelCode(config);
+  let productoCounter = config.codigo.producto;
   const eventoIndex = config.sello.elevento;
   const evento = config.sello.eventos?.[eventoIndex];
   const stampFecha = evento?.fecha ?? "";
@@ -3450,9 +3462,10 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo) {
               tarifa: tLabel,
               fecha: stampFecha,
               evento: stampEvento,
-              codigo: labelCode,
+              codigo: buildLabelCode(config, productoCounter),
               backgroundImage: background
             });
+            productoCounter++;
           }
         } else {
           for (let j = 0; j < 4; j++) {
@@ -3460,9 +3473,10 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo) {
               tarifa: tariff.label,
               fecha: stampFecha,
               evento: stampEvento,
-              codigo: labelCode,
+              codigo: buildLabelCode(config, productoCounter),
               backgroundImage: background
             });
+            productoCounter++;
           }
         }
         const pdfBuffer = await renderStampMultiPage(stamps);
@@ -3479,9 +3493,10 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo) {
           tarifa: tariff.label,
           fecha: stampFecha,
           evento: stampEvento,
-          codigo: labelCode,
+          codigo: buildLabelCode(config, productoCounter),
           backgroundImage: background
         });
+        productoCounter++;
         pdfs.push({
           buffer: pdfBuffer,
           target: tariff.target,
@@ -3491,7 +3506,9 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo) {
       }
     }
   }
-  await generateEspecialStrips(config, quantities, labelCode, pdfs);
+  const counterRef = { value: productoCounter };
+  await generateEspecialStrips(config, quantities, counterRef, pdfs);
+  productoCounter = counterRef.value;
   const { items, productos } = buildTicketData(quantities, config.precios);
   const hasAnyItems = items.some((item) => item.cantidad > 0);
   if (hasAnyItems) {
@@ -3499,6 +3516,9 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo) {
     const modoTicket = buildTicketTitle(profile, config.ticket.titulo);
     const modelo1Ticket = model1Name || "Modelo 1";
     const modelo2Ticket = model2Name || "Modelo 2";
+    const nitems = countActiveItems(items);
+    const ticketHeightMm = calcTicketHeightMm(nitems);
+    const ticketCajaHeightMm = calcTicketCajaHeightMm(nitems);
     const ticketBuffer = await genTicket({
       fechaTicket,
       modoTicket,
@@ -3521,7 +3541,8 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo) {
       buffer: ticketBuffer,
       target: "ticket",
       pdfType: "ticket",
-      description: "Ticket principal (Factura Simplificada)"
+      description: "Ticket principal (Factura Simplificada)",
+      ticketHeightMm
     });
     if (config.ticket.ImprimeCopiaTicket === "S") {
       const ticketCajaBuffer = await genTicketCaja({
@@ -3538,7 +3559,8 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo) {
         buffer: ticketCajaBuffer,
         target: "ticket",
         pdfType: "ticket_caja",
-        description: "Ticket copia (caja)"
+        description: "Ticket copia (caja)",
+        ticketHeightMm: ticketCajaHeightMm
       });
     }
     if (config.ticket.ImprimeMasterTicket === "S") {
@@ -3563,19 +3585,59 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo) {
         buffer: ticketMasterBuffer,
         target: "ticket",
         pdfType: "ticket_master",
-        description: "Ticket master set"
+        description: "Ticket master set",
+        ticketHeightMm: ticketCajaHeightMm
       });
+    }
+    const maquinaPrefix = config.codigo.maquina.substring(0, 2).toUpperCase();
+    if (maquinaPrefix !== "MD" && maquinaPrefix !== "FI") {
+      for (let idx = 0; idx < items.length; idx++) {
+        if (items[idx].cantidad > 0 && productos[idx].modo === "T") {
+          for (let t = 0; t < items[idx].cantidad; t++) {
+            const singleTiraItems = items.map((item, i) => ({
+              idProducto: item.idProducto,
+              cantidad: i === idx ? 1 : 0
+            }));
+            const singleTiraHeightMm = calcTicketHeightMm(1);
+            const singleTiraBuffer = await genTicket({
+              fechaTicket,
+              modoTicket,
+              modelo1Ticket,
+              modelo2Ticket,
+              items: singleTiraItems,
+              idCliente: config.codigo.cliente,
+              nombreMaquina: config.codigo.maquina,
+              productos,
+              feria: config.ticket.feria,
+              lugar: config.ticket.lugar,
+              empresa: config.ticket.empresa,
+              cif: config.ticket.cif,
+              cp: config.ticket.cp,
+              l1: config.ticket.l1,
+              l2: config.ticket.l2,
+              l3: config.ticket.l3
+            });
+            pdfs.push({
+              buffer: singleTiraBuffer,
+              target: "ticket",
+              pdfType: "ticket_tira",
+              description: `Ticket individual tira ${productos[idx].nombre_ticket} #${t + 1}`,
+              ticketHeightMm: singleTiraHeightMm
+            });
+          }
+        }
+      }
     }
   }
   const stampCount = pdfs.filter(
     (p) => p.pdfType === "stamp_simple" || p.pdfType === "stamp_tira" || p.pdfType === "stamp_especial"
   ).length;
   const ticketCount = pdfs.filter(
-    (p) => p.pdfType === "ticket" || p.pdfType === "ticket_caja" || p.pdfType === "ticket_master"
+    (p) => p.pdfType === "ticket" || p.pdfType === "ticket_caja" || p.pdfType === "ticket_master" || p.pdfType === "ticket_tira"
   ).length;
-  return { pdfs, stampCount, ticketCount };
+  return { pdfs, stampCount, ticketCount, nextProducto: productoCounter };
 }
-async function generateEspecialStrips(config, quantities, labelCode, pdfs) {
+async function generateEspecialStrips(config, quantities, counterRef, pdfs) {
   const { ticket } = config;
   const hasTiras1 = quantities.tarifaAT1 > 0 || quantities.tarifa4T1 > 0;
   const hasTiras2 = quantities.tarifaAT2 > 0 || quantities.tarifa4T2 > 0;
@@ -3585,10 +3647,10 @@ async function generateEspecialStrips(config, quantities, labelCode, pdfs) {
       const price = especialPrices[idx];
       if (price && price > 0) {
         const codigos = [
-          labelCode,
-          labelCode,
-          labelCode,
-          labelCode
+          buildLabelCode(config, counterRef.value++),
+          buildLabelCode(config, counterRef.value++),
+          buildLabelCode(config, counterRef.value++),
+          buildLabelCode(config, counterRef.value++)
         ];
         const tarifa = `Tarifa A${idx + 1 > 1 ? idx + 1 : ""}`;
         const buffer = await renderStampEspecialStrip(codigos, "  -E", tarifa);
@@ -3607,10 +3669,10 @@ async function generateEspecialStrips(config, quantities, labelCode, pdfs) {
       const price = especialPrices[idx];
       if (price && price > 0) {
         const codigos = [
-          labelCode,
-          labelCode,
-          labelCode,
-          labelCode
+          buildLabelCode(config, counterRef.value++),
+          buildLabelCode(config, counterRef.value++),
+          buildLabelCode(config, counterRef.value++),
+          buildLabelCode(config, counterRef.value++)
         ];
         const tarifa = `Tarifa A${idx + 1 > 1 ? idx + 1 : ""}`;
         const buffer = await renderStampEspecialStrip(codigos, "  -E", tarifa);
@@ -3652,6 +3714,17 @@ function registerSaleHandlers() {
           typedProfile
         );
         pdfCache.set(result.sesionId, pdfResult.pdfs);
+        try {
+          const currentConfig = configRepo.get();
+          if (currentConfig) {
+            currentConfig.codigo.producto = pdfResult.nextProducto;
+            configRepo.set(currentConfig);
+            notifyConfigChanged(currentConfig);
+          }
+        } catch (persistErr) {
+          const persistError = persistErr instanceof Error ? persistErr.message : String(persistErr);
+          console.error("[Sale] Failed to persist product counter:", persistError);
+        }
         let printJobIds = [];
         try {
           const queueService = getPrintQueueService();

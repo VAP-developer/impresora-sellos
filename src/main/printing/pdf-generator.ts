@@ -20,7 +20,7 @@
 import type { AppConfig, PreciosConfig } from '../../renderer/src/types/config'
 import { renderStamp, renderStampMultiPage, renderStampEspecialStrip } from './stamp-renderer'
 import type { StampRenderParams } from './stamp-renderer'
-import { genTicket, genTicketCaja, genTicketMaster } from './ticket-renderer'
+import { genTicket, genTicketCaja, genTicketMaster, calcTicketHeightMm, calcTicketCajaHeightMm, countActiveItems } from './ticket-renderer'
 import type { TicketItem, TicketProduct } from './ticket-renderer'
 import { ImagesRepository } from '../database/repositories/images.repository'
 
@@ -57,6 +57,8 @@ export interface GeneratedPdf {
   pdfType: string
   /** Human-readable description for debugging/logging */
   description: string
+  /** Actual page height in mm (used for ticket media sizing) */
+  ticketHeightMm?: number
 }
 
 /** Result of generating all PDFs for a sale */
@@ -67,6 +69,8 @@ export interface SaleGenerationResult {
   stampCount: number
   /** Total number of ticket PDFs generated */
   ticketCount: number
+  /** The next product counter value (to persist in config for the following sale) */
+  nextProducto: number
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -110,8 +114,11 @@ function formatProducto(producto: number): string {
 /**
  * Builds the complete label code string.
  * Pattern: {modo}{mes}{pais}{año} {maquina}-{cliente4dígitos}-{producto3dígitos}
+ *
+ * @param config - App configuration
+ * @param productoId - The product/stamp counter value to encode (increments per stamp)
  */
-function buildLabelCode(config: AppConfig): string {
+function buildLabelCode(config: AppConfig, productoId: number): string {
   const { codigo } = config
   const modo = codigo.modo
   const mes = formatMes(codigo.mes)
@@ -119,7 +126,7 @@ function buildLabelCode(config: AppConfig): string {
   const annio = formatAnnio(codigo.annio)
   const maquina = codigo.maquina
   const cliente = formatCliente(codigo.cliente)
-  const producto = formatProducto(codigo.producto)
+  const producto = formatProducto(productoId)
   return `${modo}${mes}${pais}${annio} ${maquina}-${cliente}-${producto}`
 }
 
@@ -272,7 +279,8 @@ export async function generateSalePdfs(
   const repo = imagesRepo ?? new ImagesRepository()
   const pdfs: GeneratedPdf[] = []
 
-  const labelCode = buildLabelCode(config)
+  // Product counter starts from config value and increments per stamp generated
+  let productoCounter = config.codigo.producto
 
   // Get active event data for stamp text
   const eventoIndex = config.sello.elevento
@@ -314,9 +322,10 @@ export async function generateSalePdfs(
               tarifa: tLabel,
               fecha: stampFecha,
               evento: stampEvento,
-              codigo: labelCode,
+              codigo: buildLabelCode(config, productoCounter),
               backgroundImage: background
             })
+            productoCounter++
           }
         } else {
           // "Tira Tarifa A" — 4 stamps all same tariff
@@ -325,9 +334,10 @@ export async function generateSalePdfs(
               tarifa: tariff.label,
               fecha: stampFecha,
               evento: stampEvento,
-              codigo: labelCode,
+              codigo: buildLabelCode(config, productoCounter),
               backgroundImage: background
             })
+            productoCounter++
           }
         }
 
@@ -346,9 +356,10 @@ export async function generateSalePdfs(
           tarifa: tariff.label,
           fecha: stampFecha,
           evento: stampEvento,
-          codigo: labelCode,
+          codigo: buildLabelCode(config, productoCounter),
           backgroundImage: background
         })
+        productoCounter++
         pdfs.push({
           buffer: pdfBuffer,
           target: tariff.target,
@@ -361,7 +372,9 @@ export async function generateSalePdfs(
 
   // ─── Generate special strips (tiras especiales) ────────────────────────────
 
-  await generateEspecialStrips(config, quantities, labelCode, pdfs)
+  const counterRef = { value: productoCounter }
+  await generateEspecialStrips(config, quantities, counterRef, pdfs)
+  productoCounter = counterRef.value
 
   // ─── Generate ticket PDFs ──────────────────────────────────────────────────
 
@@ -373,6 +386,11 @@ export async function generateSalePdfs(
     const modoTicket = buildTicketTitle(profile, config.ticket.titulo)
     const modelo1Ticket = model1Name || 'Modelo 1'
     const modelo2Ticket = model2Name || 'Modelo 2'
+
+    // Calculate actual ticket heights based on number of active items
+    const nitems = countActiveItems(items)
+    const ticketHeightMm = calcTicketHeightMm(nitems)
+    const ticketCajaHeightMm = calcTicketCajaHeightMm(nitems)
 
     // Main ticket
     const ticketBuffer = await genTicket({
@@ -397,7 +415,8 @@ export async function generateSalePdfs(
       buffer: ticketBuffer,
       target: 'ticket',
       pdfType: 'ticket',
-      description: 'Ticket principal (Factura Simplificada)'
+      description: 'Ticket principal (Factura Simplificada)',
+      ticketHeightMm
     })
 
     // Copy ticket (ticket caja) — when configured
@@ -416,7 +435,8 @@ export async function generateSalePdfs(
         buffer: ticketCajaBuffer,
         target: 'ticket',
         pdfType: 'ticket_caja',
-        description: 'Ticket copia (caja)'
+        description: 'Ticket copia (caja)',
+        ticketHeightMm: ticketCajaHeightMm
       })
     }
 
@@ -444,8 +464,56 @@ export async function generateSalePdfs(
         buffer: ticketMasterBuffer,
         target: 'ticket',
         pdfType: 'ticket_master',
-        description: 'Ticket master set'
+        description: 'Ticket master set',
+        ticketHeightMm: ticketCajaHeightMm
       })
+    }
+
+    // ─── Individual ticket per tira (strip) ─────────────────────────────────
+    // Legacy behavior: for each tira unit, generate an individual ticket showing
+    // only that single tira item (cantidad=1). This only applies when the machine
+    // mode is NOT "MD" or "FI".
+    const maquinaPrefix = config.codigo.maquina.substring(0, 2).toUpperCase()
+    if (maquinaPrefix !== 'MD' && maquinaPrefix !== 'FI') {
+      for (let idx = 0; idx < items.length; idx++) {
+        if (items[idx].cantidad > 0 && productos[idx].modo === 'T') {
+          // Generate one ticket per tira unit
+          for (let t = 0; t < items[idx].cantidad; t++) {
+            // Build items array with only this tira item set to cantidad=1
+            const singleTiraItems: TicketItem[] = items.map((item, i) => ({
+              idProducto: item.idProducto,
+              cantidad: i === idx ? 1 : 0
+            }))
+
+            const singleTiraHeightMm = calcTicketHeightMm(1)
+            const singleTiraBuffer = await genTicket({
+              fechaTicket,
+              modoTicket,
+              modelo1Ticket,
+              modelo2Ticket,
+              items: singleTiraItems,
+              idCliente: config.codigo.cliente,
+              nombreMaquina: config.codigo.maquina,
+              productos,
+              feria: config.ticket.feria,
+              lugar: config.ticket.lugar,
+              empresa: config.ticket.empresa,
+              cif: config.ticket.cif,
+              cp: config.ticket.cp,
+              l1: config.ticket.l1,
+              l2: config.ticket.l2,
+              l3: config.ticket.l3
+            })
+            pdfs.push({
+              buffer: singleTiraBuffer,
+              target: 'ticket',
+              pdfType: 'ticket_tira',
+              description: `Ticket individual tira ${productos[idx].nombre_ticket} #${t + 1}`,
+              ticketHeightMm: singleTiraHeightMm
+            })
+          }
+        }
+      }
     }
   }
 
@@ -455,10 +523,10 @@ export async function generateSalePdfs(
     (p) => p.pdfType === 'stamp_simple' || p.pdfType === 'stamp_tira' || p.pdfType === 'stamp_especial'
   ).length
   const ticketCount = pdfs.filter(
-    (p) => p.pdfType === 'ticket' || p.pdfType === 'ticket_caja' || p.pdfType === 'ticket_master'
+    (p) => p.pdfType === 'ticket' || p.pdfType === 'ticket_caja' || p.pdfType === 'ticket_master' || p.pdfType === 'ticket_tira'
   ).length
 
-  return { pdfs, stampCount, ticketCount }
+  return { pdfs, stampCount, ticketCount, nextProducto: productoCounter }
 }
 
 // ─── Special strips generation ────────────────────────────────────────────────
@@ -474,7 +542,7 @@ export async function generateSalePdfs(
 async function generateEspecialStrips(
   config: AppConfig,
   quantities: SaleQuantities,
-  labelCode: string,
+  counterRef: { value: number },
   pdfs: GeneratedPdf[]
 ): Promise<void> {
   const { ticket } = config
@@ -490,10 +558,10 @@ async function generateEspecialStrips(
       const price = especialPrices[idx]
       if (price && price > 0) {
         const codigos: [string, string, string, string] = [
-          labelCode,
-          labelCode,
-          labelCode,
-          labelCode
+          buildLabelCode(config, counterRef.value++),
+          buildLabelCode(config, counterRef.value++),
+          buildLabelCode(config, counterRef.value++),
+          buildLabelCode(config, counterRef.value++)
         ]
         const tarifa = `Tarifa A${idx + 1 > 1 ? idx + 1 : ''}`
         const buffer = await renderStampEspecialStrip(codigos, '  -E', tarifa)
@@ -514,10 +582,10 @@ async function generateEspecialStrips(
       const price = especialPrices[idx]
       if (price && price > 0) {
         const codigos: [string, string, string, string] = [
-          labelCode,
-          labelCode,
-          labelCode,
-          labelCode
+          buildLabelCode(config, counterRef.value++),
+          buildLabelCode(config, counterRef.value++),
+          buildLabelCode(config, counterRef.value++),
+          buildLabelCode(config, counterRef.value++)
         ]
         const tarifa = `Tarifa A${idx + 1 > 1 ? idx + 1 : ''}`
         const buffer = await renderStampEspecialStrip(codigos, '  -E', tarifa)

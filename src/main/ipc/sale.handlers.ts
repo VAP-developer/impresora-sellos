@@ -104,6 +104,20 @@ export function registerSaleHandlers(): void {
         // Store PDFs in cache for backward compatibility
         pdfCache.set(result.sesionId, pdfResult.pdfs)
 
+        // Persist the updated product counter so the next sale continues the sequence
+        try {
+          const currentConfig = configRepo.get()
+          if (currentConfig) {
+            currentConfig.codigo.producto = pdfResult.nextProducto
+            configRepo.set(currentConfig)
+            notifyConfigChanged(currentConfig)
+          }
+        } catch (persistErr) {
+          const persistError =
+            persistErr instanceof Error ? persistErr.message : String(persistErr)
+          console.error('[Sale] Failed to persist product counter:', persistError)
+        }
+
         // Enqueue PDFs in the print queue for background processing (Req 18.2)
         let printJobIds: number[] = []
         try {
