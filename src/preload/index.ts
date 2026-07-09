@@ -80,11 +80,17 @@ export interface PreciosConfig {
   tarifaT4?: number
 }
 
+export interface ImagenesConfig {
+  printSello: boolean
+  activeFair: { year: string; fairName: string } | null
+}
+
 export interface AppConfig {
   ticket: TicketConfig
   codigo: CodigoConfig
   sello: SelloConfig
   precios: PreciosConfig
+  imagenes?: ImagenesConfig
 }
 
 // === Order Types ===
@@ -215,9 +221,19 @@ export type CancelSaleOutcome = CancelSaleResult | CancelSaleError
 
 // === ElectronAPI Interface ===
 
+// === Sale Image Flags ===
+
+/** Flags passed from frontend to control image layer composition during PDF generation */
+export interface SaleImageFlags {
+  printFondo: boolean
+  printSello: boolean
+}
+
+// === ElectronAPI Interface ===
+
 export interface ElectronAPI {
   sale: {
-    execute(config: AppConfig, quantities: KioskoQuantities, profile: string): Promise<SaleOutcome>
+    execute(config: AppConfig, quantities: KioskoQuantities, profile: string, imageFlags?: SaleImageFlags): Promise<SaleOutcome>
     cancel(input: CancelSaleInput): Promise<CancelSaleOutcome>
   }
   config: {
@@ -235,6 +251,8 @@ export interface ElectronAPI {
     updateRollos(sellos1: number, sellos2: number, tickets: number): Promise<void>
     updateRollosRevert(sellos1: number, sellos2: number, tickets: number): Promise<void>
     initConfig(): Promise<void>
+    getImagenes(): Promise<ImagenesConfig>
+    updateImagenes(data: ImagenesConfig): Promise<void>
     onChange(callback: (config: AppConfig) => void): () => void
   }
   orders: {
@@ -245,6 +263,18 @@ export interface ElectronAPI {
     upload(name: string, dataUri: string, type: string, size: number): Promise<void>
     remove(name: string): Promise<void>
     getByName(name: string): Promise<{ name: string; url: string } | null>
+    getFairList(): Promise<Array<{ year: string; fairName: string }>>
+    getByFair(
+      year: string,
+      fairName: string
+    ): Promise<{ fondo: string | null; sello: string | null }>
+    getSyncStatus(): Promise<{
+      inserted: number
+      updated: number
+      deleted: number
+      unchanged: number
+      errors: Array<{ path: string; error: string }>
+    } | null>
   }
   printer: {
     getStatus(): Promise<PrinterInfo[]>
@@ -270,8 +300,8 @@ export interface ElectronAPI {
 
 const api: ElectronAPI = {
   sale: {
-    execute: (config, quantities, profile) =>
-      ipcRenderer.invoke('sale:execute', config, quantities, profile),
+    execute: (config, quantities, profile, imageFlags) =>
+      ipcRenderer.invoke('sale:execute', config, quantities, profile, imageFlags),
     cancel: (input) => ipcRenderer.invoke('sale:cancel', input)
   },
   config: {
@@ -285,6 +315,8 @@ const api: ElectronAPI = {
     updateRollosRevert: (sellos1, sellos2, tickets) =>
       ipcRenderer.invoke('config:updateRollosRevert', sellos1, sellos2, tickets),
     initConfig: () => ipcRenderer.invoke('config:initConfig'),
+    getImagenes: () => ipcRenderer.invoke('config:getImagenes'),
+    updateImagenes: (data) => ipcRenderer.invoke('config:updateImagenes', data),
     onChange: (callback) => {
       const handler = (_event: Electron.IpcRendererEvent, config: AppConfig): void => {
         callback(config)
@@ -303,7 +335,10 @@ const api: ElectronAPI = {
     upload: (name, dataUri, type, size) =>
       ipcRenderer.invoke('images:upload', name, dataUri, type, size),
     remove: (name) => ipcRenderer.invoke('images:remove', name),
-    getByName: (name) => ipcRenderer.invoke('images:getByName', name)
+    getByName: (name) => ipcRenderer.invoke('images:getByName', name),
+    getFairList: () => ipcRenderer.invoke('images:getFairList'),
+    getByFair: (year, fairName) => ipcRenderer.invoke('images:getByFair', year, fairName),
+    getSyncStatus: () => ipcRenderer.invoke('images:getSyncStatus')
   },
   printer: {
     getStatus: () => ipcRenderer.invoke('printer:getStatus'),

@@ -13,6 +13,8 @@ import { ConfigRepository } from '../database/repositories/config.repository'
  * - config:updateRollos
  * - config:updateRollosRevert
  * - config:initConfig
+ * - config:getImagenes
+ * - config:updateImagenes
  */
 export function registerConfigHandlers(): void {
   const repo = new ConfigRepository()
@@ -54,5 +56,13 @@ export function registerConfigHandlers(): void {
   handleIpc('config:initConfig', () => {
     repo.initConfig()
     notifyConfigChanged(repo.get())
+  })
+
+  handleIpc('config:getImagenes', () => {
+    return repo.getImagenes()
+  })
+
+  handleIpc('config:updateImagenes', (data: unknown) => {
+    repo.updateImagenes(data as Parameters<ConfigRepository['updateImagenes']>[0])
   })
 }

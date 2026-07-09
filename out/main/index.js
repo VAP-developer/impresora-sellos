@@ -287,6 +287,26 @@ class ConfigRepository {
     }
   }
   /**
+   * Retrieves the imagenes section of the config.
+   * Returns defaults ({ printSello: false, activeFair: null }) if not yet set.
+   */
+  getImagenes() {
+    const config = this.get();
+    return config?.imagenes ?? { printSello: false, activeFair: null };
+  }
+  /**
+   * Updates only the imagenes section of the config.
+   * Creates the section if it doesn't exist yet.
+   */
+  updateImagenes(imagenes) {
+    const config = this.get();
+    if (!config) {
+      throw new Error("Config not initialized. Call initConfig() first.");
+    }
+    config.imagenes = imagenes;
+    this.set(config);
+  }
+  /**
    * Resets the configuration to factory defaults.
    * Deletes any existing config and inserts the default.
    * Use this for a full reset (destructive operation).
@@ -328,6 +348,12 @@ function registerConfigHandlers() {
   handleIpc("config:initConfig", () => {
     repo.initConfig();
     notifyConfigChanged(repo.get());
+  });
+  handleIpc("config:getImagenes", () => {
+    return repo.getImagenes();
+  });
+  handleIpc("config:updateImagenes", (data) => {
+    repo.updateImagenes(data);
   });
 }
 class OrdersRepository {
@@ -587,8 +613,277 @@ class ImagesRepository {
     };
   }
 }
+class ImageSyncRepository {
+  db;
+  constructor(db2) {
+    this.db = db2 ?? getDatabase();
+  }
+  /**
+   * Returns all sync records.
+   */
+  getAll() {
+    const rows = this.db.prepare("SELECT * FROM image_sync ORDER BY year DESC, fair_name ASC").all();
+    return rows.map(this.rowToRecord);
+  }
+  /**
+   * Retrieves a sync record by its file path.
+   * Returns null if no record exists for that path.
+   */
+  getByFilePath(filePath) {
+    const row = this.db.prepare("SELECT * FROM image_sync WHERE file_path = ?").get(filePath);
+    if (!row) {
+      return null;
+    }
+    return this.rowToRecord(row);
+  }
+  /**
+   * Inserts or updates a sync record.
+   * Uses the UNIQUE(year, fair_name, image_type) constraint for conflict resolution.
+   */
+  upsert(record) {
+    this.db.prepare(
+      `INSERT INTO image_sync (year, fair_name, image_type, file_path, mtime, image_name, synced_at)
+         VALUES (@year, @fairName, @imageType, @filePath, @mtime, @imageName, datetime('now'))
+         ON CONFLICT(year, fair_name, image_type) DO UPDATE SET
+           file_path = @filePath,
+           mtime = @mtime,
+           image_name = @imageName,
+           synced_at = datetime('now')`
+    ).run({
+      year: record.year,
+      fairName: record.fairName,
+      imageType: record.imageType,
+      filePath: record.filePath,
+      mtime: record.mtime,
+      imageName: record.imageName
+    });
+  }
+  /**
+   * Deletes sync records whose file paths are NOT in the provided list.
+   * Used to clean up orphan records after a sync scan.
+   *
+   * @param validPaths - Array of file paths that still exist on disk
+   * @returns Number of records deleted
+   */
+  deleteOrphans(validPaths) {
+    if (validPaths.length === 0) {
+      const result2 = this.db.prepare("DELETE FROM image_sync").run();
+      return result2.changes;
+    }
+    const placeholders = validPaths.map(() => "?").join(", ");
+    const result = this.db.prepare(`DELETE FROM image_sync WHERE file_path NOT IN (${placeholders})`).run(...validPaths);
+    return result.changes;
+  }
+  /**
+   * Returns a list of unique fairs (year + name) from the sync records.
+   * Ordered by year descending, then fair name ascending.
+   */
+  getFairList() {
+    const rows = this.db.prepare(
+      `SELECT DISTINCT year, fair_name
+         FROM image_sync
+         ORDER BY year DESC, fair_name ASC`
+    ).all();
+    return rows.map((row) => ({
+      year: row.year,
+      fairName: row.fair_name
+    }));
+  }
+  /**
+   * Returns all sync records for a specific fair.
+   */
+  getByFair(year, fairName) {
+    const rows = this.db.prepare("SELECT * FROM image_sync WHERE year = ? AND fair_name = ?").all(year, fairName);
+    return rows.map(this.rowToRecord);
+  }
+  /**
+   * Converts a raw database row (snake_case) to an ImageSyncRecord (camelCase).
+   */
+  rowToRecord(row) {
+    return {
+      id: row.id,
+      year: row.year,
+      fairName: row.fair_name,
+      imageType: row.image_type,
+      filePath: row.file_path,
+      mtime: row.mtime,
+      imageName: row.image_name,
+      syncedAt: row.synced_at
+    };
+  }
+}
+const SUPPORTED_EXTENSIONS = /* @__PURE__ */ new Set([".jpg", ".jpeg", ".png"]);
+function classifyImageFile(fileName) {
+  const ext = path.extname(fileName).toLowerCase();
+  if (!SUPPORTED_EXTENSIONS.has(ext)) {
+    return null;
+  }
+  const baseName = fileName.slice(0, fileName.length - ext.length);
+  if (baseName.endsWith("-fondo")) {
+    return "fondo";
+  }
+  if (baseName.endsWith("-sello")) {
+    return "sello";
+  }
+  return null;
+}
+function buildImageName(year, fairName, imageType) {
+  return `${year}/${fairName}-${imageType}`;
+}
+function fileToDataUri(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  const mimeType = ext === ".png" ? "image/png" : "image/jpeg";
+  const buffer = fs.readFileSync(filePath);
+  const base64 = buffer.toString("base64");
+  return `data:${mimeType};base64,${base64}`;
+}
+function scanFairFolders(basePath) {
+  const results = [];
+  if (!fs.existsSync(basePath)) {
+    return results;
+  }
+  let yearEntries;
+  try {
+    yearEntries = fs.readdirSync(basePath);
+  } catch {
+    return results;
+  }
+  for (const yearEntry of yearEntries) {
+    const yearPath = path.join(basePath, yearEntry);
+    try {
+      if (!fs.statSync(yearPath).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    let fairEntries;
+    try {
+      fairEntries = fs.readdirSync(yearPath);
+    } catch {
+      continue;
+    }
+    for (const fairEntry of fairEntries) {
+      const fairPath = path.join(yearPath, fairEntry);
+      try {
+        if (!fs.statSync(fairPath).isDirectory()) continue;
+      } catch {
+        continue;
+      }
+      let fileEntries;
+      try {
+        fileEntries = fs.readdirSync(fairPath);
+      } catch {
+        continue;
+      }
+      for (const fileEntry of fileEntries) {
+        const imageType = classifyImageFile(fileEntry);
+        if (!imageType) continue;
+        const filePath = path.join(fairPath, fileEntry);
+        try {
+          const stat = fs.statSync(filePath);
+          if (!stat.isFile()) continue;
+          results.push({
+            year: yearEntry,
+            fairName: fairEntry,
+            imageType,
+            filePath,
+            fileName: fileEntry,
+            mtime: stat.mtimeMs
+          });
+        } catch {
+          continue;
+        }
+      }
+    }
+  }
+  return results;
+}
+function syncImages(basePath) {
+  const syncRepo = new ImageSyncRepository();
+  const imagesRepo = new ImagesRepository();
+  const result = {
+    inserted: 0,
+    updated: 0,
+    deleted: 0,
+    unchanged: 0,
+    errors: []
+  };
+  const scannedFiles = scanFairFolders(basePath);
+  const existingRecords = syncRepo.getAll();
+  const recordsByPath = new Map(existingRecords.map((r) => [r.filePath, r]));
+  const diskPaths = /* @__PURE__ */ new Set();
+  for (const file of scannedFiles) {
+    diskPaths.add(file.filePath);
+    const existingRecord = recordsByPath.get(file.filePath);
+    const imageName = buildImageName(file.year, file.fairName, file.imageType);
+    if (!existingRecord) {
+      try {
+        const dataUri = fileToDataUri(file.filePath);
+        const ext = path.extname(file.fileName).toLowerCase();
+        const mimeType = ext === ".png" ? "image/png" : "image/jpeg";
+        const stat = fs.statSync(file.filePath);
+        imagesRepo.upload(imageName, dataUri, mimeType, stat.size);
+        syncRepo.upsert({
+          year: file.year,
+          fairName: file.fairName,
+          imageType: file.imageType,
+          filePath: file.filePath,
+          mtime: file.mtime,
+          imageName
+        });
+        result.inserted++;
+      } catch (err) {
+        result.errors.push({
+          path: file.filePath,
+          error: err instanceof Error ? err.message : String(err)
+        });
+      }
+    } else if (file.mtime > existingRecord.mtime) {
+      try {
+        const dataUri = fileToDataUri(file.filePath);
+        const ext = path.extname(file.fileName).toLowerCase();
+        const mimeType = ext === ".png" ? "image/png" : "image/jpeg";
+        const stat = fs.statSync(file.filePath);
+        imagesRepo.upload(imageName, dataUri, mimeType, stat.size);
+        syncRepo.upsert({
+          year: file.year,
+          fairName: file.fairName,
+          imageType: file.imageType,
+          filePath: file.filePath,
+          mtime: file.mtime,
+          imageName
+        });
+        result.updated++;
+      } catch (err) {
+        result.errors.push({
+          path: file.filePath,
+          error: err instanceof Error ? err.message : String(err)
+        });
+      }
+    } else {
+      result.unchanged++;
+    }
+  }
+  const validPaths = Array.from(diskPaths);
+  const orphanedRecords = existingRecords.filter((r) => !diskPaths.has(r.filePath));
+  for (const orphan of orphanedRecords) {
+    try {
+      imagesRepo.remove(orphan.imageName);
+    } catch {
+    }
+  }
+  if (orphanedRecords.length > 0) {
+    const deletedCount = syncRepo.deleteOrphans(validPaths);
+    result.deleted = deletedCount;
+  }
+  return result;
+}
+let lastSyncResult = null;
+function setLastSyncResult(result) {
+  lastSyncResult = result;
+}
 function registerImagesHandlers() {
   const repo = new ImagesRepository();
+  const syncRepo = new ImageSyncRepository();
   handleIpc("images:upload", (name, dataUri, type, size) => {
     repo.upload(name, dataUri, type, size);
   });
@@ -597,6 +892,24 @@ function registerImagesHandlers() {
   });
   handleIpc("images:getByName", (name) => {
     return repo.getByName(name);
+  });
+  handleIpc("images:getFairList", () => {
+    return syncRepo.getFairList();
+  });
+  handleIpc("images:getByFair", (year, fairName) => {
+    const y = year;
+    const fn = fairName;
+    const fondoName = buildImageName(y, fn, "fondo");
+    const selloName = buildImageName(y, fn, "sello");
+    const fondoRecord = repo.getByName(fondoName);
+    const selloRecord = repo.getByName(selloName);
+    return {
+      fondo: fondoRecord?.url ?? null,
+      sello: selloRecord?.url ?? null
+    };
+  });
+  handleIpc("images:getSyncStatus", () => {
+    return lastSyncResult;
   });
 }
 const execAsync$1 = util.promisify(child_process.exec);
@@ -2898,6 +3211,7 @@ async function renderStamp(params) {
   const result = collectPdf$1(doc);
   registerFonts$1(doc);
   drawBackground(doc, params.backgroundImage);
+  drawBackground(doc, params.overlayImage);
   drawTextLeft(doc, params.tarifa, FONTS.regular, 12, 2, 19.5);
   drawTextRight(doc, params.evento, FONTS.regular, 9, 53, 19);
   drawTextRight(doc, params.fecha, FONTS.regular, 9, 53, 15);
@@ -2921,6 +3235,7 @@ async function renderStampMultiPage(stamps) {
       doc.addPage({ size: [STAMP_WIDTH, STAMP_HEIGHT], margin: 0 });
     }
     drawBackground(doc, stamp.backgroundImage);
+    drawBackground(doc, stamp.overlayImage);
     drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12, 2, 19.5);
     drawTextRight(doc, stamp.evento, FONTS.regular, 9, 53, 19);
     drawTextRight(doc, stamp.fecha, FONTS.regular, 9, 53, 15);
@@ -3037,16 +3352,29 @@ function collectPdf(doc) {
   });
 }
 function calcTicketHeightMm(numItems) {
-  const HEADER_HEIGHT_MM = 62;
-  const FOOTER_HEIGHT_MM = 30;
-  const ITEM_HEIGHT_MM = 3;
-  return HEADER_HEIGHT_MM + numItems * ITEM_HEIGHT_MM + FOOTER_HEIGHT_MM;
+  return TICKET_MARGIN_TOP + TICKET_LOGO_HEIGHT + TICKET_HEADER_HEIGHT + TICKET_COLUMNS_HEIGHT + numItems * TICKET_ITEM_ROW_HEIGHT + TICKET_TOTAL_HEIGHT + TICKET_FOOTER_HEIGHT + TICKET_MARGIN_BOTTOM;
 }
+const TICKET_MARGIN_TOP = 5;
+const TICKET_LOGO_HEIGHT = 14;
+const TICKET_HEADER_HEIGHT = 32;
+const TICKET_COLUMNS_HEIGHT = 5;
+const TICKET_ITEM_ROW_HEIGHT = 3.5;
+const TICKET_TOTAL_HEIGHT = 8;
+const TICKET_FOOTER_HEIGHT = 20;
+const TICKET_MARGIN_BOTTOM = 5;
 function calcTicketCajaHeightMm(numItems) {
-  const HEADER_HEIGHT_MM = 72;
-  const FOOTER_HEIGHT_MM = 22;
-  const ITEM_HEIGHT_MM = 3.5;
-  return HEADER_HEIGHT_MM + numItems * ITEM_HEIGHT_MM + FOOTER_HEIGHT_MM;
+  return 5 + 14 + 38 + 5 + numItems * 3.5 + 8 + 16 + 5;
+}
+const MASTER_MARGIN_TOP = 5;
+const MASTER_LOGO_HEIGHT = 14;
+const MASTER_HEADER_HEIGHT = 36;
+const MASTER_COLUMNS_HEIGHT = 5;
+const MASTER_ITEM_ROW_HEIGHT = 3.5;
+const MASTER_TOTAL_HEIGHT = 8;
+const MASTER_FOOTER_HEIGHT = 20;
+const MASTER_MARGIN_BOTTOM = 5;
+function calcTicketMasterHeightMm(numItems) {
+  return MASTER_MARGIN_TOP + MASTER_LOGO_HEIGHT + MASTER_HEADER_HEIGHT + MASTER_COLUMNS_HEIGHT + numItems * MASTER_ITEM_ROW_HEIGHT + MASTER_TOTAL_HEIGHT + MASTER_FOOTER_HEIGHT + MASTER_MARGIN_BOTTOM;
 }
 async function genTicket(params) {
   const {
@@ -3068,10 +3396,7 @@ async function genTicket(params) {
     l3
   } = params;
   const nitems = countActiveItems(items);
-  const HEADER_HEIGHT_MM = 62;
-  const FOOTER_HEIGHT_MM = 30;
-  const ITEM_HEIGHT_MM = 3;
-  const pageHeightMm = HEADER_HEIGHT_MM + nitems * ITEM_HEIGHT_MM + FOOTER_HEIGHT_MM;
+  const pageHeightMm = calcTicketHeightMm(nitems);
   const pageHeight = pageHeightMm * MM_TO_PT;
   const doc = new PDFDocument({
     size: [TICKET_WIDTH, pageHeight],
@@ -3081,11 +3406,10 @@ async function genTicket(params) {
   const result = collectPdf(doc);
   registerFonts(doc);
   const pageWidth = TICKET_WIDTH;
-  let y = 2;
+  let y = TICKET_MARGIN_TOP;
   drawImageCentered(doc, "image2.jpg", y * MM_TO_PT, 30 * MM_TO_PT, pageWidth);
-  y += 12;
-  const bgY = y + 2;
-  drawImage(doc, "fondoticketori.png", 5 * MM_TO_PT, bgY * MM_TO_PT, 20 * MM_TO_PT);
+  y += TICKET_LOGO_HEIGHT;
+  drawImage(doc, "fondoticketori.png", 5 * MM_TO_PT, y * MM_TO_PT, 20 * MM_TO_PT);
   drawCentered(doc, feria, FONTS.bold, 12, y * MM_TO_PT, pageWidth);
   y += 5;
   drawCentered(doc, lugar, FONTS.bold, 10, y * MM_TO_PT, pageWidth);
@@ -3101,7 +3425,7 @@ async function genTicket(params) {
   drawCentered(doc, fechaTicket, FONTS.condensed, 8, y * MM_TO_PT, pageWidth);
   y += 4;
   drawLeft(doc, modoTicket, FONTS.bold, 6.5, 5 * MM_TO_PT, y * MM_TO_PT);
-  y += 4;
+  y += 6;
   drawLeft(doc, "Producto", FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT);
   drawLeft(doc, "Cant.", FONTS.condensed, 8, 45 * MM_TO_PT, y * MM_TO_PT);
   drawLeft(doc, "Precio", FONTS.condensed, 8, 55 * MM_TO_PT, y * MM_TO_PT);
@@ -3126,10 +3450,10 @@ async function genTicket(params) {
       drawRight(doc, quantity, FONTS.condensed, 8, 50 * MM_TO_PT, y * MM_TO_PT);
       drawRight(doc, price, FONTS.condensed, 8, 62 * MM_TO_PT, y * MM_TO_PT);
       drawRight(doc, total, FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT);
-      y += ITEM_HEIGHT_MM;
+      y += TICKET_ITEM_ROW_HEIGHT;
     }
   }
-  y += 2;
+  y += 1;
   drawLine(doc, 30 * MM_TO_PT, y * MM_TO_PT, pageWidth - 30 * MM_TO_PT - 5 * MM_TO_PT);
   y += 3;
   drawLeft(doc, "Total:", FONTS.condensed, 8, 35 * MM_TO_PT, y * MM_TO_PT);
@@ -3141,7 +3465,7 @@ async function genTicket(params) {
   const clienteStr = formatClientId(idCliente);
   const sessionText = `${nombreMaquina} - Sesión: ${clienteStr}`;
   drawCentered(doc, sessionText, FONTS.condensed, 9, y * MM_TO_PT, pageWidth);
-  y += 5;
+  y += 4;
   drawCentered(doc, l1, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
   y += 4;
   drawCentered(doc, l2, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
@@ -3341,6 +3665,35 @@ async function genTicketMaster(params) {
   doc.end();
   return result;
 }
+function resolveImageLayers(options) {
+  const notifications = [];
+  let backgroundImage = null;
+  let overlayImage = null;
+  const { printFondo, printSello, fondoImage, selloImage } = options;
+  if (printSello && !selloImage) {
+    notifications.push({
+      type: "missing_image",
+      imageType: "sello",
+      message: "La imagen del sello está activada pero no fue encontrada para la feria activa"
+    });
+  }
+  if (printFondo && !fondoImage) {
+    notifications.push({
+      type: "missing_image",
+      imageType: "fondo",
+      message: "La imagen de fondo está activada pero no fue encontrada para la feria activa"
+    });
+  }
+  if (printSello && printFondo) {
+    backgroundImage = fondoImage;
+    overlayImage = selloImage;
+  } else if (printSello) {
+    backgroundImage = selloImage;
+  } else if (printFondo) {
+    backgroundImage = fondoImage;
+  }
+  return { backgroundImage, overlayImage, notifications };
+}
 function formatMes(mesCfg) {
   const month = mesCfg === 0 ? (/* @__PURE__ */ new Date()).getMonth() + 1 : mesCfg;
   if (month === 10) return "O";
@@ -3441,9 +3794,10 @@ const TARIFF_DEFS = [
   { qtyKey: "tarifaAT2", label: "Tarifa A", isTira: true, model: 2, target: "printer2" },
   { qtyKey: "tarifa4T2", label: "Tira 4 Tarifas", isTira: true, model: 2, target: "printer2" }
 ];
-async function generateSalePdfs(config, quantities, profile, imagesRepo) {
+async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLayerOptions) {
   const repo = new ImagesRepository();
   const pdfs = [];
+  const notifications = [];
   let productoCounter = 1;
   const eventoIndex = config.sello.elevento;
   const evento = config.sello.eventos?.[eventoIndex];
@@ -3451,13 +3805,27 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo) {
   const stampEvento = evento?.localidad ?? "";
   const model1Name = evento?.motivoi ?? config.sello.modelo1 ?? "";
   const model2Name = evento?.motivod ?? config.sello.modelo2 ?? "";
-  const bg1 = getModelBackground(model1Name, repo);
-  const bg2 = getModelBackground(model2Name, repo);
+  let bg1 = null;
+  let bg2 = null;
+  let overlay1 = null;
+  let overlay2 = null;
+  if (imageLayerOptions) {
+    const layerResult = resolveImageLayers(imageLayerOptions);
+    bg1 = layerResult.backgroundImage;
+    bg2 = layerResult.backgroundImage;
+    overlay1 = layerResult.overlayImage;
+    overlay2 = layerResult.overlayImage;
+    notifications.push(...layerResult.notifications);
+  } else {
+    bg1 = getModelBackground(model1Name, repo);
+    bg2 = getModelBackground(model2Name, repo);
+  }
   const usesBlankBackground = config.codigo.modo === "MD" || config.codigo.modo === "FI";
   for (const tariff of TARIFF_DEFS) {
     const qty = quantities[tariff.qtyKey];
     if (qty <= 0) continue;
     const background = usesBlankBackground ? null : tariff.model === 1 ? bg1 : bg2;
+    const overlay = usesBlankBackground ? null : tariff.model === 1 ? overlay1 : overlay2;
     if (tariff.isTira) {
       for (let i = 0; i < qty; i++) {
         const stamps = [];
@@ -3469,7 +3837,8 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo) {
               fecha: stampFecha,
               evento: stampEvento,
               codigo: buildLabelCode(config, productoCounter),
-              backgroundImage: background
+              backgroundImage: background,
+              overlayImage: overlay
             });
             productoCounter++;
           }
@@ -3480,7 +3849,8 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo) {
               fecha: stampFecha,
               evento: stampEvento,
               codigo: buildLabelCode(config, productoCounter),
-              backgroundImage: background
+              backgroundImage: background,
+              overlayImage: overlay
             });
             productoCounter++;
           }
@@ -3500,7 +3870,8 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo) {
           fecha: stampFecha,
           evento: stampEvento,
           codigo: buildLabelCode(config, productoCounter),
-          backgroundImage: background
+          backgroundImage: background,
+          overlayImage: overlay
         });
         productoCounter++;
         pdfs.push({
@@ -3525,6 +3896,7 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo) {
     const nitems = countActiveItems(items);
     const ticketHeightMm = calcTicketHeightMm(nitems);
     const ticketCajaHeightMm = calcTicketCajaHeightMm(nitems);
+    const ticketMasterHeightMm = calcTicketMasterHeightMm(nitems);
     const ticketBuffer = await genTicket({
       fechaTicket,
       modoTicket,
@@ -3592,7 +3964,7 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo) {
         target: "ticket",
         pdfType: "ticket_master",
         description: "Ticket master set",
-        ticketHeightMm: ticketCajaHeightMm
+        ticketHeightMm: ticketMasterHeightMm
       });
     }
     const maquinaPrefix = config.codigo.maquina.substring(0, 2).toUpperCase();
@@ -3641,7 +4013,7 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo) {
   const ticketCount = pdfs.filter(
     (p) => p.pdfType === "ticket" || p.pdfType === "ticket_caja" || p.pdfType === "ticket_master" || p.pdfType === "ticket_tira"
   ).length;
-  return { pdfs, stampCount, ticketCount, nextProducto: productoCounter };
+  return { pdfs, stampCount, ticketCount, nextProducto: productoCounter, notifications };
 }
 async function generateEspecialStrips(config, quantities, counterRef, pdfs) {
   const { ticket } = config;
@@ -3697,10 +4069,11 @@ function registerSaleHandlers() {
   const configRepo = new ConfigRepository();
   handleIpc(
     "sale:execute",
-    async (config, quantities, profile) => {
+    async (config, quantities, profile, imageFlags) => {
       const typedConfig = config;
       const typedQuantities = quantities;
       const typedProfile = profile;
+      const typedImageFlags = imageFlags;
       const result = executeSale(typedConfig, typedQuantities, typedProfile);
       if (!result.success) {
         return result;
@@ -3713,11 +4086,35 @@ function registerSaleHandlers() {
           cliente: result.sesionId
         }
       };
+      let imageLayerOptions;
+      if (typedImageFlags) {
+        const imagesRepo = new ImagesRepository();
+        const imagenesConfig = configRepo.getImagenes();
+        let fondoImage = null;
+        let selloImage = null;
+        if (imagenesConfig.activeFair) {
+          const { year, fairName } = imagenesConfig.activeFair;
+          const fondoName = buildImageName(year, fairName, "fondo");
+          const selloName = buildImageName(year, fairName, "sello");
+          const fondoRecord = imagesRepo.getByName(fondoName);
+          const selloRecord = imagesRepo.getByName(selloName);
+          fondoImage = fondoRecord?.url ?? null;
+          selloImage = selloRecord?.url ?? null;
+        }
+        imageLayerOptions = {
+          printFondo: typedImageFlags.printFondo,
+          printSello: typedImageFlags.printSello,
+          fondoImage,
+          selloImage
+        };
+      }
       try {
         const pdfResult = await generateSalePdfs(
           updatedConfig,
           typedQuantities,
-          typedProfile
+          typedProfile,
+          void 0,
+          imageLayerOptions
         );
         pdfCache.set(result.sesionId, pdfResult.pdfs);
         let printJobIds = [];
@@ -3841,6 +4238,26 @@ electron.app.whenReady().then(() => {
   initDatabase();
   const configRepo = new ConfigRepository();
   configRepo.initConfig();
+  try {
+    const basePath = path.join(
+      electron.app.isPackaged ? path.dirname(electron.app.getPath("exe")) : electron.app.getAppPath(),
+      "bbdd-ferias"
+    );
+    console.log("[sync-images] Starting image synchronization from:", basePath);
+    const syncResult = syncImages(basePath);
+    setLastSyncResult(syncResult);
+    console.log(
+      `[sync-images] Sync complete — inserted: ${syncResult.inserted}, updated: ${syncResult.updated}, deleted: ${syncResult.deleted}, unchanged: ${syncResult.unchanged}`
+    );
+    if (syncResult.errors.length > 0) {
+      console.warn(`[sync-images] Sync finished with ${syncResult.errors.length} error(s):`);
+      for (const err of syncResult.errors) {
+        console.warn(`  - ${err.path}: ${err.error}`);
+      }
+    }
+  } catch (err) {
+    console.error("[sync-images] Image synchronization failed (non-blocking):", err);
+  }
   registerAllHandlers();
   initServices();
   electron.app.on("browser-window-created", (_, window) => {

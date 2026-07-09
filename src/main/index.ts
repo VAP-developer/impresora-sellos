@@ -1,10 +1,12 @@
 import { app, shell, BrowserWindow } from 'electron'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { initDatabase, closeDatabase } from './database/connection'
 import { ConfigRepository } from './database/repositories/config.repository'
 import { registerAllHandlers } from './ipc/handlers'
 import { initServices, shutdownServices } from './services'
+import { syncImages } from './images/sync-images'
+import { setLastSyncResult } from './ipc/images.handlers'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -43,6 +45,28 @@ app.whenReady().then(() => {
   // Seed default configuration if not present
   const configRepo = new ConfigRepository()
   configRepo.initConfig()
+
+  // Synchronize fair images from bbdd-ferias/ folder into SQLite
+  try {
+    const basePath = join(
+      app.isPackaged ? dirname(app.getPath('exe')) : app.getAppPath(),
+      'bbdd-ferias'
+    )
+    console.log('[sync-images] Starting image synchronization from:', basePath)
+    const syncResult = syncImages(basePath)
+    setLastSyncResult(syncResult)
+    console.log(
+      `[sync-images] Sync complete — inserted: ${syncResult.inserted}, updated: ${syncResult.updated}, deleted: ${syncResult.deleted}, unchanged: ${syncResult.unchanged}`
+    )
+    if (syncResult.errors.length > 0) {
+      console.warn(`[sync-images] Sync finished with ${syncResult.errors.length} error(s):`)
+      for (const err of syncResult.errors) {
+        console.warn(`  - ${err.path}: ${err.error}`)
+      }
+    }
+  } catch (err) {
+    console.error('[sync-images] Image synchronization failed (non-blocking):', err)
+  }
 
   // Register all IPC handlers for renderer communication
   registerAllHandlers()

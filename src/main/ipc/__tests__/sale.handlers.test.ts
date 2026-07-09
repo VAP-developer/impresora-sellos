@@ -111,7 +111,7 @@ function makeMockPdfResult(stampCount: number, ticketCount: number): SaleGenerat
     })
   }
 
-  return { pdfs, stampCount, ticketCount }
+  return { pdfs, stampCount, ticketCount, nextProducto: stampCount + 1, notifications: [] }
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────

@@ -20,6 +20,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useConfigStore } from '@renderer/stores/config.store'
 import { useKioskoStore } from '@renderer/stores/kiosko.store'
+import { useImagesStore } from '@renderer/stores/images.store'
 import { calcUsedRollo1, calcUsedRollo2, calcUsedTickets } from '@renderer/lib/tariff-calc'
 import * as ipc from '@renderer/lib/ipc-client'
 
@@ -59,6 +60,10 @@ export default function CartControls({
   const recordLastSale = useKioskoStore((state) => state.recordLastSale)
   const clearLastSale = useKioskoStore((state) => state.clearLastSale)
   const reset = useKioskoStore((state) => state.reset)
+
+  // Image layer flags from images store
+  const printFondo = useImagesStore((state) => state.printFondo)
+  const printSello = useImagesStore((state) => state.printSello)
 
   const [printing, setPrinting] = useState(false)
 
@@ -144,7 +149,7 @@ export default function CartControls({
         //   - 'protocolo' -> "Protocolo de: {titulo_base}"
         //   - 'spde' -> "SPDE de: {titulo_base}"
         //   - 'normal' -> unchanged titulo_base
-        await ipc.print(config, quantities, profile)
+        await ipc.print(config, quantities, profile, { printFondo, printSello })
 
         // 4. Reset all quantities to zero after successful sale
         reset()
@@ -158,7 +163,7 @@ export default function CartControls({
         setPrinting(false)
       }
     },
-    [config, quantities, printing, validateSale, recordLastSale, reset]
+    [config, quantities, printing, validateSale, recordLastSale, reset, printFondo, printSello]
   )
 
   /**

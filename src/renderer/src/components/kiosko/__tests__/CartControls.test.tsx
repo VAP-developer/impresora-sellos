@@ -290,7 +290,8 @@ describe('CartControls – Imprimir Normal (Task 7.6)', () => {
         expect(mockPrint).toHaveBeenCalledWith(
           config,
           expect.objectContaining({ tarifaAS1: 2 }),
-          'normal'
+          'normal',
+          { printFondo: false, printSello: false }
         )
       })
     })
@@ -812,7 +813,8 @@ describe('CartControls – Profile Buttons: Filatelia, Protocolo, SPDE (Task 7.8
         expect(mockPrint).toHaveBeenCalledWith(
           config,
           expect.objectContaining({ tarifaAS1: 2 }),
-          'filatelia'
+          'filatelia',
+          { printFondo: false, printSello: false }
         )
       })
     })
@@ -944,7 +946,8 @@ describe('CartControls – Profile Buttons: Filatelia, Protocolo, SPDE (Task 7.8
         expect(mockPrint).toHaveBeenCalledWith(
           config,
           expect.objectContaining({ tarifaA2S1: 4 }),
-          'protocolo'
+          'protocolo',
+          { printFondo: false, printSello: false }
         )
       })
     })
@@ -1026,7 +1029,8 @@ describe('CartControls – Profile Buttons: Filatelia, Protocolo, SPDE (Task 7.8
         expect(mockPrint).toHaveBeenCalledWith(
           config,
           expect.objectContaining({ tarifaBS2: 3 }),
-          'spde'
+          'spde',
+          { printFondo: false, printSello: false }
         )
       })
     })
@@ -1172,7 +1176,7 @@ describe('CartControls – Profile Buttons: Filatelia, Protocolo, SPDE (Task 7.8
       // Click Filatelia
       await user.click(screen.getByLabelText('Imprimir Filatelia'))
       await waitFor(() => {
-        expect(mockPrint).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'filatelia')
+        expect(mockPrint).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'filatelia', expect.anything())
       })
 
       mockPrint.mockClear()
@@ -1181,7 +1185,7 @@ describe('CartControls – Profile Buttons: Filatelia, Protocolo, SPDE (Task 7.8
       // Click Protocolo
       await user.click(screen.getByLabelText('Imprimir Protocolo'))
       await waitFor(() => {
-        expect(mockPrint).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'protocolo')
+        expect(mockPrint).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'protocolo', expect.anything())
       })
 
       mockPrint.mockClear()
@@ -1190,7 +1194,7 @@ describe('CartControls – Profile Buttons: Filatelia, Protocolo, SPDE (Task 7.8
       // Click SPDE
       await user.click(screen.getByLabelText('Imprimir SPDE'))
       await waitFor(() => {
-        expect(mockPrint).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'spde')
+        expect(mockPrint).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'spde', expect.anything())
       })
     })
   })

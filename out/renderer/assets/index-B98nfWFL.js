@@ -13956,6 +13956,12 @@ async function insertOrders(orders) {
 async function downloadCSV() {
   return getAPI().orders.downloadCSV();
 }
+async function getImagenesConfig() {
+  return getAPI().config.getImagenes();
+}
+async function updateImagenesConfig(data) {
+  return getAPI().config.updateImagenes(data);
+}
 async function uploadImage(name, dataUri, type, size2) {
   return getAPI().images.upload(name, dataUri, type, size2);
 }
@@ -13965,11 +13971,17 @@ async function removeImage(name) {
 async function getImageByName(name) {
   return getAPI().images.getByName(name);
 }
+async function getFairList() {
+  return getAPI().images.getFairList();
+}
+async function getFairImages(year, fairName) {
+  return getAPI().images.getByFair(year, fairName);
+}
 async function getPrinterStatus() {
   return getAPI().printer.getStatus();
 }
-async function print(config, quantities, profile) {
-  await getAPI().sale.execute(config, quantities, profile);
+async function print(config, quantities, profile, imageFlags) {
+  await getAPI().sale.execute(config, quantities, profile, imageFlags);
 }
 async function pausePrinter() {
   return getAPI().printer.pause();
@@ -21831,7 +21843,7 @@ function PrinterControls() {
   const resume = usePrinterStore((state) => state.resume);
   const loading = usePrinterStore((state) => state.loading);
   const printers = usePrinterStore((state) => state.printers);
-  const anyPaused = printers.some((p) => p.status === "paused");
+  const anyPaused = (printers ?? []).some((p) => p.status === "paused");
   const handlePause = reactExports.useCallback(async () => {
     try {
       await pause();
@@ -22379,6 +22391,74 @@ function TariffTable() {
     )
   ] }) });
 }
+const useImagesStore = create((set, get) => ({
+  fairList: [],
+  activeFair: null,
+  fondoImage: null,
+  selloImage: null,
+  printFondo: false,
+  printSello: false,
+  loading: false,
+  error: null,
+  loadFairList: async () => {
+    if (get().loading) return;
+    set({ loading: true, error: null });
+    try {
+      const [fairList, imagenesConfig] = await Promise.all([
+        getFairList(),
+        getImagenesConfig()
+      ]);
+      const updates = {
+        fairList,
+        printSello: imagenesConfig.printSello,
+        loading: false
+      };
+      set(updates);
+      if (imagenesConfig.activeFair) {
+        const { year, fairName } = imagenesConfig.activeFair;
+        const fairExists = fairList.some(
+          (f) => f.year === year && f.fairName === fairName
+        );
+        if (fairExists) {
+          const images = await getFairImages(year, fairName);
+          set({
+            activeFair: { year, fairName },
+            fondoImage: images.fondo,
+            selloImage: images.sello
+          });
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load fair list";
+      set({ error: message, loading: false });
+    }
+  },
+  selectFair: async (year, fairName) => {
+    set({ loading: true, error: null });
+    try {
+      const images = await getFairImages(year, fairName);
+      set({
+        activeFair: { year, fairName },
+        fondoImage: images.fondo,
+        selloImage: images.sello,
+        loading: false
+      });
+      const { printSello } = get();
+      await updateImagenesConfig({ printSello, activeFair: { year, fairName } });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load fair images";
+      set({ error: message, loading: false });
+    }
+  },
+  setPrintFondo: (value) => {
+    set({ printFondo: value });
+  },
+  setPrintSello: async (value) => {
+    set({ printSello: value });
+    const { activeFair } = get();
+    await updateImagenesConfig({ printSello: value, activeFair });
+  }
+}));
 function CartControls({
   onPrintNormal,
   onPrintFilatelia,
@@ -22396,6 +22476,8 @@ function CartControls({
   const recordLastSale = useKioskoStore((state) => state.recordLastSale);
   const clearLastSale = useKioskoStore((state) => state.clearLastSale);
   const reset = useKioskoStore((state) => state.reset);
+  const printFondo = useImagesStore((state) => state.printFondo);
+  const printSello = useImagesStore((state) => state.printSello);
   const [printing, setPrinting] = reactExports.useState(false);
   const precios = config?.precios;
   const ticket = config?.ticket;
@@ -22440,7 +22522,7 @@ function CartControls({
         const sellos2 = calcUsedRollo2(quantities);
         const ticketsUsed = 2 + calcUsedTickets(quantities);
         recordLastSale(sellos1, sellos2, ticketsUsed);
-        await print(config, quantities, profile);
+        await print(config, quantities, profile, { printFondo, printSello });
         reset();
         onSuccess?.();
       } catch (err) {
@@ -22450,7 +22532,7 @@ function CartControls({
         setPrinting(false);
       }
     },
-    [config, quantities, printing, validateSale2, recordLastSale, reset]
+    [config, quantities, printing, validateSale2, recordLastSale, reset, printFondo, printSello]
   );
   const handlePrintNormal = reactExports.useCallback(async () => {
     await handlePrint("normal", onPrintNormal);
@@ -22776,9 +22858,58 @@ function RollCounters() {
     }
   );
 }
+function FairBackground() {
+  const { activeFair, fondoImage, loading, loadFairList, fairList } = useImagesStore();
+  reactExports.useEffect(() => {
+    if (fairList.length === 0) {
+      loadFairList();
+    }
+  }, [fairList.length, loadFairList]);
+  if (!activeFair) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full flex items-center justify-center py-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "w-full max-w-[400px] h-[80px] bg-gray-100 rounded border border-dashed\n                     border-gray-300 flex items-center justify-center",
+        role: "img",
+        "aria-label": "Sin feria seleccionada",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-gray-400 text-xs italic", children: "Sin feria seleccionada" })
+      }
+    ) });
+  }
+  if (loading) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full flex items-center justify-center py-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full max-w-[400px] h-[80px] bg-gray-100 animate-pulse rounded flex items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-gray-400 text-xs", children: "Cargando imagen..." }) }) });
+  }
+  if (fondoImage) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full flex items-center justify-center py-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "img",
+      {
+        src: fondoImage,
+        alt: `Fondo de feria: ${activeFair.year} — ${activeFair.fairName}`,
+        className: "max-w-[400px] max-h-[100px] w-auto h-auto object-contain rounded shadow-sm"
+      }
+    ) });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full flex items-center justify-center py-2", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "w-full max-w-[400px] h-[80px] bg-gray-200 rounded border border-gray-300\n                   flex flex-col items-center justify-center gap-1",
+      role: "img",
+      "aria-label": `Sin imagen de fondo para ${activeFair.year} — ${activeFair.fairName}`,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-gray-500 text-xs font-medium", children: [
+          activeFair.year,
+          " — ",
+          activeFair.fairName
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-gray-400 text-xs italic", children: "Sin imagen de fondo" })
+      ]
+    }
+  ) });
+}
 function KioskoView() {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col h-full p-2 gap-2 overflow-auto", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(StampModels, {}),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(FairBackground, {}),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx(TariffTable, {}) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(CartControls, {})
@@ -24035,6 +24166,160 @@ function TirasSection({
     )
   ] });
 }
+function ImageConfig() {
+  const [collapsed, setCollapsed] = reactExports.useState(true);
+  const {
+    fairList,
+    activeFair,
+    printFondo,
+    printSello,
+    loading,
+    error,
+    loadFairList,
+    selectFair,
+    setPrintFondo,
+    setPrintSello
+  } = useImagesStore();
+  reactExports.useEffect(() => {
+    loadFairList();
+  }, [loadFairList]);
+  const handleFairChange = reactExports.useCallback(
+    async (e) => {
+      const value = e.target.value;
+      if (!value) return;
+      const [year, fairName] = value.split("/");
+      if (year && fairName) {
+        await selectFair(year, fairName);
+      }
+    },
+    [selectFair]
+  );
+  const handlePrintFondoChange = reactExports.useCallback(
+    (e) => {
+      setPrintFondo(e.target.checked);
+    },
+    [setPrintFondo]
+  );
+  const handlePrintSelloChange = reactExports.useCallback(
+    async (e) => {
+      await setPrintSello(e.target.checked);
+    },
+    [setPrintSello]
+  );
+  const activeFairValue = activeFair ? `${activeFair.year}/${activeFair.fairName}` : "";
+  const headerLabel = activeFair ? `${activeFair.year} — ${activeFair.fairName}` : "Sin feria seleccionada";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "images-section-heading", className: "mt-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "button",
+      {
+        type: "button",
+        id: "images-section-heading",
+        className: "w-full bg-[rgb(100,149,237)] p-2 rounded cursor-pointer flex items-center gap-2\n                   text-left text-white focus:outline-none focus:ring-2 focus:ring-blue-400",
+        onClick: () => setCollapsed(!collapsed),
+        "aria-expanded": !collapsed,
+        "aria-controls": "images-section-content",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "checkbox",
+              checked: !collapsed,
+              readOnly: true,
+              className: "cursor-pointer",
+              tabIndex: -1,
+              "aria-hidden": "true"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "text-base font-bold m-0", children: [
+            "IMÁGENES FERIA: ",
+            headerLabel
+          ] })
+        ]
+      }
+    ),
+    !collapsed && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        id: "images-section-content",
+        className: "border border-gray-200 rounded-b p-4 bg-white",
+        role: "region",
+        "aria-label": "Configuración de imágenes de feria",
+        children: [
+          error && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-3 p-2 bg-red-100 text-red-800 rounded text-sm", role: "alert", children: error }),
+          loading && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-500 mb-3", children: "Cargando ferias..." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-end gap-6 mb-4", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "fair-selector", className: "text-xs text-gray-600 mb-1", children: "Feria activa" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "select",
+                {
+                  id: "fair-selector",
+                  value: activeFairValue,
+                  onChange: handleFairChange,
+                  disabled: loading || fairList.length === 0,
+                  className: "border border-gray-300 rounded px-3 py-1.5 text-sm\n                           focus:outline-none focus:ring-2 focus:ring-blue-400\n                           disabled:opacity-50 disabled:cursor-not-allowed min-w-[200px]",
+                  "aria-describedby": "fair-selector-desc",
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "— Seleccionar feria —" }),
+                    fairList.map((fair) => /* @__PURE__ */ jsxRuntimeExports.jsxs("option", { value: `${fair.year}/${fair.fairName}`, children: [
+                      fair.year,
+                      " — ",
+                      fair.fairName
+                    ] }, `${fair.year}/${fair.fairName}`))
+                  ]
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { id: "fair-selector-desc", className: "sr-only", children: "Selecciona la feria activa para cargar sus imágenes" })
+            ] }),
+            fairList.length === 0 && !loading && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-400 italic", children: "No hay ferias disponibles. Añade carpetas en bbdd-ferias/ y reinicia la app." })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "label",
+              {
+                htmlFor: "print-fondo-checkbox",
+                className: "flex items-center gap-2 cursor-pointer select-none",
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "input",
+                    {
+                      id: "print-fondo-checkbox",
+                      type: "checkbox",
+                      checked: printFondo,
+                      onChange: handlePrintFondoChange,
+                      className: "w-4 h-4 rounded border-gray-300 text-blue-600\n                           focus:ring-2 focus:ring-blue-400 cursor-pointer"
+                    }
+                  ),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm", children: "Imprimir imagen de fondo (pruebas)" })
+                ]
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "label",
+              {
+                htmlFor: "print-sello-checkbox",
+                className: "flex items-center gap-2 cursor-pointer select-none",
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "input",
+                    {
+                      id: "print-sello-checkbox",
+                      type: "checkbox",
+                      checked: printSello,
+                      onChange: handlePrintSelloChange,
+                      className: "w-4 h-4 rounded border-gray-300 text-blue-600\n                           focus:ring-2 focus:ring-blue-400 cursor-pointer"
+                    }
+                  ),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm", children: "Imprimir imagen del sello" })
+                ]
+              }
+            )
+          ] })
+        ]
+      }
+    )
+  ] });
+}
 function MaquinaView() {
   const navigate = useNavigate();
   const { config, loading, error: storeError, loadConfig, updateMaquina: updateMaquina2 } = useConfigStore();
@@ -24214,6 +24499,7 @@ function MaquinaView() {
           onChange: handleTicketChange
         }
       ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ImageConfig, {}),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex justify-center items-center gap-4 mt-6 mb-4", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",

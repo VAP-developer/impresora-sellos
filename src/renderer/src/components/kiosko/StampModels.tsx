@@ -143,7 +143,7 @@ function PrinterControls(): JSX.Element {
   const printers = usePrinterStore((state) => state.printers)
 
   // Determine if any printer is currently paused
-  const anyPaused = printers.some((p) => p.status === 'paused')
+  const anyPaused = (printers ?? []).some((p) => p.status === 'paused')
 
   const handlePause = useCallback(async () => {
     try {

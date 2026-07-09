@@ -225,10 +225,10 @@ describe('calcTicketHeight', () => {
   })
 
   it('matches expected formula for known values', () => {
-    // New formula: page_height = (62 + 3*nitems + 30) * mm
-    // For nitems=4: (62 + 12 + 30) = 104mm
+    // New formula: page_height = (5 + 14 + 32 + 5 + 3.5*nitems + 8 + 20 + 5) * mm
+    // For nitems=4: (5 + 14 + 32 + 5 + 14 + 8 + 20 + 5) = 103mm
     const MM_TO_PT = 72 / 25.4
-    const expected = 104 * MM_TO_PT
+    const expected = 103 * MM_TO_PT
     expect(calcTicketHeight(4)).toBeCloseTo(expected, 1)
   })
 })

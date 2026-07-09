@@ -2,7 +2,7 @@
 const electron = require("electron");
 const api = {
   sale: {
-    execute: (config, quantities, profile) => electron.ipcRenderer.invoke("sale:execute", config, quantities, profile),
+    execute: (config, quantities, profile, imageFlags) => electron.ipcRenderer.invoke("sale:execute", config, quantities, profile, imageFlags),
     cancel: (input) => electron.ipcRenderer.invoke("sale:cancel", input)
   },
   config: {
@@ -14,6 +14,8 @@ const api = {
     updateRollos: (sellos1, sellos2, tickets) => electron.ipcRenderer.invoke("config:updateRollos", sellos1, sellos2, tickets),
     updateRollosRevert: (sellos1, sellos2, tickets) => electron.ipcRenderer.invoke("config:updateRollosRevert", sellos1, sellos2, tickets),
     initConfig: () => electron.ipcRenderer.invoke("config:initConfig"),
+    getImagenes: () => electron.ipcRenderer.invoke("config:getImagenes"),
+    updateImagenes: (data) => electron.ipcRenderer.invoke("config:updateImagenes", data),
     onChange: (callback) => {
       const handler = (_event, config) => {
         callback(config);
@@ -31,7 +33,10 @@ const api = {
   images: {
     upload: (name, dataUri, type, size) => electron.ipcRenderer.invoke("images:upload", name, dataUri, type, size),
     remove: (name) => electron.ipcRenderer.invoke("images:remove", name),
-    getByName: (name) => electron.ipcRenderer.invoke("images:getByName", name)
+    getByName: (name) => electron.ipcRenderer.invoke("images:getByName", name),
+    getFairList: () => electron.ipcRenderer.invoke("images:getFairList"),
+    getByFair: (year, fairName) => electron.ipcRenderer.invoke("images:getByFair", year, fairName),
+    getSyncStatus: () => electron.ipcRenderer.invoke("images:getSyncStatus")
   },
   printer: {
     getStatus: () => electron.ipcRenderer.invoke("printer:getStatus"),

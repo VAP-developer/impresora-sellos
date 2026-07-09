@@ -103,6 +103,12 @@ export interface StampRenderParams {
    * - null/undefined for no background
    */
   backgroundImage?: string | null
+  /**
+   * Overlay image rendered on top of the background but below text.
+   * Used for sello layer when both fondo (background) and sello are active.
+   * Same format as backgroundImage (file path or data URI).
+   */
+  overlayImage?: string | null
 }
 
 /** Input parameters for rendering a special strip stamp (tira especial) */
@@ -251,6 +257,7 @@ export async function renderStamp(params: StampRenderParams): Promise<Buffer> {
 
   registerFonts(doc)
   drawBackground(doc, params.backgroundImage)
+  drawBackground(doc, params.overlayImage)
   drawTextLeft(doc, params.tarifa, FONTS.regular, 12, 2, 19.5)
   drawTextRight(doc, params.evento, FONTS.regular, 9, 53, 19)
   drawTextRight(doc, params.fecha, FONTS.regular, 9, 53, 15)
@@ -402,6 +409,7 @@ export async function renderStampMultiPage(stamps: StampRenderParams[]): Promise
     }
 
     drawBackground(doc, stamp.backgroundImage)
+    drawBackground(doc, stamp.overlayImage)
     drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12, 2, 19.5)
     drawTextRight(doc, stamp.evento, FONTS.regular, 9, 53, 19)
     drawTextRight(doc, stamp.fecha, FONTS.regular, 9, 53, 15)

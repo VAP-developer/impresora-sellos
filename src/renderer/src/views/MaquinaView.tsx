@@ -24,6 +24,7 @@ import CodigoSection from '@renderer/components/maquina/CodigoSection'
 import TicketSection from '@renderer/components/maquina/TicketSection'
 import RollosSection from '@renderer/components/maquina/RollosSection'
 import TirasSection from '@renderer/components/maquina/TirasSection'
+import ImageConfig from '@renderer/components/images/ImageConfig'
 
 export default function MaquinaView(): JSX.Element {
   const navigate = useNavigate()
@@ -261,6 +262,9 @@ export default function MaquinaView(): JSX.Element {
               onChange={handleTicketChange}
             />
           )}
+
+          {/* Section 5: IMÁGENES FERIA */}
+          <ImageConfig />
 
           {/* Footer buttons */}
           <div className="flex justify-center items-center gap-4 mt-6 mb-4">

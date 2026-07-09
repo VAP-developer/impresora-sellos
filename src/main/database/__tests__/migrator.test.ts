@@ -206,21 +206,33 @@ describe('database/migrator', () => {
       expect(objects).toHaveLength(3)
     })
 
-    it('should work with the actual 001_initial.sql migration', () => {
-      // Use the real migration file from the project
+    it('should work with the actual migrations', () => {
+      // Use the real migration files from the project
       const realMigrationsPath = join(__dirname, '..', 'migrations')
       const result = runMigrations(db, realMigrationsPath)
 
-      expect(result).toEqual(['001_initial.sql'])
+      expect(result).toEqual([
+        '001_initial.sql',
+        '002_printer_assignments.sql',
+        '003_image_sync.sql'
+      ])
 
       // Verify expected tables exist
       const tables = db
         .prepare(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('config', 'orders', 'images', 'print_queue', 'sync_log')"
+          "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('config', 'orders', 'images', 'print_queue', 'sync_log', 'printer_assignments', 'image_sync')"
         )
         .all() as Array<{ name: string }>
       const tableNames = tables.map((t) => t.name).sort()
-      expect(tableNames).toEqual(['config', 'images', 'orders', 'print_queue', 'sync_log'])
+      expect(tableNames).toEqual([
+        'config',
+        'image_sync',
+        'images',
+        'orders',
+        'print_queue',
+        'printer_assignments',
+        'sync_log'
+      ])
     })
   })
 

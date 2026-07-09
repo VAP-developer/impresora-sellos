@@ -87,10 +87,17 @@ export interface PreciosConfig {
   tarifaT4?: number // Tira 4 tarifas (A+A2+B+C)
 }
 
+/** Configuración de imágenes de ferias (persistida en SQLite config) */
+export interface ImagenesConfig {
+  printSello: boolean
+  activeFair: { year: string; fairName: string } | null
+}
+
 /** Configuración completa de la aplicación (documento único en SQLite) */
 export interface AppConfig {
   ticket: TicketConfig
   codigo: CodigoConfig
   sello: SelloConfig
   precios: PreciosConfig
+  imagenes?: ImagenesConfig
 }

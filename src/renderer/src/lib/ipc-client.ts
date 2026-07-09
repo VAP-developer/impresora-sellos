@@ -121,6 +121,16 @@ export async function downloadCSV(): Promise<string> {
 
 // === Images ===
 
+export type ImagenesConfig = Awaited<ReturnType<ElectronAPI['config']['getImagenes']>>
+
+export async function getImagenesConfig(): Promise<ImagenesConfig> {
+  return getAPI().config.getImagenes()
+}
+
+export async function updateImagenesConfig(data: ImagenesConfig): Promise<void> {
+  return getAPI().config.updateImagenes(data)
+}
+
 export async function uploadImage(
   name: string,
   dataUri: string,
@@ -140,6 +150,23 @@ export async function getImageByName(
   return getAPI().images.getByName(name)
 }
 
+export async function getFairList(): Promise<Array<{ year: string; fairName: string }>> {
+  return getAPI().images.getFairList()
+}
+
+export async function getFairImages(
+  year: string,
+  fairName: string
+): Promise<{ fondo: string | null; sello: string | null }> {
+  return getAPI().images.getByFair(year, fairName)
+}
+
+export type SyncStatus = Awaited<ReturnType<ElectronAPI['images']['getSyncStatus']>>
+
+export async function getImageSyncStatus(): Promise<SyncStatus> {
+  return getAPI().images.getSyncStatus()
+}
+
 // === Printer ===
 
 export async function getPrinterStatus(): Promise<PrinterInfo[]> {
@@ -149,11 +176,12 @@ export async function getPrinterStatus(): Promise<PrinterInfo[]> {
 export async function print(
   config: AppConfig,
   quantities: KioskoQuantities,
-  profile: string
+  profile: string,
+  imageFlags?: { printFondo: boolean; printSello: boolean }
 ): Promise<void> {
   // Triggers the full sale flow: atomic transaction + PDF generation + print queue enqueue.
   // Previously called printer:print which is a no-op stub.
-  await getAPI().sale.execute(config, quantities, profile)
+  await getAPI().sale.execute(config, quantities, profile, imageFlags)
 }
 
 export async function pausePrinter(): Promise<void> {
@@ -208,9 +236,10 @@ export type CancelSaleInput = Parameters<ElectronAPI['sale']['cancel']>[0]
 export async function executeSale(
   config: AppConfig,
   quantities: KioskoQuantities,
-  profile: string
+  profile: string,
+  imageFlags?: { printFondo: boolean; printSello: boolean }
 ): Promise<SaleOutcome> {
-  return getAPI().sale.execute(config, quantities, profile)
+  return getAPI().sale.execute(config, quantities, profile, imageFlags)
 }
 
 export async function cancelSale(input: CancelSaleInput): Promise<CancelSaleOutcome> {

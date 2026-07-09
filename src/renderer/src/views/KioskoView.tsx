@@ -12,12 +12,16 @@ import StampModels from '@renderer/components/kiosko/StampModels'
 import TariffTable from '@renderer/components/kiosko/TariffTable'
 import CartControls from '@renderer/components/kiosko/CartControls'
 import RollCounters from '@renderer/components/kiosko/RollCounters'
+import FairBackground from '@renderer/components/kiosko/FairBackground'
 
 export default function KioskoView(): JSX.Element {
   return (
     <div className="flex flex-col h-full p-2 gap-2 overflow-auto">
       {/* Top: stamp model previews with printer controls */}
       <StampModels />
+
+      {/* Fair background image preview */}
+      <FairBackground />
 
       {/* Middle: tariff table + cart controls side by side */}
       <div className="flex items-start gap-2">

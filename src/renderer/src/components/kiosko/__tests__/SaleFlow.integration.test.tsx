@@ -285,7 +285,8 @@ describe('Kiosko – Complete Sale Flow Integration (Task 7.12)', () => {
             tarifaAS1: 3,
             tarifaBS2: 2
           }),
-          'normal'
+          'normal',
+          { printFondo: false, printSello: false }
         )
       })
 
@@ -390,7 +391,8 @@ describe('Kiosko – Complete Sale Flow Integration (Task 7.12)', () => {
           codigo: expect.objectContaining({ cliente: 1 })
         }),
         expect.any(Object),
-        'normal'
+        'normal',
+        { printFondo: false, printSello: false }
       )
 
       // lastSale should be recorded for potential error reversal
@@ -544,7 +546,8 @@ describe('Kiosko – Complete Sale Flow Integration (Task 7.12)', () => {
           tarifaCS2: 3,
           tarifa4T2: 1
         }),
-        'normal'
+        'normal',
+        { printFondo: false, printSello: false }
       )
 
       // After successful sale, ALL quantities reset to 0
@@ -612,7 +615,8 @@ describe('Kiosko – Complete Sale Flow Integration (Task 7.12)', () => {
           tarifaAS1: 0,
           tarifaCS2: 5
         }),
-        'normal'
+        'normal',
+        { printFondo: false, printSello: false }
       )
 
       // After second sale, quantities reset again

@@ -20,9 +20,104 @@
 import type { AppConfig, PreciosConfig } from '../../renderer/src/types/config'
 import { renderStamp, renderStampMultiPage, renderStampEspecialStrip } from './stamp-renderer'
 import type { StampRenderParams } from './stamp-renderer'
-import { genTicket, genTicketCaja, genTicketMaster, calcTicketHeightMm, calcTicketCajaHeightMm, countActiveItems } from './ticket-renderer'
+import { genTicket, genTicketCaja, genTicketMaster, calcTicketHeightMm, calcTicketCajaHeightMm, calcTicketMasterHeightMm, countActiveItems } from './ticket-renderer'
 import type { TicketItem, TicketProduct } from './ticket-renderer'
 import { ImagesRepository } from '../database/repositories/images.repository'
+
+// ─── Image Layer Types ────────────────────────────────────────────────────────
+
+/**
+ * Options for image layer composition in stamps/labels.
+ * Controls which image layers are rendered and in what order.
+ *
+ * Layer ordering (bottom to top):
+ * - Only sello:  [sello, texto]
+ * - Only fondo:  [fondo, texto]
+ * - Both:        [fondo, sello, texto]
+ * - Neither:     [texto]
+ */
+export interface ImageLayerOptions {
+  /** Whether to print the background image (fondo) — volatile, for testing */
+  printFondo: boolean
+  /** Whether to print the stamp image (sello) */
+  printSello: boolean
+  /** Background image as Data URI or null */
+  fondoImage: string | null
+  /** Stamp image as Data URI or null */
+  selloImage: string | null
+}
+
+/**
+ * Notification emitted when an image was expected but not available.
+ */
+export interface ImageLayerNotification {
+  type: 'missing_image'
+  imageType: 'fondo' | 'sello'
+  message: string
+}
+
+/**
+ * Resolves which background image(s) to use for a stamp based on ImageLayerOptions.
+ * Returns the effective background image for the stamp renderer (single image or null),
+ * plus any notifications about missing images.
+ *
+ * The stamp renderer only supports a single backgroundImage param, so when both
+ * fondo and sello are active, we return sello (it renders on top of fondo which
+ * must be composed separately). For the current stamp renderer architecture,
+ * the background image param maps to the "bottom-most" layer below text.
+ *
+ * Layer composition strategy:
+ * - sello only → backgroundImage = sello
+ * - fondo only → backgroundImage = fondo
+ * - both → backgroundImage = fondo (sello handled as overlay — see design note below)
+ * - neither → backgroundImage = null
+ *
+ * Design note: When both are active, the current stamp renderer uses a single
+ * background image slot. In this case, fondo goes as background and sello as
+ * an additional overlay. This is handled via the `overlayImage` field in the result.
+ */
+export function resolveImageLayers(options: ImageLayerOptions): {
+  backgroundImage: string | null
+  overlayImage: string | null
+  notifications: ImageLayerNotification[]
+} {
+  const notifications: ImageLayerNotification[] = []
+  let backgroundImage: string | null = null
+  let overlayImage: string | null = null
+
+  const { printFondo, printSello, fondoImage, selloImage } = options
+
+  if (printSello && !selloImage) {
+    notifications.push({
+      type: 'missing_image',
+      imageType: 'sello',
+      message: 'La imagen del sello está activada pero no fue encontrada para la feria activa'
+    })
+  }
+
+  if (printFondo && !fondoImage) {
+    notifications.push({
+      type: 'missing_image',
+      imageType: 'fondo',
+      message: 'La imagen de fondo está activada pero no fue encontrada para la feria activa'
+    })
+  }
+
+  if (printSello && printFondo) {
+    // Both active: fondo as background, sello as overlay
+    backgroundImage = fondoImage
+    overlayImage = selloImage
+  } else if (printSello) {
+    // Only sello: use as background
+    backgroundImage = selloImage
+  } else if (printFondo) {
+    // Only fondo: use as background
+    backgroundImage = fondoImage
+  }
+  // Neither: both remain null
+
+  return { backgroundImage, overlayImage, notifications }
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -71,6 +166,8 @@ export interface SaleGenerationResult {
   ticketCount: number
   /** The next product counter value (to persist in config for the following sale) */
   nextProducto: number
+  /** Notifications about missing images or other non-fatal issues */
+  notifications: ImageLayerNotification[]
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -268,16 +365,19 @@ const TARIFF_DEFS: TariffDef[] = [
  * @param quantities - Quantities per tariff/model selected in the kiosko
  * @param profile - Active profile name (e.g. "FERIA", "Filatelia", "Protocolo", "SPDE")
  * @param imagesRepo - Optional ImagesRepository instance (for testability)
- * @returns SaleGenerationResult with all PDFs and counts
+ * @param imageLayerOptions - Optional image layer options for fondo/sello composition
+ * @returns SaleGenerationResult with all PDFs, counts, and image notifications
  */
 export async function generateSalePdfs(
   config: AppConfig,
   quantities: SaleQuantities,
   profile: string,
-  imagesRepo?: ImagesRepository
+  imagesRepo?: ImagesRepository,
+  imageLayerOptions?: ImageLayerOptions
 ): Promise<SaleGenerationResult> {
   const repo = imagesRepo ?? new ImagesRepository()
   const pdfs: GeneratedPdf[] = []
+  const notifications: ImageLayerNotification[] = []
 
   // Product counter starts at 1 for each new sale (resets per client/order)
   let productoCounter = 1
@@ -291,8 +391,27 @@ export async function generateSalePdfs(
   // Get background images for each model
   const model1Name = evento?.motivoi ?? config.sello.modelo1 ?? ''
   const model2Name = evento?.motivod ?? config.sello.modelo2 ?? ''
-  const bg1 = getModelBackground(model1Name, repo)
-  const bg2 = getModelBackground(model2Name, repo)
+
+  // Resolve image layers: when ImageLayerOptions is provided, use the layer
+  // composition logic; otherwise fall back to legacy model-based background.
+  let bg1: string | null = null
+  let bg2: string | null = null
+  let overlay1: string | null = null
+  let overlay2: string | null = null
+
+  if (imageLayerOptions) {
+    // Use fair-based image layer composition
+    const layerResult = resolveImageLayers(imageLayerOptions)
+    bg1 = layerResult.backgroundImage
+    bg2 = layerResult.backgroundImage
+    overlay1 = layerResult.overlayImage
+    overlay2 = layerResult.overlayImage
+    notifications.push(...layerResult.notifications)
+  } else {
+    // Legacy: load background from images repository by model name
+    bg1 = getModelBackground(model1Name, repo)
+    bg2 = getModelBackground(model2Name, repo)
+  }
 
   // Determine if we use blank stamps (modes MD/FI don't print background)
   const usesBlankBackground = config.codigo.modo === 'MD' || config.codigo.modo === 'FI'
@@ -309,6 +428,12 @@ export async function generateSalePdfs(
         ? bg1
         : bg2
 
+    const overlay = usesBlankBackground
+      ? null
+      : tariff.model === 1
+        ? overlay1
+        : overlay2
+
     if (tariff.isTira) {
       // Tiras: each unit generates a 4-page PDF (4 stamps in one print job)
       for (let i = 0; i < qty; i++) {
@@ -323,7 +448,8 @@ export async function generateSalePdfs(
               fecha: stampFecha,
               evento: stampEvento,
               codigo: buildLabelCode(config, productoCounter),
-              backgroundImage: background
+              backgroundImage: background,
+              overlayImage: overlay
             })
             productoCounter++
           }
@@ -335,7 +461,8 @@ export async function generateSalePdfs(
               fecha: stampFecha,
               evento: stampEvento,
               codigo: buildLabelCode(config, productoCounter),
-              backgroundImage: background
+              backgroundImage: background,
+              overlayImage: overlay
             })
             productoCounter++
           }
@@ -357,7 +484,8 @@ export async function generateSalePdfs(
           fecha: stampFecha,
           evento: stampEvento,
           codigo: buildLabelCode(config, productoCounter),
-          backgroundImage: background
+          backgroundImage: background,
+          overlayImage: overlay
         })
         productoCounter++
         pdfs.push({
@@ -391,6 +519,7 @@ export async function generateSalePdfs(
     const nitems = countActiveItems(items)
     const ticketHeightMm = calcTicketHeightMm(nitems)
     const ticketCajaHeightMm = calcTicketCajaHeightMm(nitems)
+    const ticketMasterHeightMm = calcTicketMasterHeightMm(nitems)
 
     // Main ticket
     const ticketBuffer = await genTicket({
@@ -465,7 +594,7 @@ export async function generateSalePdfs(
         target: 'ticket',
         pdfType: 'ticket_master',
         description: 'Ticket master set',
-        ticketHeightMm: ticketCajaHeightMm
+        ticketHeightMm: ticketMasterHeightMm
       })
     }
 
@@ -526,7 +655,7 @@ export async function generateSalePdfs(
     (p) => p.pdfType === 'ticket' || p.pdfType === 'ticket_caja' || p.pdfType === 'ticket_master' || p.pdfType === 'ticket_tira'
   ).length
 
-  return { pdfs, stampCount, ticketCount, nextProducto: productoCounter }
+  return { pdfs, stampCount, ticketCount, nextProducto: productoCounter, notifications }
 }
 
 // ─── Special strips generation ────────────────────────────────────────────────

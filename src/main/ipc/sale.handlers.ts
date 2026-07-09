@@ -14,10 +14,12 @@
 
 import { handleIpc, notifyConfigChanged } from './handlers'
 import { ConfigRepository } from '../database/repositories/config.repository'
+import { ImagesRepository } from '../database/repositories/images.repository'
 import { executeSale, cancelSale } from '../sales/sale.service'
 import { generateSalePdfs } from '../printing/pdf-generator'
+import { buildImageName } from '../images/sync-images'
 import { getPrintQueueService } from '../services'
-import type { GeneratedPdf, SaleGenerationResult } from '../printing/pdf-generator'
+import type { GeneratedPdf, SaleGenerationResult, ImageLayerOptions } from '../printing/pdf-generator'
 import type { AppConfig } from '../database/repositories/config.repository'
 import type {
   KioskoQuantities,
@@ -68,10 +70,11 @@ export function registerSaleHandlers(): void {
 
   handleIpc(
     'sale:execute',
-    async (config: unknown, quantities: unknown, profile: unknown): Promise<SaleOutcome> => {
+    async (config: unknown, quantities: unknown, profile: unknown, imageFlags: unknown): Promise<SaleOutcome> => {
       const typedConfig = config as AppConfig
       const typedQuantities = quantities as KioskoQuantities
       const typedProfile = profile as string
+      const typedImageFlags = imageFlags as { printFondo: boolean; printSello: boolean } | undefined
 
       // Step 1: Execute atomic sale transaction (synchronous SQLite)
       const result = executeSale(typedConfig, typedQuantities, typedProfile)
@@ -94,11 +97,41 @@ export function registerSaleHandlers(): void {
         }
       }
 
+      // Step 3b: Build ImageLayerOptions if image flags were provided
+      let imageLayerOptions: ImageLayerOptions | undefined
+      if (typedImageFlags) {
+        const imagesRepo = new ImagesRepository()
+        const imagenesConfig = configRepo.getImagenes()
+        let fondoImage: string | null = null
+        let selloImage: string | null = null
+
+        if (imagenesConfig.activeFair) {
+          const { year, fairName } = imagenesConfig.activeFair
+          const fondoName = buildImageName(year, fairName, 'fondo')
+          const selloName = buildImageName(year, fairName, 'sello')
+
+          const fondoRecord = imagesRepo.getByName(fondoName)
+          const selloRecord = imagesRepo.getByName(selloName)
+
+          fondoImage = fondoRecord?.url ?? null
+          selloImage = selloRecord?.url ?? null
+        }
+
+        imageLayerOptions = {
+          printFondo: typedImageFlags.printFondo,
+          printSello: typedImageFlags.printSello,
+          fondoImage,
+          selloImage
+        }
+      }
+
       try {
         const pdfResult: SaleGenerationResult = await generateSalePdfs(
           updatedConfig,
           typedQuantities,
-          typedProfile
+          typedProfile,
+          undefined,
+          imageLayerOptions
         )
 
         // Store PDFs in cache for backward compatibility

@@ -334,14 +334,37 @@ export function calcTicketHeight(numItems: number): number {
 
 /**
  * Calculates the page height in mm for a ticket based on number of active items.
- * Uses top-down layout: fixed header + variable item rows + fixed footer.
+ *
+ * Sections (all values in mm):
+ *   - Top margin: 5
+ *   - Logo: 14
+ *   - Header info (feria, lugar, empresa, CIF, CP, fecha, modo): 32
+ *   - Column headers + separator: 5
+ *   - Item rows: nitems × 3.5
+ *   - Total section (separator + total row): 8
+ *   - Footer info (separator + session + legal texts): 20
+ *   - Bottom margin: 5
  */
 export function calcTicketHeightMm(numItems: number): number {
-  const HEADER_HEIGHT_MM = 62
-  const FOOTER_HEIGHT_MM = 30
-  const ITEM_HEIGHT_MM = 3
-  return HEADER_HEIGHT_MM + (numItems * ITEM_HEIGHT_MM) + FOOTER_HEIGHT_MM
+  return TICKET_MARGIN_TOP
+    + TICKET_LOGO_HEIGHT
+    + TICKET_HEADER_HEIGHT
+    + TICKET_COLUMNS_HEIGHT
+    + (numItems * TICKET_ITEM_ROW_HEIGHT)
+    + TICKET_TOTAL_HEIGHT
+    + TICKET_FOOTER_HEIGHT
+    + TICKET_MARGIN_BOTTOM
 }
+
+// Section heights for genTicket (in mm)
+const TICKET_MARGIN_TOP = 5
+const TICKET_LOGO_HEIGHT = 14
+const TICKET_HEADER_HEIGHT = 32
+const TICKET_COLUMNS_HEIGHT = 5
+const TICKET_ITEM_ROW_HEIGHT = 3.5
+const TICKET_TOTAL_HEIGHT = 8
+const TICKET_FOOTER_HEIGHT = 20
+const TICKET_MARGIN_BOTTOM = 5
 
 /**
  * Calculates the page height for genTicketCaja/genTicketMaster (slightly different formula).
@@ -355,14 +378,44 @@ export function calcTicketCajaHeight(numItems: number): number {
 }
 
 /**
- * Calculates the page height in mm for genTicketCaja/genTicketMaster.
- * Uses top-down layout: fixed header (with payment fields) + variable items + footer.
+ * Calculates the page height in mm for genTicketCaja.
+ *
+ * Sections:
+ *   - Top margin: 5
+ *   - Logo: 14
+ *   - Header (feria + mode + payment fields): 38
+ *   - Column headers + separator: 5
+ *   - Item rows: nitems × 3.5
+ *   - Total section: 8
+ *   - Footer (separator + session + bottom texts): 16
+ *   - Bottom margin: 5
  */
 export function calcTicketCajaHeightMm(numItems: number): number {
-  const HEADER_HEIGHT_MM = 72
-  const FOOTER_HEIGHT_MM = 22
-  const ITEM_HEIGHT_MM = 3.5
-  return HEADER_HEIGHT_MM + (numItems * ITEM_HEIGHT_MM) + FOOTER_HEIGHT_MM
+  return 5 + 14 + 38 + 5 + (numItems * 3.5) + 8 + 16 + 5
+}
+
+// Section heights for genTicketMaster (in mm)
+const MASTER_MARGIN_TOP = 5
+const MASTER_LOGO_HEIGHT = 14
+const MASTER_HEADER_HEIGHT = 36
+const MASTER_COLUMNS_HEIGHT = 5
+const MASTER_ITEM_ROW_HEIGHT = 3.5
+const MASTER_TOTAL_HEIGHT = 8
+const MASTER_FOOTER_HEIGHT = 20
+const MASTER_MARGIN_BOTTOM = 5
+
+/**
+ * Calculates the page height in mm for genTicketMaster.
+ */
+export function calcTicketMasterHeightMm(numItems: number): number {
+  return MASTER_MARGIN_TOP
+    + MASTER_LOGO_HEIGHT
+    + MASTER_HEADER_HEIGHT
+    + MASTER_COLUMNS_HEIGHT
+    + (numItems * MASTER_ITEM_ROW_HEIGHT)
+    + MASTER_TOTAL_HEIGHT
+    + MASTER_FOOTER_HEIGHT
+    + MASTER_MARGIN_BOTTOM
 }
 
 // ─────────────────────────────────────────────
@@ -372,19 +425,17 @@ export function calcTicketCajaHeightMm(numItems: number): number {
 /**
  * Generates the main ticket PDF (Factura Simplificada).
  *
- * Layout (top-down):
- *   - Logo (image2.jpg) centered at top
- *   - Header: feria, lugar, empresa, CIF, CP
- *   - Date
- *   - Mode/title text
- *   - Column headers and separator
- *   - Item rows (variable number)
- *   - Total separator + total row
- *   - Session ID
- *   - Legal texts l1, l2, l3
+ * The layout is divided into clearly defined vertical sections:
+ *   1. Top margin (TICKET_MARGIN_TOP)
+ *   2. Logo section (TICKET_LOGO_HEIGHT)
+ *   3. Header info section (TICKET_HEADER_HEIGHT): feria, lugar, empresa, CIF, CP, fecha, modo
+ *   4. Column headers + separator (TICKET_COLUMNS_HEIGHT)
+ *   5. Item rows (nitems × TICKET_ITEM_ROW_HEIGHT) — variable
+ *   6. Total section (TICKET_TOTAL_HEIGHT): separator + total row
+ *   7. Footer section (TICKET_FOOTER_HEIGHT): separator + session ID + legal texts
+ *   8. Bottom margin (TICKET_MARGIN_BOTTOM)
  *
- * The page height is calculated dynamically based on the actual content size,
- * ensuring the ticket grows as needed without scaling text.
+ * The page height = sum of all sections, ensuring no scaling and no overlap.
  *
  * @returns Buffer containing the generated ticket PDF
  */
@@ -409,15 +460,7 @@ export async function genTicket(params: GenTicketParams): Promise<Buffer> {
   } = params
 
   const nitems = countActiveItems(items)
-
-  // Calculate page height: fixed header/footer + variable item rows
-  // Header (logo + texts + date + title + column headers): ~62mm
-  // Each item row: 3mm
-  // Footer (total + session + legal): ~30mm
-  const HEADER_HEIGHT_MM = 62
-  const FOOTER_HEIGHT_MM = 30
-  const ITEM_HEIGHT_MM = 3
-  const pageHeightMm = HEADER_HEIGHT_MM + (nitems * ITEM_HEIGHT_MM) + FOOTER_HEIGHT_MM
+  const pageHeightMm = calcTicketHeightMm(nitems)
   const pageHeight = pageHeightMm * MM_TO_PT
 
   const doc = new PDFDocument({
@@ -431,18 +474,17 @@ export async function genTicket(params: GenTicketParams): Promise<Buffer> {
 
   const pageWidth = TICKET_WIDTH
 
-  // ─── Top-down layout (all Y values are from top in mm) ───
-  let y = 2 // Start 2mm from top
+  // ─── Section 1: Top margin ───
+  let y = TICKET_MARGIN_TOP
 
-  // 1. Logo centered (height ~10mm)
+  // ─── Section 2: Logo ───
   drawImageCentered(doc, 'image2.jpg', y * MM_TO_PT, 30 * MM_TO_PT, pageWidth)
-  y += 12
+  y += TICKET_LOGO_HEIGHT
 
-  // 2. Background watermark (positioned behind content area)
-  const bgY = y + 2
-  drawImage(doc, 'fondoticketori.png', 5 * MM_TO_PT, bgY * MM_TO_PT, 20 * MM_TO_PT)
+  // ─── Section 3: Header info ───
+  // Background watermark (behind header content)
+  drawImage(doc, 'fondoticketori.png', 5 * MM_TO_PT, y * MM_TO_PT, 20 * MM_TO_PT)
 
-  // 3. Header texts
   drawCentered(doc, feria, FONTS.bold, 12, y * MM_TO_PT, pageWidth)
   y += 5
   drawCentered(doc, lugar, FONTS.bold, 10, y * MM_TO_PT, pageWidth)
@@ -453,29 +495,23 @@ export async function genTicket(params: GenTicketParams): Promise<Buffer> {
   y += 3
   drawCentered(doc, cp, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth)
   y += 4
-
-  // 4. Date
   drawCentered(doc, 'Fecha', FONTS.condensed, 8, y * MM_TO_PT, pageWidth)
   y += 3
   drawCentered(doc, fechaTicket, FONTS.condensed, 8, y * MM_TO_PT, pageWidth)
   y += 4
-
-  // 5. Mode/title text
   drawLeft(doc, modoTicket, FONTS.bold, 6.5, 5 * MM_TO_PT, y * MM_TO_PT)
-  y += 4
+  y += 6 // Remaining space to complete TICKET_HEADER_HEIGHT
 
-  // 6. Column headers
+  // ─── Section 4: Column headers + separator ───
   drawLeft(doc, 'Producto', FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT)
   drawLeft(doc, 'Cant.', FONTS.condensed, 8, 45 * MM_TO_PT, y * MM_TO_PT)
   drawLeft(doc, 'Precio', FONTS.condensed, 8, 55 * MM_TO_PT, y * MM_TO_PT)
   drawLeft(doc, 'Importe', FONTS.condensed, 8, 65 * MM_TO_PT, y * MM_TO_PT)
   y += 3
-
-  // 7. Separator line below headers
   drawLine(doc, 5 * MM_TO_PT, y * MM_TO_PT, pageWidth - 2 * 5 * MM_TO_PT)
   y += 2
 
-  // 8. Item rows
+  // ─── Section 5: Item rows (variable) ───
   let totalProductos = 0
   let totalImporte = 0
 
@@ -498,36 +534,33 @@ export async function genTicket(params: GenTicketParams): Promise<Buffer> {
       drawRight(doc, price, FONTS.condensed, 8, 62 * MM_TO_PT, y * MM_TO_PT)
       drawRight(doc, total, FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT)
 
-      y += ITEM_HEIGHT_MM
+      y += TICKET_ITEM_ROW_HEIGHT
     }
   }
 
-  // 9. Total separator and total row
-  y += 2
+  // ─── Section 6: Total ───
+  y += 1
   drawLine(doc, 30 * MM_TO_PT, y * MM_TO_PT, pageWidth - 30 * MM_TO_PT - 5 * MM_TO_PT)
   y += 3
-
   drawLeft(doc, 'Total:', FONTS.condensed, 8, 35 * MM_TO_PT, y * MM_TO_PT)
   drawRight(doc, String(totalProductos), FONTS.condensed, 8, 50 * MM_TO_PT, y * MM_TO_PT)
   drawRight(doc, formatPrice(totalImporte), FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT)
   y += 4
 
-  // 10. Bottom separator
+  // ─── Section 7: Footer ───
   drawLine(doc, 5 * MM_TO_PT, y * MM_TO_PT, pageWidth - 2 * 5 * MM_TO_PT)
   y += 4
-
-  // 11. Session ID
   const clienteStr = formatClientId(idCliente)
   const sessionText = `${nombreMaquina} - Sesión: ${clienteStr}`
   drawCentered(doc, sessionText, FONTS.condensed, 9, y * MM_TO_PT, pageWidth)
-  y += 5
-
-  // 12. Legal texts at bottom
+  y += 4
   drawCentered(doc, l1, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth)
   y += 4
   drawCentered(doc, l2, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth)
   y += 4
   drawCentered(doc, l3, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth)
+
+  // ─── Section 8: Bottom margin (implicit — page ends) ───
 
   doc.end()
   return result

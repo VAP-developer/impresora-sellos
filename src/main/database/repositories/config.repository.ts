@@ -81,11 +81,17 @@ export interface PreciosConfig {
   tarifaT4?: number // Tira 4 tarifas
 }
 
+export interface ImagenesConfig {
+  printSello: boolean
+  activeFair: { year: string; fairName: string } | null
+}
+
 export interface AppConfig {
   ticket: TicketConfig
   codigo: CodigoConfig
   sello: SelloConfig
   precios: PreciosConfig
+  imagenes?: ImagenesConfig
 }
 
 // Default configuration (replicates legacy Meteor initConfig)
@@ -315,6 +321,28 @@ export class ConfigRepository {
     if (!existing) {
       this.set(structuredClone(DEFAULT_CONFIG))
     }
+  }
+
+  /**
+   * Retrieves the imagenes section of the config.
+   * Returns defaults ({ printSello: false, activeFair: null }) if not yet set.
+   */
+  getImagenes(): ImagenesConfig {
+    const config = this.get()
+    return config?.imagenes ?? { printSello: false, activeFair: null }
+  }
+
+  /**
+   * Updates only the imagenes section of the config.
+   * Creates the section if it doesn't exist yet.
+   */
+  updateImagenes(imagenes: ImagenesConfig): void {
+    const config = this.get()
+    if (!config) {
+      throw new Error('Config not initialized. Call initConfig() first.')
+    }
+    config.imagenes = imagenes
+    this.set(config)
   }
 
   /**

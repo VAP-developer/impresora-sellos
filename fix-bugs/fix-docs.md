@@ -301,6 +301,38 @@ El bufferCache ahora almacena la altura junto con el buffer
 buildPrintOptions usa la altura real del ticket para construir el media string (Custom.78x{N}mm), con fallback al default de 200mm si no hay dato disponible
 De esta manera, cuando hay pocos ítems el ticket sale corto, y cuando hay muchos ítems la hoja se alarga proporcionalmente sin escalar el texto.
 
+Problema: El logo de Correos y el título de la feria se solapaban, y al generar tickets largos la impresora seguía escalando el texto porque la altura calculada del PDF y del media no coincidían exactamente con el contenido.
+
+Solución: Layout por secciones con alturas declarativas
+
+Ahora el ticket se construye con secciones verticales claramente definidas (constantes al inicio del archivo). La altura de la página es la suma exacta de estas secciones, por lo que PDF y media siempre coinciden:
+
+┌─────────────────────┐
+│  Sangría superior   │  5mm  (TICKET_MARGIN_TOP)
+├─────────────────────┤
+│  Logo Correos       │ 14mm  (TICKET_LOGO_HEIGHT)
+├─────────────────────┤
+│  Título + info      │ 32mm  (TICKET_HEADER_HEIGHT)
+│  feria, lugar,      │       (feria, lugar, empresa, CIF, CP,
+│  empresa, fecha...  │        fecha, modo)
+├─────────────────────┤
+│  Cabeceras columnas │  5mm  (TICKET_COLUMNS_HEIGHT)
+├─────────────────────┤
+│  Items (variable)   │  N × 3.5mm (TICKET_ITEM_ROW_HEIGHT)
+├─────────────────────┤
+│  Total              │  8mm  (TICKET_TOTAL_HEIGHT)
+├─────────────────────┤
+│  Pie (sesión+legal) │ 20mm  (TICKET_FOOTER_HEIGHT)
+├─────────────────────┤
+│  Sangría inferior   │  5mm  (TICKET_MARGIN_BOTTOM)
+└─────────────────────┘
+Cambios clave:
+
+Cada sección tiene su espacio reservado y no compite con las demás
+El logo ocupa sus 14mm propios, por lo que nunca se solapa con el título que empieza justo debajo
+La altura total del PDF = suma de secciones = media enviada a la impresora → no hay escalado
+El mismo approach se aplica a los 3 tipos de ticket (genTicket, genTicketCaja, genTicketMaster)
+
 
 ## Contador de sellos
 Quiero arreglar otra cosa.
