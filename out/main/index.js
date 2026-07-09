@@ -891,7 +891,18 @@ function registerImagesHandlers() {
     repo.remove(name);
   });
   handleIpc("images:getByName", (name) => {
-    return repo.getByName(name);
+    const imageName = name;
+    const directResult = repo.getByName(imageName);
+    if (directResult) return directResult;
+    const fairs = syncRepo.getFairList();
+    const matchedFair = fairs.find(
+      (f) => f.fairName.toLowerCase() === imageName.toLowerCase()
+    );
+    if (matchedFair) {
+      const fondoName = buildImageName(matchedFair.year, matchedFair.fairName, "fondo");
+      return repo.getByName(fondoName);
+    }
+    return null;
   });
   handleIpc("images:getFairList", () => {
     return syncRepo.getFairList();
@@ -910,6 +921,15 @@ function registerImagesHandlers() {
   });
   handleIpc("images:getSyncStatus", () => {
     return lastSyncResult;
+  });
+  handleIpc("images:resync", () => {
+    const basePath = path.join(
+      electron.app.isPackaged ? path.dirname(electron.app.getPath("exe")) : electron.app.getAppPath(),
+      "bbdd-ferias"
+    );
+    const result = syncImages(basePath);
+    lastSyncResult = result;
+    return result;
   });
 }
 const execAsync$1 = util.promisify(child_process.exec);
@@ -3738,10 +3758,22 @@ function getTicketDateTime(config) {
   const hora = ticket.hora === "auto" ? now.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : ticket.hora;
   return `${fecha} ${hora}`;
 }
-function getModelBackground(modelName, imagesRepo) {
+function getModelBackground(modelName, imagesRepo, syncRepo) {
   if (!modelName) return null;
   const image = imagesRepo.getByName(modelName);
-  return image ? image.url : null;
+  if (image) return image.url;
+  if (syncRepo) {
+    const fairs = syncRepo.getFairList();
+    const matchedFair = fairs.find(
+      (f) => f.fairName.toLowerCase() === modelName.toLowerCase()
+    );
+    if (matchedFair) {
+      const fondoName = buildImageName(matchedFair.year, matchedFair.fairName, "fondo");
+      const fondoImage = imagesRepo.getByName(fondoName);
+      return fondoImage?.url ?? null;
+    }
+  }
+  return null;
 }
 function buildTicketData(quantities, precios) {
   const tarifaTA = precios.tarifaTA ?? precios.tarifaA * 4;
@@ -3817,8 +3849,13 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
     overlay2 = layerResult.overlayImage;
     notifications.push(...layerResult.notifications);
   } else {
-    bg1 = getModelBackground(model1Name, repo);
-    bg2 = getModelBackground(model2Name, repo);
+    let syncRepo;
+    try {
+      syncRepo = new ImageSyncRepository();
+    } catch {
+    }
+    bg1 = getModelBackground(model1Name, repo, syncRepo);
+    bg2 = getModelBackground(model2Name, repo, syncRepo);
   }
   const usesBlankBackground = config.codigo.modo === "MD" || config.codigo.modo === "FI";
   for (const tariff of TARIFF_DEFS) {

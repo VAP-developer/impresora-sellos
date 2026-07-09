@@ -275,6 +275,13 @@ export interface ElectronAPI {
       unchanged: number
       errors: Array<{ path: string; error: string }>
     } | null>
+    resync(): Promise<{
+      inserted: number
+      updated: number
+      deleted: number
+      unchanged: number
+      errors: Array<{ path: string; error: string }>
+    }>
   }
   printer: {
     getStatus(): Promise<PrinterInfo[]>
@@ -338,7 +345,8 @@ const api: ElectronAPI = {
     getByName: (name) => ipcRenderer.invoke('images:getByName', name),
     getFairList: () => ipcRenderer.invoke('images:getFairList'),
     getByFair: (year, fairName) => ipcRenderer.invoke('images:getByFair', year, fairName),
-    getSyncStatus: () => ipcRenderer.invoke('images:getSyncStatus')
+    getSyncStatus: () => ipcRenderer.invoke('images:getSyncStatus'),
+    resync: () => ipcRenderer.invoke('images:resync')
   },
   printer: {
     getStatus: () => ipcRenderer.invoke('printer:getStatus'),

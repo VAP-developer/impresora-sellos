@@ -36,7 +36,8 @@ const api = {
     getByName: (name) => electron.ipcRenderer.invoke("images:getByName", name),
     getFairList: () => electron.ipcRenderer.invoke("images:getFairList"),
     getByFair: (year, fairName) => electron.ipcRenderer.invoke("images:getByFair", year, fairName),
-    getSyncStatus: () => electron.ipcRenderer.invoke("images:getSyncStatus")
+    getSyncStatus: () => electron.ipcRenderer.invoke("images:getSyncStatus"),
+    resync: () => electron.ipcRenderer.invoke("images:resync")
   },
   printer: {
     getStatus: () => electron.ipcRenderer.invoke("printer:getStatus"),

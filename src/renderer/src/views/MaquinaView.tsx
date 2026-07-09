@@ -277,15 +277,7 @@ export default function MaquinaView(): JSX.Element {
             >
               {saving ? 'Guardando...' : 'Guardar'}
             </button>
-            <button
-              type="button"
-              className="bg-blue-600 text-white px-4 py-2 rounded font-semibold hover:bg-blue-700
-                         focus:outline-none focus:ring-2 focus:ring-blue-400"
-              onClick={() => navigate('/subir-imagen')}
-              aria-label="Subir imagen de fondo para sellos"
-            >
-              Subir Imagen
-            </button>
+
             <button
               type="button"
               className="bg-[#212F5D] text-white px-4 py-2 rounded font-semibold hover:bg-[#2d3f7a]

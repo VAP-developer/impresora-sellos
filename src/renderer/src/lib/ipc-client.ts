@@ -167,6 +167,10 @@ export async function getImageSyncStatus(): Promise<SyncStatus> {
   return getAPI().images.getSyncStatus()
 }
 
+export async function resyncImages(): Promise<SyncStatus> {
+  return getAPI().images.resync() as Promise<SyncStatus>
+}
+
 // === Printer ===
 
 export async function getPrinterStatus(): Promise<PrinterInfo[]> {

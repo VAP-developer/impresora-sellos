@@ -13977,6 +13977,9 @@ async function getFairList() {
 async function getFairImages(year, fairName) {
   return getAPI().images.getByFair(year, fairName);
 }
+async function resyncImages() {
+  return getAPI().images.resync();
+}
 async function getPrinterStatus() {
   return getAPI().printer.getStatus();
 }
@@ -24167,7 +24170,8 @@ function TirasSection({
   ] });
 }
 function ImageConfig() {
-  const [collapsed, setCollapsed] = reactExports.useState(true);
+  const [collapsed, setCollapsed] = reactExports.useState(false);
+  const [syncing, setSyncing] = reactExports.useState(false);
   const {
     fairList,
     activeFair,
@@ -24206,6 +24210,17 @@ function ImageConfig() {
     },
     [setPrintSello]
   );
+  const handleResync = reactExports.useCallback(async () => {
+    setSyncing(true);
+    try {
+      await resyncImages();
+      await loadFairList();
+    } catch (err) {
+      console.error("[ImageConfig] Error resyncing images:", err);
+    } finally {
+      setSyncing(false);
+    }
+  }, [loadFairList]);
   const activeFairValue = activeFair ? `${activeFair.year}/${activeFair.fairName}` : "";
   const headerLabel = activeFair ? `${activeFair.year} — ${activeFair.fairName}` : "Sin feria seleccionada";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "images-section-heading", className: "mt-4", children: [
@@ -24271,7 +24286,18 @@ function ImageConfig() {
               ),
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { id: "fair-selector-desc", className: "sr-only", children: "Selecciona la feria activa para cargar sus imágenes" })
             ] }),
-            fairList.length === 0 && !loading && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-400 italic", children: "No hay ferias disponibles. Añade carpetas en bbdd-ferias/ y reinicia la app." })
+            fairList.length === 0 && !loading && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-400 italic", children: "No hay ferias disponibles. Añade carpetas en bbdd-ferias/ y pulsa Resincronizar." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                onClick: handleResync,
+                disabled: syncing || loading,
+                className: "bg-green-600 text-white px-3 py-1.5 rounded text-sm font-medium\n                         hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-400\n                         disabled:opacity-50 disabled:cursor-not-allowed",
+                "aria-label": "Resincronizar imágenes de ferias",
+                children: syncing ? "Sincronizando..." : "Resincronizar"
+              }
+            )
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -24509,16 +24535,6 @@ function MaquinaView() {
             onClick: handleGuardar,
             disabled: saving,
             children: saving ? "Guardando..." : "Guardar"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            type: "button",
-            className: "bg-blue-600 text-white px-4 py-2 rounded font-semibold hover:bg-blue-700\n                         focus:outline-none focus:ring-2 focus:ring-blue-400",
-            onClick: () => navigate("/subir-imagen"),
-            "aria-label": "Subir imagen de fondo para sellos",
-            children: "Subir Imagen"
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsx(

@@ -13,11 +13,13 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useImagesStore } from '@renderer/stores/images.store'
+import { resyncImages } from '@renderer/lib/ipc-client'
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ImageConfig(): JSX.Element {
-  const [collapsed, setCollapsed] = useState(true)
+  const [collapsed, setCollapsed] = useState(false)
+  const [syncing, setSyncing] = useState(false)
 
   const {
     fairList,
@@ -66,6 +68,18 @@ export default function ImageConfig(): JSX.Element {
     },
     [setPrintSello]
   )
+
+  const handleResync = useCallback(async () => {
+    setSyncing(true)
+    try {
+      await resyncImages()
+      await loadFairList()
+    } catch (err) {
+      console.error('[ImageConfig] Error resyncing images:', err)
+    } finally {
+      setSyncing(false)
+    }
+  }, [loadFairList])
 
   // ─── Derived ────────────────────────────────────────────────────────────────
 
@@ -152,9 +166,21 @@ export default function ImageConfig(): JSX.Element {
 
             {fairList.length === 0 && !loading && (
               <p className="text-sm text-gray-400 italic">
-                No hay ferias disponibles. Añade carpetas en bbdd-ferias/ y reinicia la app.
+                No hay ferias disponibles. Añade carpetas en bbdd-ferias/ y pulsa Resincronizar.
               </p>
             )}
+
+            <button
+              type="button"
+              onClick={handleResync}
+              disabled={syncing || loading}
+              className="bg-green-600 text-white px-3 py-1.5 rounded text-sm font-medium
+                         hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-400
+                         disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Resincronizar imágenes de ferias"
+            >
+              {syncing ? 'Sincronizando...' : 'Resincronizar'}
+            </button>
           </div>
 
           {/* Print checkboxes */}

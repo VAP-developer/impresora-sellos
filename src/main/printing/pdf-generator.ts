@@ -23,6 +23,8 @@ import type { StampRenderParams } from './stamp-renderer'
 import { genTicket, genTicketCaja, genTicketMaster, calcTicketHeightMm, calcTicketCajaHeightMm, calcTicketMasterHeightMm, countActiveItems } from './ticket-renderer'
 import type { TicketItem, TicketProduct } from './ticket-renderer'
 import { ImagesRepository } from '../database/repositories/images.repository'
+import { ImageSyncRepository } from '../database/repositories/image-sync.repository'
+import { buildImageName } from '../images/sync-images'
 
 // ─── Image Layer Types ────────────────────────────────────────────────────────
 
@@ -266,11 +268,33 @@ function getTicketDateTime(config: AppConfig): string {
 /**
  * Retrieves the background image for a given model name.
  * Returns the data URI from the database, or null if not found.
+ * Falls back to searching by fair name from the bbdd-ferias sync if direct lookup fails.
  */
-function getModelBackground(modelName: string, imagesRepo: ImagesRepository): string | null {
+function getModelBackground(
+  modelName: string,
+  imagesRepo: ImagesRepository,
+  syncRepo?: ImageSyncRepository
+): string | null {
   if (!modelName) return null
+
+  // Direct lookup by exact name
   const image = imagesRepo.getByName(modelName)
-  return image ? image.url : null
+  if (image) return image.url
+
+  // Fallback: search by fair name in image_sync table
+  if (syncRepo) {
+    const fairs = syncRepo.getFairList()
+    const matchedFair = fairs.find(
+      (f) => f.fairName.toLowerCase() === modelName.toLowerCase()
+    )
+    if (matchedFair) {
+      const fondoName = buildImageName(matchedFair.year, matchedFair.fairName, 'fondo')
+      const fondoImage = imagesRepo.getByName(fondoName)
+      return fondoImage?.url ?? null
+    }
+  }
+
+  return null
 }
 
 /**
@@ -409,8 +433,15 @@ export async function generateSalePdfs(
     notifications.push(...layerResult.notifications)
   } else {
     // Legacy: load background from images repository by model name
-    bg1 = getModelBackground(model1Name, repo)
-    bg2 = getModelBackground(model2Name, repo)
+    // Create syncRepo for fair name fallback (may not be available in test environments)
+    let syncRepo: ImageSyncRepository | undefined
+    try {
+      syncRepo = new ImageSyncRepository()
+    } catch {
+      // DB not available (e.g. in unit tests) — skip fair name fallback
+    }
+    bg1 = getModelBackground(model1Name, repo, syncRepo)
+    bg2 = getModelBackground(model2Name, repo, syncRepo)
   }
 
   // Determine if we use blank stamps (modes MD/FI don't print background)
