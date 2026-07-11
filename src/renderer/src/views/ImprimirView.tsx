@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useConfigStore } from '@renderer/stores/config.store'
-import type { EventoData, PreciosConfig, SelloConfig } from '@renderer/types/config'
+import type { PreciosConfig, SelloConfig } from '@renderer/types/config'
+import type { EventoRow } from '@renderer/lib/ipc-client'
+import { getEventoById } from '@renderer/lib/ipc-client'
 import PerfilSection from '@renderer/components/imprimir/PerfilSection'
 import EventoSection from '@renderer/components/imprimir/EventoSection'
 import EventoEditor from '@renderer/components/imprimir/EventoEditor'
 import PerfilesSection from '@renderer/components/imprimir/PerfilesSection'
 import TarifaSection from '@renderer/components/imprimir/TarifaSection'
+import PrinterSection from '@renderer/components/imprimir/PrinterSection'
 
 export default function ImprimirView(): JSX.Element {
   const config = useConfigStore((s) => s.config)
@@ -15,28 +18,16 @@ export default function ImprimirView(): JSX.Element {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
-  // Local state for profile selection (persisted on save via task 9.6)
+  // Local state for profile selection
   const [selectedPerfil, setSelectedPerfil] = useState<number>(
     config?.sello.elperfil ?? 6
   )
 
-  // Local state for event selection (persisted on save via task 9.6)
-  const [selectedEvento, setSelectedEvento] = useState<number>(
-    config?.sello.elevento ?? 0
-  )
+  // Selected event from the DB (new system)
+  const [selectedEvento, setSelectedEvento] = useState<EventoRow | null>(null)
 
-  // Local editable copy of event data (synced from config on load)
-  const [localEventos, setLocalEventos] = useState<EventoData[]>(() =>
-    config?.sello.eventos ?? Array.from({ length: 8 }, () => ({
-      nevento: '',
-      nferia: '',
-      nlugar: '',
-      motivoi: '',
-      motivod: '',
-      fecha: '',
-      localidad: ''
-    }))
-  )
+  // Key to force EventoSection to re-fetch after edits
+  const [eventosRefreshKey, setEventosRefreshKey] = useState(0)
 
   // Local editable profile names (only nperfil4 is actually editable)
   const [localProfileNames, setLocalProfileNames] = useState<Record<number, string>>(() => ({
@@ -58,12 +49,17 @@ export default function ImprimirView(): JSX.Element {
     tarifaT4: config?.precios.tarifaT4 ?? 0
   }))
 
-  // Sync local eventos from config when it loads/changes externally
+  // On mount, try to load the previously active event from config
   useEffect(() => {
-    if (config?.sello.eventos) {
-      setLocalEventos(config.sello.eventos.map((e) => ({ ...e })))
+    if (config?.sello.elevento && config.sello.elevento > 0) {
+      // elevento now stores the DB event ID
+      getEventoById(config.sello.elevento)
+        .then((ev) => {
+          if (ev) setSelectedEvento(ev)
+        })
+        .catch(() => { /* ignore - event may have been deleted */ })
     }
-  }, [config?.sello.eventos])
+  }, [])
 
   // Sync local profile names from config when it loads/changes externally
   useEffect(() => {
@@ -97,22 +93,13 @@ export default function ImprimirView(): JSX.Element {
     setSelectedPerfil(perfil)
   }, [])
 
-  const handleEventoChange = useCallback((evento: number) => {
+  const handleEventoChange = useCallback((evento: EventoRow | null) => {
     setSelectedEvento(evento)
   }, [])
 
-  const handleEventoDataChange = useCallback(
-    (index: number, field: keyof EventoData, value: string) => {
-      setLocalEventos((prev) => {
-        const updated = prev.map((e) => ({ ...e }))
-        if (updated[index]) {
-          updated[index] = { ...updated[index], [field]: value }
-        }
-        return updated
-      })
-    },
-    []
-  )
+  const handleEventosChanged = useCallback(() => {
+    setEventosRefreshKey((k) => k + 1)
+  }, [])
 
   const handleProfileNameChange = useCallback(
     (profileIndex: number, value: string) => {
@@ -129,9 +116,10 @@ export default function ImprimirView(): JSX.Element {
   )
 
   /**
-   * Guardar + Activar: Persists the local state (profile, event, event data,
-   * profile names, tariff prices) via IPC and navigates to Kiosko.
-   * Replicates the legacy guardar() behavior from ImprimirView.vue.
+   * Guardar + Activar: Persists the local state (profile, event, profile names,
+   * tariff prices) via IPC and navigates to Kiosko.
+   * The selected event from the DB is mapped into the sello config for compatibility
+   * with the rest of the system (printing, kiosko, etc.).
    */
   const handleSave = useCallback(async () => {
     if (!config) return
@@ -151,19 +139,35 @@ export default function ImprimirView(): JSX.Element {
       }
       const elnperfil = perfilNames[selectedPerfil] ?? ''
 
-      // Derive top-level sello fields from the currently active event
-      const activeEvent = localEventos[selectedEvento]
-      const activeModelo1 = activeEvent?.motivoi ?? ''
-      const activeModelo2 = activeEvent?.motivod ?? ''
+      // Map selected DB event into sello fields for compatibility
+      const ev = selectedEvento
+      const activeModelo1 = ev?.motivoi ?? ''
+      const activeModelo2 = ev?.motivod ?? ''
+
+      // Build the eventos array for backward compatibility
+      // The first slot contains the active event, rest remain from config
+      const eventos = config.sello.eventos ? [...config.sello.eventos] : []
+      if (ev) {
+        eventos[0] = {
+          nevento: ev.nevento,
+          nferia: ev.nferia,
+          nlugar: ev.nlugar,
+          motivoi: ev.motivoi,
+          motivod: ev.motivod,
+          fecha: ev.fecha,
+          localidad: ev.localidad,
+          codigo: ev.codigo
+        }
+      }
 
       // Build sello update payload
       const selloUpdate: Partial<SelloConfig> = {
         elperfil: selectedPerfil,
         elnperfil,
-        elevento: selectedEvento,
-        elnevento: activeEvent?.nevento ?? '',
-        feria: activeEvent?.nferia ?? '',
-        lugar: activeEvent?.nlugar ?? '',
+        elevento: ev?.id ?? 0, // Now stores the DB event ID
+        elnevento: ev?.nevento ?? '',
+        feria: ev?.nferia ?? '',
+        lugar: ev?.nlugar ?? '',
         modelo1: activeModelo1,
         modelo2: activeModelo2,
         modo: config.sello.modo,
@@ -173,7 +177,7 @@ export default function ImprimirView(): JSX.Element {
         nperfil4: localProfileNames[4],
         nperfil5: localProfileNames[5],
         nperfil6: localProfileNames[6],
-        eventos: localEventos
+        eventos
       }
 
       // Build precios payload
@@ -197,7 +201,7 @@ export default function ImprimirView(): JSX.Element {
     } finally {
       setSaving(false)
     }
-  }, [config, selectedPerfil, selectedEvento, localEventos, localProfileNames, localPrecios, updateImprimir, navigate])
+  }, [config, selectedPerfil, selectedEvento, localProfileNames, localPrecios, updateImprimir, navigate])
 
   if (!config) {
     return (
@@ -234,18 +238,17 @@ export default function ImprimirView(): JSX.Element {
         onPerfilChange={handlePerfilChange}
       />
 
-      {/* Event section (uses local editable event data for live preview) */}
+      {/* Event section - select active event by year */}
       <EventoSection
-        sello={{ ...config.sello, eventos: localEventos }}
+        key={eventosRefreshKey}
         ticket={config.ticket}
         selectedEvento={selectedEvento}
         onEventoChange={handleEventoChange}
       />
 
-      {/* Event editor */}
+      {/* Event editor - create/edit/delete events by year */}
       <EventoEditor
-        eventos={localEventos}
-        onEventoDataChange={handleEventoDataChange}
+        onEventosChanged={handleEventosChanged}
       />
 
       {/* Profiles name editor (collapsible) */}
@@ -267,6 +270,9 @@ export default function ImprimirView(): JSX.Element {
         precios={localPrecios}
         onPreciosChange={handlePreciosChange}
       />
+
+      {/* Printer management section */}
+      <PrinterSection />
 
       {/* Footer buttons */}
       <div className="flex justify-center gap-4 p-4">

@@ -51,6 +51,7 @@ export interface EventoData {
   motivod: string // Nombre imagen motivo derecho
   fecha: string // Fecha para la etiqueta
   localidad: string // Localidad para la etiqueta
+  codigo?: string // Código del evento
 }
 
 export interface SelloConfig {

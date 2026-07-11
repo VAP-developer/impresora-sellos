@@ -860,7 +860,24 @@ function syncImages(basePath) {
         });
       }
     } else {
-      result.unchanged++;
+      const existingImage = imagesRepo.getByName(imageName);
+      if (!existingImage) {
+        try {
+          const dataUri = fileToDataUri(file.filePath);
+          const ext = path.extname(file.fileName).toLowerCase();
+          const mimeType = ext === ".png" ? "image/png" : "image/jpeg";
+          const stat = fs.statSync(file.filePath);
+          imagesRepo.upload(imageName, dataUri, mimeType, stat.size);
+          result.updated++;
+        } catch (err) {
+          result.errors.push({
+            path: file.filePath,
+            error: err instanceof Error ? err.message : String(err)
+          });
+        }
+      } else {
+        result.unchanged++;
+      }
     }
   }
   const validPaths = Array.from(diskPaths);
@@ -892,6 +909,7 @@ function registerImagesHandlers() {
   });
   handleIpc("images:getByName", (name) => {
     const imageName = name;
+    if (!imageName) return null;
     const directResult = repo.getByName(imageName);
     if (directResult) return directResult;
     const fairs = syncRepo.getFairList();
@@ -900,7 +918,22 @@ function registerImagesHandlers() {
     );
     if (matchedFair) {
       const fondoName = buildImageName(matchedFair.year, matchedFair.fairName, "fondo");
-      return repo.getByName(fondoName);
+      const fondoResult = repo.getByName(fondoName);
+      if (fondoResult) return fondoResult;
+    }
+    const allImages = repo.getAll();
+    const lowerName = imageName.toLowerCase();
+    const partialMatch = allImages.find(
+      (img) => img.name.toLowerCase().includes(lowerName) && img.name.toLowerCase().includes("fondo")
+    );
+    if (partialMatch) {
+      return { name: partialMatch.name, url: partialMatch.data };
+    }
+    const anyMatch = allImages.find(
+      (img) => img.name.toLowerCase().includes(lowerName)
+    );
+    if (anyMatch) {
+      return { name: anyMatch.name, url: anyMatch.data };
     }
     return null;
   });
@@ -4225,6 +4258,124 @@ function registerAutoLaunchHandlers() {
     return getAutoLaunchEnabled();
   });
 }
+class EventosRepository {
+  db;
+  constructor(db2) {
+    this.db = db2 ?? getDatabase();
+  }
+  /**
+   * Returns all distinct years that have events, sorted descending.
+   */
+  getYears() {
+    const rows = this.db.prepare("SELECT DISTINCT year FROM eventos ORDER BY year DESC").all();
+    return rows.map((r) => r.year);
+  }
+  /**
+   * Returns all events for a given year, sorted by name.
+   */
+  getByYear(year) {
+    return this.db.prepare("SELECT * FROM eventos WHERE year = ? ORDER BY nevento ASC").all(year);
+  }
+  /**
+   * Returns a single event by ID.
+   */
+  getById(id) {
+    const row = this.db.prepare("SELECT * FROM eventos WHERE id = ?").get(id);
+    return row ?? null;
+  }
+  /**
+   * Creates a new event. Returns the created event with its ID.
+   */
+  create(input) {
+    const stmt = this.db.prepare(`
+      INSERT INTO eventos (year, codigo, nevento, nferia, nlugar, motivoi, motivod, fecha, localidad)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const result = stmt.run(
+      input.year,
+      input.codigo,
+      input.nevento,
+      input.nferia,
+      input.nlugar,
+      input.motivoi,
+      input.motivod,
+      input.fecha,
+      input.localidad
+    );
+    return this.getById(Number(result.lastInsertRowid));
+  }
+  /**
+   * Updates an existing event by ID. Returns the updated event.
+   */
+  update(id, input) {
+    const existing = this.getById(id);
+    if (!existing) return null;
+    const updated = {
+      year: input.year ?? existing.year,
+      codigo: input.codigo ?? existing.codigo,
+      nevento: input.nevento ?? existing.nevento,
+      nferia: input.nferia ?? existing.nferia,
+      nlugar: input.nlugar ?? existing.nlugar,
+      motivoi: input.motivoi ?? existing.motivoi,
+      motivod: input.motivod ?? existing.motivod,
+      fecha: input.fecha ?? existing.fecha,
+      localidad: input.localidad ?? existing.localidad
+    };
+    this.db.prepare(`
+      UPDATE eventos SET
+        year = ?, codigo = ?, nevento = ?, nferia = ?, nlugar = ?,
+        motivoi = ?, motivod = ?, fecha = ?, localidad = ?,
+        updated_at = datetime('now')
+      WHERE id = ?
+    `).run(
+      updated.year,
+      updated.codigo,
+      updated.nevento,
+      updated.nferia,
+      updated.nlugar,
+      updated.motivoi,
+      updated.motivod,
+      updated.fecha,
+      updated.localidad,
+      id
+    );
+    return this.getById(id);
+  }
+  /**
+   * Deletes an event by ID. Returns true if deleted.
+   */
+  delete(id) {
+    const result = this.db.prepare("DELETE FROM eventos WHERE id = ?").run(id);
+    return result.changes > 0;
+  }
+  /**
+   * Returns all events (all years).
+   */
+  getAll() {
+    return this.db.prepare("SELECT * FROM eventos ORDER BY year DESC, nevento ASC").all();
+  }
+}
+function registerEventosHandlers() {
+  const repo = new EventosRepository();
+  handleIpc("eventos:getYears", () => {
+    return repo.getYears();
+  });
+  handleIpc("eventos:getByYear", (year) => {
+    return repo.getByYear(year);
+  });
+  handleIpc("eventos:getById", (id) => {
+    return repo.getById(id);
+  });
+  handleIpc("eventos:create", (input) => {
+    return repo.create(input);
+  });
+  handleIpc("eventos:update", (id, input) => {
+    return repo.update(id, input);
+  });
+  handleIpc("eventos:delete", (id) => {
+    return repo.delete(id);
+  });
+}
 function registerAllHandlers() {
   registerConfigHandlers();
   registerOrdersHandlers();
@@ -4232,6 +4383,7 @@ function registerAllHandlers() {
   registerPrinterHandlers();
   registerSaleHandlers();
   registerAutoLaunchHandlers();
+  registerEventosHandlers();
 }
 function notifyConfigChanged(config) {
   const windows = electron.BrowserWindow.getAllWindows();

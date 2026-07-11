@@ -280,8 +280,28 @@ export function syncImages(basePath: string): SyncResult {
         })
       }
     } else {
-      // Unchanged
-      result.unchanged++
+      // mtime unchanged — but verify the image actually exists in the images table.
+      // If a previous sync registered in image_sync but failed to insert into images,
+      // we need to re-insert the image data.
+      const existingImage = imagesRepo.getByName(imageName)
+      if (!existingImage) {
+        try {
+          const dataUri = fileToDataUri(file.filePath)
+          const ext = extname(file.fileName).toLowerCase()
+          const mimeType = ext === '.png' ? 'image/png' : 'image/jpeg'
+          const stat = statSync(file.filePath)
+
+          imagesRepo.upload(imageName, dataUri, mimeType, stat.size)
+          result.updated++
+        } catch (err) {
+          result.errors.push({
+            path: file.filePath,
+            error: err instanceof Error ? err.message : String(err)
+          })
+        }
+      } else {
+        result.unchanged++
+      }
     }
   }
 

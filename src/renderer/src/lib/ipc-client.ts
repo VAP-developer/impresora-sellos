@@ -267,3 +267,56 @@ export async function getAutoLaunchEnabled(): Promise<boolean> {
 export async function setAutoLaunchEnabled(enabled: boolean): Promise<boolean> {
   return getAPI().autoLaunch.set(enabled)
 }
+
+// === Eventos ===
+
+export interface EventoRow {
+  id: number
+  year: number
+  codigo: string
+  nevento: string
+  nferia: string
+  nlugar: string
+  motivoi: string
+  motivod: string
+  fecha: string
+  localidad: string
+  created_at: string
+  updated_at: string
+}
+
+export interface EventoInput {
+  year: number
+  codigo: string
+  nevento: string
+  nferia: string
+  nlugar: string
+  motivoi: string
+  motivod: string
+  fecha: string
+  localidad: string
+}
+
+export async function getEventoYears(): Promise<number[]> {
+  return getAPI().eventos.getYears()
+}
+
+export async function getEventosByYear(year: number): Promise<EventoRow[]> {
+  return getAPI().eventos.getByYear(year)
+}
+
+export async function getEventoById(id: number): Promise<EventoRow | null> {
+  return getAPI().eventos.getById(id)
+}
+
+export async function createEvento(input: EventoInput): Promise<EventoRow> {
+  return getAPI().eventos.create(input)
+}
+
+export async function updateEvento(id: number, input: Partial<EventoInput>): Promise<EventoRow | null> {
+  return getAPI().eventos.update(id, input)
+}
+
+export async function deleteEvento(id: number): Promise<boolean> {
+  return getAPI().eventos.delete(id)
+}

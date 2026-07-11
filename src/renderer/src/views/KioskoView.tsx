@@ -1,37 +1,30 @@
 /**
  * KioskoView.tsx
  *
- * Vista principal de venta. Compone los componentes de kiosko:
- * - StampModels: previsualizaciones de los dos modelos con controles de impresora
- * - TariffTable: tabla de tarifas con inputs de cantidad y límites
- * - CartControls: total de cesta, presupuesto, botones de acción (imprimir, perfiles, reset, error)
- * - RollCounters: contadores de stock de rollos y tickets al pie
+ * Vista principal de venta. Layout dividido en dos mitades:
+ * - Izquierda: Sello A (Modelo 1 / printer1) con su imagen y tabla de tarifas
+ * - Derecha: Sello B (Modelo 2 / printer2) con su imagen y tabla de tarifas
+ * - Abajo: Controles de impresión y contadores de rollos
  */
 
 import StampModels from '@renderer/components/kiosko/StampModels'
-import TariffTable from '@renderer/components/kiosko/TariffTable'
+import TariffTableSplit from '@renderer/components/kiosko/TariffTableSplit'
 import CartControls from '@renderer/components/kiosko/CartControls'
 import RollCounters from '@renderer/components/kiosko/RollCounters'
-import FairBackground from '@renderer/components/kiosko/FairBackground'
 
 export default function KioskoView(): JSX.Element {
   return (
     <div className="flex flex-col h-full p-2 gap-2 overflow-auto">
-      {/* Top: stamp model previews with printer controls */}
+      {/* Top: stamp model previews (just the two images, no printer selector) */}
       <StampModels />
 
-      {/* Fair background image preview */}
-      <FairBackground />
+      {/* Middle: tariff tables split by model */}
+      <TariffTableSplit />
 
-      {/* Middle: tariff table + cart controls side by side */}
-      <div className="flex items-start gap-2">
-        <div className="flex-1">
-          <TariffTable />
-        </div>
-        <CartControls />
-      </div>
+      {/* Bottom: cart controls (print buttons, total, etc.) */}
+      <CartControls />
 
-      {/* Bottom: roll and ticket counters */}
+      {/* Footer: roll and ticket counters */}
       <RollCounters />
     </div>
   )

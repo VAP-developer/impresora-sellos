@@ -13,6 +13,7 @@ export interface EventoData {
   motivod: string // Nombre imagen motivo derecho
   fecha: string // Fecha para la etiqueta
   localidad: string // Localidad para la etiqueta
+  codigo?: string // Código del evento
 }
 
 /** Configuración de ticket / factura simplificada y contadores de rollos */

@@ -56,6 +56,14 @@ const api = {
   autoLaunch: {
     get: () => electron.ipcRenderer.invoke("autoLaunch:get"),
     set: (enabled) => electron.ipcRenderer.invoke("autoLaunch:set", enabled)
+  },
+  eventos: {
+    getYears: () => electron.ipcRenderer.invoke("eventos:getYears"),
+    getByYear: (year) => electron.ipcRenderer.invoke("eventos:getByYear", year),
+    getById: (id) => electron.ipcRenderer.invoke("eventos:getById", id),
+    create: (input) => electron.ipcRenderer.invoke("eventos:create", input),
+    update: (id, input) => electron.ipcRenderer.invoke("eventos:update", id, input),
+    delete: (id) => electron.ipcRenderer.invoke("eventos:delete", id)
   }
 };
 if (process.contextIsolated) {

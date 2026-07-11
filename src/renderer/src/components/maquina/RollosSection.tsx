@@ -212,8 +212,33 @@ export default function RollosSection({
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
+  const [collapsed, setCollapsed] = useState(false)
+
   return (
     <section aria-labelledby="rollos-section-heading" className="mt-4">
+      {/* Collapsible header */}
+      <button
+        type="button"
+        id="rollos-section-heading"
+        className="w-full bg-[rgb(255,192,0)] p-2 rounded cursor-pointer flex items-center gap-2
+                   text-left focus:outline-none focus:ring-2 focus:ring-yellow-500"
+        onClick={() => setCollapsed(!collapsed)}
+        aria-expanded={!collapsed}
+        aria-controls="rollos-section-content"
+      >
+        <input
+          type="checkbox"
+          checked={!collapsed}
+          readOnly
+          className="cursor-pointer"
+          tabIndex={-1}
+          aria-hidden="true"
+        />
+        <h3 className="text-base font-bold m-0">ROLLOS ETIQUETAS EN MÁQUINA</h3>
+      </button>
+
+      {!collapsed && (
+      <div id="rollos-section-content">
       {/* ─── Tickets counter ──────────────────────────────────────────────── */}
       <div className="flex flex-col items-center">
         <div className="bg-gray-100 p-2 rounded shadow-sm">
@@ -250,14 +275,6 @@ export default function RollosSection({
             Reset
           </button>
         </div>
-      </div>
-
-      {/* ─── ROLLOS ETIQUETAS EN MÁQUINA ─────────────────────────────────── */}
-      <div
-        id="rollos-section-heading"
-        className="bg-[rgb(255,192,0)] p-2 rounded mt-4"
-      >
-        <h3 className="text-base font-bold m-0">ROLLOS ETIQUETAS EN MÁQUINA</h3>
       </div>
 
       <div className="flex justify-center gap-8 mt-4">
@@ -450,6 +467,8 @@ export default function RollosSection({
           </div>
         )}
       </div>
+      </div>
+      )}
     </section>
   )
 }

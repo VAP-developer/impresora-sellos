@@ -11,6 +11,7 @@
  * Validates: Requirement 13.4 (changing active profile adjusts Límite_Importe)
  */
 
+import { useState } from 'react'
 import type { SelloConfig } from '@renderer/types/config'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -31,6 +32,7 @@ export default function PerfilSection({
   selectedPerfil,
   onPerfilChange
 }: PerfilSectionProps): JSX.Element {
+  const [expanded, setExpanded] = useState(true)
   /** Build profile options from the sello config (nperfil1..nperfil6). */
   const profiles: { value: number; label: string }[] = [
     { value: 1, label: sello.nperfil1 || 'Perfil 1' },
@@ -50,36 +52,51 @@ export default function PerfilSection({
 
   return (
     <section aria-labelledby="perfil-section-heading" className="mb-6">
-      {/* Section header */}
-      <div className="bg-[rgb(255,192,0)] p-2 mb-2 rounded shadow">
-        <h3 id="perfil-section-heading" className="text-black font-bold m-0">
+      {/* Section header with collapsible toggle */}
+      <div className="bg-[rgb(255,192,0)] p-2 mb-2 rounded shadow flex items-center gap-2">
+        <input
+          id="toggle-perfil"
+          type="checkbox"
+          checked={expanded}
+          onChange={() => setExpanded(!expanded)}
+          className="cursor-pointer"
+          aria-expanded={expanded}
+          aria-controls="perfil-section-content"
+        />
+        <label
+          htmlFor="toggle-perfil"
+          id="perfil-section-heading"
+          className="text-black text-lg font-bold cursor-pointer"
+        >
           PERFIL - MODO DE VENTA
-        </h3>
+        </label>
       </div>
 
-      {/* Profile selector */}
-      <div className="flex flex-col items-center p-4">
-        <label
-          htmlFor="perfil-selector"
-          className="text-red-600 text-lg font-bold mb-2"
-        >
-          Ir a Menú MÁQUINA y GUARDAR
-        </label>
-        <select
-          id="perfil-selector"
-          value={selectedPerfil}
-          onChange={handleChange}
-          className="w-[250px] text-blue-700 text-lg border border-gray-300 rounded p-2
-                     focus:outline-none focus:ring-2 focus:ring-blue-500"
-          aria-label="Seleccionar perfil de venta activo"
-        >
-          {profiles.map((profile) => (
-            <option key={profile.value} value={profile.value}>
-              {profile.label}
-            </option>
-          ))}
-        </select>
-      </div>
+      {/* Collapsible content */}
+      {expanded && (
+        <div id="perfil-section-content" className="flex flex-col items-center p-4">
+          <label
+            htmlFor="perfil-selector"
+            className="text-red-600 text-lg font-bold mb-2"
+          >
+            Ir a Menú MÁQUINA y GUARDAR
+          </label>
+          <select
+            id="perfil-selector"
+            value={selectedPerfil}
+            onChange={handleChange}
+            className="w-[250px] text-blue-700 text-lg border border-gray-300 rounded p-2
+                       focus:outline-none focus:ring-2 focus:ring-blue-500"
+            aria-label="Seleccionar perfil de venta activo"
+          >
+            {profiles.map((profile) => (
+              <option key={profile.value} value={profile.value}>
+                {profile.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
     </section>
   )
 }

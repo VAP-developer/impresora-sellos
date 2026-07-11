@@ -50,6 +50,7 @@ export interface EventoData {
   motivod: string
   fecha: string
   localidad: string
+  codigo?: string
 }
 
 export interface SelloConfig {
@@ -219,6 +220,35 @@ export interface CancelSaleError {
 
 export type CancelSaleOutcome = CancelSaleResult | CancelSaleError
 
+// === Evento Types ===
+
+export interface EventoRow {
+  id: number
+  year: number
+  codigo: string
+  nevento: string
+  nferia: string
+  nlugar: string
+  motivoi: string
+  motivod: string
+  fecha: string
+  localidad: string
+  created_at: string
+  updated_at: string
+}
+
+export interface EventoInput {
+  year: number
+  codigo: string
+  nevento: string
+  nferia: string
+  nlugar: string
+  motivoi: string
+  motivod: string
+  fecha: string
+  localidad: string
+}
+
 // === ElectronAPI Interface ===
 
 // === Sale Image Flags ===
@@ -301,6 +331,14 @@ export interface ElectronAPI {
     get(): Promise<boolean>
     set(enabled: boolean): Promise<boolean>
   }
+  eventos: {
+    getYears(): Promise<number[]>
+    getByYear(year: number): Promise<EventoRow[]>
+    getById(id: number): Promise<EventoRow | null>
+    create(input: EventoInput): Promise<EventoRow>
+    update(id: number, input: Partial<EventoInput>): Promise<EventoRow | null>
+    delete(id: number): Promise<boolean>
+  }
 }
 
 // === IPC API Implementation ===
@@ -366,6 +404,14 @@ const api: ElectronAPI = {
   autoLaunch: {
     get: () => ipcRenderer.invoke('autoLaunch:get'),
     set: (enabled) => ipcRenderer.invoke('autoLaunch:set', enabled)
+  },
+  eventos: {
+    getYears: () => ipcRenderer.invoke('eventos:getYears'),
+    getByYear: (year) => ipcRenderer.invoke('eventos:getByYear', year),
+    getById: (id) => ipcRenderer.invoke('eventos:getById', id),
+    create: (input) => ipcRenderer.invoke('eventos:create', input),
+    update: (id, input) => ipcRenderer.invoke('eventos:update', id, input),
+    delete: (id) => ipcRenderer.invoke('eventos:delete', id)
   }
 }
 

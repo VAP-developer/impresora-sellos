@@ -52,11 +52,13 @@ export function registerImagesHandlers(): void {
   handleIpc('images:getByName', (name: unknown) => {
     const imageName = name as string
 
-    // Direct lookup by exact name (legacy uploaded images)
+    if (!imageName) return null
+
+    // Direct lookup by exact name (legacy uploaded images or full sync name)
     const directResult = repo.getByName(imageName)
     if (directResult) return directResult
 
-    // Fallback: try to find by fair name from bbdd-ferias sync
+    // Fallback 1: try to find by fair name from bbdd-ferias sync
     // When the user puts "serpiente" in the motivo field, the image is stored
     // as "{year}/serpiente-fondo" from the folder sync. We search the image_sync
     // table for a matching fair name and then look up the fondo image.
@@ -66,7 +68,27 @@ export function registerImagesHandlers(): void {
     )
     if (matchedFair) {
       const fondoName = buildImageName(matchedFair.year, matchedFair.fairName, 'fondo')
-      return repo.getByName(fondoName)
+      const fondoResult = repo.getByName(fondoName)
+      if (fondoResult) return fondoResult
+    }
+
+    // Fallback 2: partial match — search for any image whose name contains the input
+    // This handles cases like the user typing "serpiente" and the image being "2026/serpiente-fondo"
+    const allImages = repo.getAll()
+    const lowerName = imageName.toLowerCase()
+    const partialMatch = allImages.find(
+      (img) => img.name.toLowerCase().includes(lowerName) && img.name.toLowerCase().includes('fondo')
+    )
+    if (partialMatch) {
+      return { name: partialMatch.name, url: partialMatch.data }
+    }
+
+    // Fallback 3: any image containing the name (even without -fondo)
+    const anyMatch = allImages.find(
+      (img) => img.name.toLowerCase().includes(lowerName)
+    )
+    if (anyMatch) {
+      return { name: anyMatch.name, url: anyMatch.data }
     }
 
     return null
