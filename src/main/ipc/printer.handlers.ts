@@ -176,9 +176,9 @@ export function registerPrinterHandlers(): void {
    */
   handleIpc(
     'printer:getAssignments',
-    (): Record<string, string | undefined> => {
+    (): Record<string, unknown> => {
       const printerManager = getPrinterManager()
-      return printerManager.getAssignments()
+      return printerManager.getAssignments() as Record<string, unknown>
     }
   )
 }

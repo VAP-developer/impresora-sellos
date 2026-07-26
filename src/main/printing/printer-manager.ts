@@ -51,6 +51,8 @@ export interface PrintOptions {
   copies?: number
   /** Job name for identification in the queue */
   jobName?: string
+  /** Thermal printer configuration (when target is a thermal label printer) */
+  thermalConfig?: ThermalPrinterConfig
 }
 
 /** Result from submitting a print job */
@@ -142,6 +144,40 @@ export interface PrinterBackend {
   cancelJob(printerUri: string, jobId: string): Promise<boolean>
 }
 
+// ─── Thermal Printer Configuration ────────────────────────────────────────────
+
+/**
+ * Configuration for thermal label printers (e.g. Brother TD-4100N).
+ *
+ * Addresses three bugs when printing stamps via win:// on thermal printers:
+ * - Content inverted 180° due to paper feed direction
+ * - Double printing caused by orientation/paper size mismatch
+ * - No dedicated thermal printer parameters in SumatraPDF settings
+ */
+export interface ThermalPrinterConfig {
+  /** Whether this target should be treated as a thermal label printer */
+  enabled: boolean
+  /** Rotation to apply to the PDF before printing (degrees clockwise) */
+  rotateDegrees: 0 | 90 | 180 | 270
+  /** Paper width in millimeters (e.g. 55 for Brother TD-4100N) */
+  paperWidthMm: number
+  /** Paper height in millimeters (e.g. 25 for Brother TD-4100N) */
+  paperHeightMm: number
+  /** Force exactly 1 copy (prevents pdf-to-printer from doubling) */
+  forceSingleCopy: boolean
+}
+
+/**
+ * Default thermal config for Brother TD-4100N with 55×25mm labels.
+ */
+export const DEFAULT_THERMAL_CONFIG: ThermalPrinterConfig = {
+  enabled: true,
+  rotateDegrees: 180,
+  paperWidthMm: 55,
+  paperHeightMm: 25,
+  forceSingleCopy: true
+}
+
 // ─── Printer Configuration ────────────────────────────────────────────────────
 
 /** Mapping of target roles to printer URIs */
@@ -149,6 +185,8 @@ export interface PrinterAssignments {
   printer1?: string // URI for stamp printer 1 (model 1 / left)
   printer2?: string // URI for stamp printer 2 (model 2 / right)
   ticket?: string // URI for ticket printer
+  /** Per-target thermal printer configuration */
+  thermalConfig?: Partial<Record<PrinterTarget, ThermalPrinterConfig>>
 }
 
 // ─── Stamp/Ticket media constants ─────────────────────────────────────────────
@@ -247,7 +285,13 @@ export class PrinterManager {
       }
     }
 
-    return this.backend.print(uri, pdfBuffer, options)
+    // Inject thermal config if this target has one configured
+    const thermalConfig = this.assignments.thermalConfig?.[target]
+    const optionsWithThermal: PrintOptions = thermalConfig?.enabled
+      ? { ...options, thermalConfig }
+      : options
+
+    return this.backend.print(uri, pdfBuffer, optionsWithThermal)
   }
 
   /**

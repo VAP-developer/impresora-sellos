@@ -608,6 +608,11 @@ export class IppBackend implements PrinterBackend {
    * directly to the Windows spooler without opening any visible window or requiring
    * any external PDF viewer (Adobe, Edge, etc.).
    *
+   * For thermal label printers (when thermalConfig is provided):
+   * - Rotates the PDF content 180° to compensate for bottom-feed paper direction
+   * - Uses explicit paper size in SumatraPDF settings (e.g. "55x25")
+   * - Forces single copy to prevent double printing
+   *
    * Supports label printers, network printers, and USB printers alike.
    */
   private async printViaWindowsSpooler(
@@ -621,7 +626,7 @@ export class IppBackend implements PrinterBackend {
     const { print: printPdf } = require('pdf-to-printer')
 
     const jobName = options.jobName ?? `print_${Date.now()}`
-    const copies = options.copies ?? 1
+    const thermalConfig = options.thermalConfig
 
     // Write PDF to a temp file (pdf-to-printer needs a file path)
     const tempDir = join(tmpdir(), 'stamp-sales-print')
@@ -633,20 +638,38 @@ export class IppBackend implements PrinterBackend {
     const tempFile = join(tempDir, `${jobName}_${Date.now()}.pdf`)
 
     try {
-      writeFileSync(tempFile, pdfBuffer)
+      // Apply PDF rotation for thermal printers (fixes 180° inversion bug)
+      let finalPdfBuffer = pdfBuffer
+      if (thermalConfig?.enabled && thermalConfig.rotateDegrees !== 0) {
+        finalPdfBuffer = await this.rotatePdfPages(pdfBuffer, thermalConfig.rotateDegrees)
+      }
+
+      writeFileSync(tempFile, finalPdfBuffer)
 
       // Build SumatraPDF print settings
-      // The Brother TD-4100N driver has the label configured as 25×55mm with
-      // "horizontal" orientation, meaning the driver rotates content 90° to print
-      // landscape. Since our PDF is already landscape (55×25mm), we tell SumatraPDF
-      // to NOT rotate (use "portrait" mode) so the driver's rotation produces correct output.
-      // "noscale": prevent SumatraPDF from scaling content to fit paper
-      const win32Options: string[] = ['-print-settings', 'noscale,portrait']
+      let printSettings: string
+      if (thermalConfig?.enabled) {
+        // Thermal printer: explicit paper size, no scaling, landscape orientation
+        // The paper is physically WxH (e.g. 55x25), and the PDF is already landscape.
+        // Using "landscape" tells SumatraPDF not to rotate the content to fit portrait paper,
+        // which prevents the double-page issue where SumatraPDF splits a landscape PDF
+        // into two portrait pages.
+        const paperSize = `${thermalConfig.paperWidthMm}x${thermalConfig.paperHeightMm}`
+        printSettings = `noscale,landscape,paper=${paperSize}`
+      } else {
+        // Non-thermal printers: generic settings (preserve existing behavior)
+        printSettings = 'noscale,portrait'
+      }
+
+      const win32Options: string[] = ['-print-settings', printSettings]
+
+      // Determine copies: force single for thermal, otherwise use options
+      const copies = thermalConfig?.forceSingleCopy ? undefined : (options.copies ?? 1)
 
       // Print using pdf-to-printer (SumatraPDF engine)
       await printPdf(tempFile, {
         printer: printerName,
-        copies,
+        ...(copies !== undefined && { copies }),
         silent: true,
         win32: win32Options
       })
@@ -663,6 +686,28 @@ export class IppBackend implements PrinterBackend {
       const message = err instanceof Error ? err.message : String(err)
       return { success: false, error: `Windows print failed: ${message}` }
     }
+  }
+
+  /**
+   * Rotates all pages of a PDF by the specified degrees.
+   * Uses pdf-lib to manipulate the PDF in memory.
+   *
+   * @param pdfBuffer - Original PDF buffer
+   * @param rotation - Degrees to rotate (0, 90, 180, 270)
+   * @returns New PDF buffer with rotated pages
+   */
+  private async rotatePdfPages(pdfBuffer: Buffer, rotation: number): Promise<Buffer> {
+    const { PDFDocument, degrees } = require('pdf-lib')
+    const pdfDoc = await PDFDocument.load(pdfBuffer)
+    const pages = pdfDoc.getPages()
+
+    for (const page of pages) {
+      const currentRotation = page.getRotation().angle
+      page.setRotation(degrees(currentRotation + rotation))
+    }
+
+    const rotatedBytes = await pdfDoc.save()
+    return Buffer.from(rotatedBytes)
   }
 
 

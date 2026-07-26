@@ -9,7 +9,8 @@
  * 8.7 (resume resends), 18.2 (persist before sending)
  */
 
-import { createPrinterManager, PrinterManager } from './printing/printer-manager'
+import { createPrinterManager, PrinterManager, DEFAULT_THERMAL_CONFIG } from './printing/printer-manager'
+import type { PrinterAssignments } from './printing/printer-manager'
 import { PrintQueueService } from './printing/print-queue.service'
 import { PrinterAssignmentsRepository } from './database/repositories/printer-assignments.repository'
 
@@ -22,6 +23,7 @@ let printQueueService: PrintQueueService | null = null
  * Returns the singleton PrinterManager instance.
  * Creates it on first access (lazy initialization).
  * Loads persisted printer assignments from the database.
+ * Applies thermal printer config for stamp printers (printer1, printer2).
  */
 export function getPrinterManager(): PrinterManager {
   if (!printerManager) {
@@ -34,9 +36,24 @@ export function getPrinterManager(): PrinterManager {
       console.warn('[Services] Failed to load printer assignments:', err)
     }
 
-    printerManager = createPrinterManager(
-      Object.keys(savedAssignments).length > 0 ? savedAssignments : undefined
-    )
+    // Build PrinterAssignments with thermal config for stamp printers.
+    // printer1 and printer2 are always Brother TD-4100N thermal label printers
+    // connected via win:// on Windows. Thermal config fixes:
+    // - 180° rotation (paper feeds from bottom)
+    // - Explicit paper size (55x25mm)
+    // - Force single copy (prevents double printing)
+    const assignments: PrinterAssignments | undefined =
+      Object.keys(savedAssignments).length > 0
+        ? {
+            ...savedAssignments,
+            thermalConfig: {
+              printer1: DEFAULT_THERMAL_CONFIG,
+              printer2: DEFAULT_THERMAL_CONFIG
+            }
+          }
+        : undefined
+
+    printerManager = createPrinterManager(assignments)
   }
   return printerManager
 }
