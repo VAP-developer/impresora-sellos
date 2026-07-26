@@ -29,11 +29,19 @@ import { existsSync } from 'fs'
 /** Conversion factor: 1mm = 72/25.4 points */
 const MM_TO_PT = 72 / 25.4 // ≈ 2.83465
 
-/** Stamp dimensions in points */
+/** Stamp logical dimensions in mm (content is designed in landscape 55×25) */
 export const STAMP_WIDTH_MM = 55
 export const STAMP_HEIGHT_MM = 25
-export const STAMP_WIDTH = STAMP_WIDTH_MM * MM_TO_PT // ~155.91 pt
-export const STAMP_HEIGHT = STAMP_HEIGHT_MM * MM_TO_PT // ~70.87 pt
+export const STAMP_WIDTH = STAMP_WIDTH_MM * MM_TO_PT // ~155.91 pt (content width)
+export const STAMP_HEIGHT = STAMP_HEIGHT_MM * MM_TO_PT // ~70.87 pt (content height)
+
+/**
+ * PDF page dimensions: portrait (25mm × 55mm) because the Brother TD-4100N
+ * feeds paper along the 55mm side. Content is rotated 90° CCW inside the PDF
+ * so that it prints horizontally when the printer feeds from the long edge.
+ */
+const PAGE_WIDTH = STAMP_HEIGHT // 25mm in points (physical page width)
+const PAGE_HEIGHT = STAMP_WIDTH // 55mm in points (physical page height)
 
 // ─────────────────────────────────────────────
 // Font & Resource Path Helpers
@@ -193,6 +201,7 @@ function drawTextLeft(
 /**
  * Draws the background image on the stamp (full cover 55×25mm).
  * Handles file paths and base64 data URIs.
+ * NOTE: Call this AFTER applyLandscapeRotation() — coordinates are in the rotated space.
  */
 function drawBackground(doc: PDFKit.PDFDocument, imageSource: string | null | undefined): void {
   if (!imageSource) return
@@ -216,6 +225,7 @@ function drawBackground(doc: PDFKit.PDFDocument, imageSource: string | null | un
  * Draws the overlay image on the right half of the stamp (27.5mm–55mm x, 0–25mm y).
  * Used for sello layer that should only occupy the right half of the label.
  * Handles file paths and base64 data URIs.
+ * NOTE: Call this AFTER applyLandscapeRotation() — coordinates are in the rotated space.
  */
 function drawOverlay(doc: PDFKit.PDFDocument, imageSource: string | null | undefined): void {
   if (!imageSource) return
@@ -236,6 +246,23 @@ function drawOverlay(doc: PDFKit.PDFDocument, imageSource: string | null | undef
   } catch {
     // Gracefully ignore image errors (matches legacy behavior)
   }
+}
+
+/**
+ * Applies a 90° counter-clockwise rotation so that landscape content (55×25mm)
+ * is rendered inside a portrait page (25×55mm).
+ *
+ * After this transform, all drawing commands use the original landscape coordinate
+ * system (origin top-left, X goes right 0→55mm, Y goes down 0→25mm) but the
+ * actual PDF page is portrait. When the Brother TD-4100N prints this portrait page
+ * feeding paper along the 55mm side, the content appears horizontal.
+ *
+ * Transform: rotate -90° around origin then translate by -pageHeight (55mm) on Y.
+ * This maps: logical (x,y) → physical (y, pageHeight - x)
+ */
+function applyLandscapeRotation(doc: PDFKit.PDFDocument): void {
+  doc.rotate(-90, { origin: [0, 0] })
+  doc.translate(-PAGE_HEIGHT, 0)
 }
 
 /**
@@ -263,18 +290,21 @@ function collectPdf(doc: PDFKit.PDFDocument): Promise<Buffer> {
 // ─────────────────────────────────────────────
 
 /**
- * Generates a single stamp PDF (55×25mm) as a Buffer.
+ * Generates a single stamp PDF as a Buffer.
+ * Page is portrait (25×55mm) with content rotated 90° CCW so that the Brother
+ * TD-4100N prints it horizontally when feeding along the 55mm side.
  *
- * Layout (matching legacy genStampI/genStampD):
+ * Layout (in logical landscape coordinates after rotation):
  *   1. Background image (full 55×25mm)
- *   2. Tarifa text: FranklinGothic 12pt at (2mm, 19.5mm from bottom)
- *   3. Evento text: FranklinGothic 9pt right-aligned at (53mm, 19mm from bottom)
- *   4. Fecha text: FranklinGothic 9pt right-aligned at (53mm, 15mm from bottom)
- *   5. Código text: FranklinGothic 6pt at (2mm, 15mm from bottom)
+ *   2. Overlay image (right half 27.5–55mm × 25mm)
+ *   3. Tarifa text: FranklinGothic 12pt at (2mm, 19.5mm from bottom)
+ *   4. Evento text: FranklinGothic 9pt right-aligned at (26mm, 19mm from bottom)
+ *   5. Fecha text: FranklinGothic 9pt right-aligned at (26mm, 15mm from bottom)
+ *   6. Código text: FranklinGothic 6pt at (2mm, 15mm from bottom)
  */
 export async function renderStamp(params: StampRenderParams): Promise<Buffer> {
   const doc = new PDFDocument({
-    size: [STAMP_WIDTH, STAMP_HEIGHT],
+    size: [PAGE_WIDTH, PAGE_HEIGHT],
     margin: 0,
     info: { Title: 'Etiqueta', Author: 'Stamp Sales App' }
   })
@@ -282,6 +312,7 @@ export async function renderStamp(params: StampRenderParams): Promise<Buffer> {
   const result = collectPdf(doc)
 
   registerFonts(doc)
+  applyLandscapeRotation(doc)
   drawBackground(doc, params.backgroundImage)
   drawOverlay(doc, params.overlayImage)
   drawTextLeft(doc, params.tarifa, FONTS.regular, 12, 2, 19.5)
@@ -310,13 +341,14 @@ export function renderStampBlank(params: StampRenderParams): Promise<Buffer> {
  */
 export async function renderStampE1(params: StampEspecialParams): Promise<Buffer> {
   const doc = new PDFDocument({
-    size: [STAMP_WIDTH, STAMP_HEIGHT],
+    size: [PAGE_WIDTH, PAGE_HEIGHT],
     margin: 0,
     info: { Title: 'Tira Especial 1', Author: 'Stamp Sales App' }
   })
 
   const result = collectPdf(doc)
   registerFonts(doc)
+  applyLandscapeRotation(doc)
 
   const bgPath = join(getImagesPath(), 'TiraEspecial1.png')
   drawBackground(doc, existsSync(bgPath) ? bgPath : null)
@@ -334,13 +366,14 @@ export async function renderStampE1(params: StampEspecialParams): Promise<Buffer
  */
 export async function renderStampE2(params: StampEspecialParams): Promise<Buffer> {
   const doc = new PDFDocument({
-    size: [STAMP_WIDTH, STAMP_HEIGHT],
+    size: [PAGE_WIDTH, PAGE_HEIGHT],
     margin: 0,
     info: { Title: 'Tira Especial 2', Author: 'Stamp Sales App' }
   })
 
   const result = collectPdf(doc)
   registerFonts(doc)
+  applyLandscapeRotation(doc)
 
   const bgPath = join(getImagesPath(), 'TiraEspecial2.png')
   drawBackground(doc, existsSync(bgPath) ? bgPath : null)
@@ -362,13 +395,14 @@ export async function renderStampE2(params: StampEspecialParams): Promise<Buffer
  */
 export async function renderStampE3(params: StampEspecialParams): Promise<Buffer> {
   const doc = new PDFDocument({
-    size: [STAMP_WIDTH, STAMP_HEIGHT],
+    size: [PAGE_WIDTH, PAGE_HEIGHT],
     margin: 0,
     info: { Title: 'Tira Especial 3', Author: 'Stamp Sales App' }
   })
 
   const result = collectPdf(doc)
   registerFonts(doc)
+  applyLandscapeRotation(doc)
 
   const bgPath = join(getImagesPath(), 'TiraEspecial3.png')
   drawBackground(doc, existsSync(bgPath) ? bgPath : null)
@@ -390,13 +424,14 @@ export async function renderStampE3(params: StampEspecialParams): Promise<Buffer
  */
 export async function renderStampE4(params: StampEspecialParams): Promise<Buffer> {
   const doc = new PDFDocument({
-    size: [STAMP_WIDTH, STAMP_HEIGHT],
+    size: [PAGE_WIDTH, PAGE_HEIGHT],
     margin: 0,
     info: { Title: 'Tira Especial 4', Author: 'Stamp Sales App' }
   })
 
   const result = collectPdf(doc)
   registerFonts(doc)
+  applyLandscapeRotation(doc)
 
   const bgPath = join(getImagesPath(), 'TiraEspecial4.png')
   drawBackground(doc, existsSync(bgPath) ? bgPath : null)
@@ -421,7 +456,7 @@ export async function renderStampMultiPage(stamps: StampRenderParams[]): Promise
   }
 
   const doc = new PDFDocument({
-    size: [STAMP_WIDTH, STAMP_HEIGHT],
+    size: [PAGE_WIDTH, PAGE_HEIGHT],
     margin: 0,
     info: { Title: `Tira de ${stamps.length} etiquetas`, Author: 'Stamp Sales App' }
   })
@@ -431,9 +466,10 @@ export async function renderStampMultiPage(stamps: StampRenderParams[]): Promise
 
   stamps.forEach((stamp, index) => {
     if (index > 0) {
-      doc.addPage({ size: [STAMP_WIDTH, STAMP_HEIGHT], margin: 0 })
+      doc.addPage({ size: [PAGE_WIDTH, PAGE_HEIGHT], margin: 0 })
     }
 
+    applyLandscapeRotation(doc)
     drawBackground(doc, stamp.backgroundImage)
     drawOverlay(doc, stamp.overlayImage)
     drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12, 2, 19.5)
@@ -461,7 +497,7 @@ export async function renderStampEspecialStrip(
   tarifa: string
 ): Promise<Buffer> {
   const doc = new PDFDocument({
-    size: [STAMP_WIDTH, STAMP_HEIGHT],
+    size: [PAGE_WIDTH, PAGE_HEIGHT],
     margin: 0,
     info: { Title: 'Tira Especial', Author: 'Stamp Sales App' }
   })
@@ -472,13 +508,15 @@ export async function renderStampEspecialStrip(
   const imagesPath = getImagesPath()
 
   // Page 1: E1 — only código + especial
+  applyLandscapeRotation(doc)
   const bg1 = join(imagesPath, 'TiraEspecial1.png')
   drawBackground(doc, existsSync(bg1) ? bg1 : null)
   drawTextLeft(doc, codigos[0], FONTS.regular, 6, 1.5, 2)
   drawTextLeft(doc, especial, FONTS.regular, 6, 23.3, 2)
 
   // Page 2: E2 — tarifa + código + especial
-  doc.addPage({ size: [STAMP_WIDTH, STAMP_HEIGHT], margin: 0 })
+  doc.addPage({ size: [PAGE_WIDTH, PAGE_HEIGHT], margin: 0 })
+  applyLandscapeRotation(doc)
   const bg2 = join(imagesPath, 'TiraEspecial2.png')
   drawBackground(doc, existsSync(bg2) ? bg2 : null)
   drawTextLeft(doc, tarifa, FONTS.regular, 12, 1.5, 19.5)
@@ -486,7 +524,8 @@ export async function renderStampEspecialStrip(
   drawTextLeft(doc, especial, FONTS.regular, 6, 23.3, 2)
 
   // Page 3: E3 — tarifa + código + especial
-  doc.addPage({ size: [STAMP_WIDTH, STAMP_HEIGHT], margin: 0 })
+  doc.addPage({ size: [PAGE_WIDTH, PAGE_HEIGHT], margin: 0 })
+  applyLandscapeRotation(doc)
   const bg3 = join(imagesPath, 'TiraEspecial3.png')
   drawBackground(doc, existsSync(bg3) ? bg3 : null)
   drawTextLeft(doc, tarifa, FONTS.regular, 12, 1.5, 19.5)
@@ -494,7 +533,8 @@ export async function renderStampEspecialStrip(
   drawTextLeft(doc, especial, FONTS.regular, 6, 23.3, 2)
 
   // Page 4: E4 — only código + especial
-  doc.addPage({ size: [STAMP_WIDTH, STAMP_HEIGHT], margin: 0 })
+  doc.addPage({ size: [PAGE_WIDTH, PAGE_HEIGHT], margin: 0 })
+  applyLandscapeRotation(doc)
   const bg4 = join(imagesPath, 'TiraEspecial4.png')
   drawBackground(doc, existsSync(bg4) ? bg4 : null)
   drawTextLeft(doc, codigos[3], FONTS.regular, 6, 1.5, 2)

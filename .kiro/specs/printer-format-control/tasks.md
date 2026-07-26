@@ -92,3 +92,14 @@
   - Actualizar los tests que validan STAMP_ORIENTATION si los hay
   - Ejecutar `npx vitest --run src/main/printing/__tests__/` para verificar que no hay regresiones
   - _Requirements: 5.1, 5.2, 6.1, 6.2_
+
+- [x] 6. Fix rotación en el PDF: generar página portrait (25×55mm) con contenido rotado 90° CCW
+  - La Brother TD-4100N alimenta papel por el lado de 55mm e ignora orientation-requested
+  - El PDF ahora se genera con size [25mm, 55mm] (portrait) y se aplica doc.rotate(-90) + doc.translate(-pageHeight, 0)
+  - Todas las coordenadas de contenido se mantienen sin cambios (el transform es transparente)
+  - Cambios en src/main/printing/stamp-renderer.ts:
+    - Añadir constantes PAGE_WIDTH = STAMP_HEIGHT y PAGE_HEIGHT = STAMP_WIDTH
+    - Añadir función applyLandscapeRotation(doc) que rota -90° y traslada
+    - Todas las funciones render usan size [PAGE_WIDTH, PAGE_HEIGHT] + applyLandscapeRotation(doc)
+  - Tests: 333/333 pasan sin regresiones
+  - _Requirements: 4.1, 4.2, 5.1, 5.2_
