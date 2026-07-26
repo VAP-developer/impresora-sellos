@@ -693,11 +693,16 @@ export class IppBackend implements PrinterBackend {
    *
    * For 90° rotation on thermal printers: the original landscape PDF (55×25mm) is
    * re-embedded into a new portrait page (25×55mm) with the content rotated 90° CW
-   * and positioned at the BOTTOM of the new page. This matches the Brother TD-4100N
-   * paper feed direction where the label exits from the bottom edge.
+   * and positioned at the BOTTOM-RIGHT of the new page. This matches the Brother
+   * TD-4100N paper feed direction where the label exits from the bottom edge and
+   * the content should appear on the trailing end of the label.
+   *
+   * pdf-lib coordinate system: origin at BOTTOM-LEFT, Y increases upward.
+   * pdf-lib rotation: degrees are counter-clockwise (so 90° CCW = -90° CW).
+   * To achieve 90° clockwise rotation we use degrees(-90) or degrees(270).
    *
    * @param pdfBuffer - Original PDF buffer
-   * @param rotation - Degrees to rotate (0, 90, 180, 270)
+   * @param rotation - Degrees to rotate CW (0, 90, 180, 270)
    * @returns New PDF buffer with rotated and repositioned pages
    */
   private async rotatePdfPages(pdfBuffer: Buffer, rotation: number): Promise<Buffer> {
@@ -705,8 +710,7 @@ export class IppBackend implements PrinterBackend {
     const sourcePdf = await PDFDocument.load(pdfBuffer)
     const sourcePages = sourcePdf.getPages()
 
-    // For 90° rotation: create a new document with portrait pages (swapped dimensions)
-    // and embed the original content rotated and positioned at the bottom
+    // For 90° CW rotation: create new portrait pages and re-embed content
     if (rotation === 90) {
       const newPdf = await PDFDocument.create()
 
@@ -715,29 +719,44 @@ export class IppBackend implements PrinterBackend {
         const origWidth = sourcePage.getWidth()   // 55mm in pts (~155.91)
         const origHeight = sourcePage.getHeight() // 25mm in pts (~70.87)
 
-        // New page: portrait orientation (swap width and height)
-        // Height = original width (55mm), Width = original height (25mm)
-        const newPage = newPdf.addPage([origHeight, origWidth])
+        // New page: portrait (25mm wide × 55mm tall)
+        const newPageWidth = origHeight   // 25mm
+        const newPageHeight = origWidth   // 55mm
+        const newPage = newPdf.addPage([newPageWidth, newPageHeight])
 
-        // Embed the source page as a form XObject
+        // Embed the source page
         const [embedded] = await newPdf.embedPdf(sourcePdf, [i])
 
-        // Draw the embedded page rotated 90° CW and positioned at the bottom.
-        // After 90° CW rotation around origin:
-        // - The content that was landscape (55w × 25h) becomes portrait
-        // - We translate to position it at the bottom of the new page
+        // To rotate 90° CW and place at bottom-right:
+        // In pdf-lib, drawPage draws the embedded page's bottom-left corner at (x, y)
+        // BEFORE rotation. Rotation happens around that (x, y) point.
         //
-        // New page is origHeight(25) wide × origWidth(55) tall.
-        // Content after 90° CW needs to be at y=0 (bottom).
-        // Transformation: translate(origHeight, 0) then rotate(90°) places
-        // content at bottom-left. But we want it at the BOTTOM of the page,
-        // meaning y position starts at 0.
+        // 90° CW = -90° in pdf-lib's CCW convention = degrees(-90)
+        //
+        // After rotating the embedded page (55w × 25h) by -90° (CW) around point (x, y):
+        // - What was the bottom edge (width=55) now points downward (becomes height)
+        // - What was the left edge (height=25) now points to the right (becomes width)
+        //
+        // The rotated content occupies a box of 25w × 55h.
+        // We want it at the bottom-right of the new page (25w × 55h).
+        // That means the rotated bounding box should span:
+        //   x: 0 to 25 (full width)
+        //   y: 0 to 55 (full height, starting from bottom)
+        //
+        // With -90° rotation around (x, y):
+        // - Original bottom-left corner goes to (x, y)
+        // - Original bottom-right corner (at +origWidth along x) goes to (x, y - origWidth)
+        // - Original top-left corner (at +origHeight along y) goes to (x + origHeight, y)
+        //
+        // We want the rotated content to fill the page from bottom:
+        // - Bottom of rotated content at y=0: y - origWidth = 0 → y = origWidth = 55mm
+        // - Left of rotated content at x=0: x = 0
+        //
+        // So: x=0, y=origWidth (= newPageHeight = 55mm in pts)
         newPage.drawPage(embedded, {
-          x: origHeight,  // shift right by page width after rotation
-          y: 0,           // position at the bottom of the page
-          rotate: degrees(90),
-          width: origWidth,
-          height: origHeight
+          x: 0,
+          y: newPageHeight,
+          rotate: degrees(-90)
         })
       }
 

@@ -234,3 +234,20 @@ sudo apt-get install cups-pdf
 2. Instalar drivers de la impresora
 3. La app detectará impresoras IPP automáticamente
 4. Configurar en la app: asignar impresoras a printer1, printer2 y ticket
+
+
+### Script Windows
+
+``` bash
+# Despliegue completo
+.\scripts\deploy-windows.ps1
+
+# Si ya tienes dependencias instaladas
+.\scripts\deploy-windows.ps1 -SkipInstall
+
+# Si ya rebuildeaste los nativos
+.\scripts\deploy-windows.ps1 -SkipInstall -SkipRebuild
+
+# Abrir carpeta dist al terminar
+.\scripts\deploy-windows.ps1 -OpenDist
+```
