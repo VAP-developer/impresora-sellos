@@ -84,3 +84,11 @@
   - Verify preservation tests pass (no regressions)
   - Verify existing tests pass (cups-backend.test.ts, stamp-renderer.test.ts, etc.)
   - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 5. Fix rotación de etiquetas: cambiar STAMP_ORIENTATION de 6 a 3
+  - En `src/main/printing/printer-manager.ts`, cambiar `export const STAMP_ORIENTATION = 6` a `export const STAMP_ORIENTATION = 3`
+  - Esto evita que el driver Brother TD-4100N rote el contenido 90° al imprimir etiquetas
+  - El PDF ya se genera en landscape (55×25mm), no necesita rotación adicional del driver
+  - Actualizar los tests que validan STAMP_ORIENTATION si los hay
+  - Ejecutar `npx vitest --run src/main/printing/__tests__/` para verificar que no hay regresiones
+  - _Requirements: 5.1, 5.2, 6.1, 6.2_

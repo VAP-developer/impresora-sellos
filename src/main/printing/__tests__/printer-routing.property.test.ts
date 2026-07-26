@@ -395,7 +395,7 @@ describe('Property 9: Enrutamiento determinista de impresión', () => {
     })
   })
 
-  describe('9.4: Stamp media is DC55x25 with landscape orientation (value 6)', () => {
+  describe('9.4: Stamp media is DC55x25 with portrait orientation (value 3)', () => {
     it('all stamp print calls use media DC55x25', async () => {
       await fc.assert(
         fc.asyncProperty(
@@ -423,7 +423,7 @@ describe('Property 9: Enrutamiento determinista de impresión', () => {
       )
     })
 
-    it('all stamp print calls use landscape orientation (6)', async () => {
+    it('all stamp print calls use portrait orientation (3)', async () => {
       await fc.assert(
         fc.asyncProperty(
           arbStampTarget,
@@ -441,7 +441,7 @@ describe('Property 9: Enrutamiento determinista de impresión', () => {
             }
 
             for (const call of calls) {
-              expect(call.options.orientation).toBe(6)
+              expect(call.options.orientation).toBe(3)
               expect(call.options.orientation).toBe(STAMP_ORIENTATION)
             }
           }

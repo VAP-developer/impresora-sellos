@@ -133,11 +133,32 @@ _For any_ impresión vía `IppBackend`, el comportamiento SHALL ser idéntico al
 
 **Validates: Requirements 3.8**
 
+## Bug 3: Rotación no deseada de etiquetas
+
+### Root Cause
+
+El `STAMP_ORIENTATION` está configurado como `6` (landscape) en `printer-manager.ts`. La función `printStamp()` envía este valor al comando `lp` como `-o orientation-requested=6`.
+
+El problema es que el PDF ya se genera en formato landscape (55mm × 25mm). Cuando el driver Brother TD-4100N recibe `orientation-requested=6`, interpreta que debe rotar el contenido 90° adicionales, porque el papel se alimenta por el lado largo (55mm). El resultado es que el contenido impreso aparece rotado verticalmente en el lateral de la etiqueta.
+
+La solución es cambiar `STAMP_ORIENTATION` de `6` a `3` (portrait). Con orientación portrait, el driver no rota el contenido y el PDF se imprime tal como fue generado — horizontalmente, con el layout correcto.
+
+**Ubicación**: `src/main/printing/printer-manager.ts`, constante `STAMP_ORIENTATION`.
+
 ## Fix Implementation
 
 ### Changes Required
 
 Asumiendo que el análisis de root cause es correcto:
+
+**File**: `src/main/printing/printer-manager.ts`
+
+**Constant**: `STAMP_ORIENTATION`
+
+**Specific Changes**:
+0. **Cambiar STAMP_ORIENTATION de 6 a 3**: En `printer-manager.ts`, cambiar `export const STAMP_ORIENTATION = 6` a `export const STAMP_ORIENTATION = 3`. Esto envía la orientación portrait al driver, evitando la rotación del contenido que ya está en landscape en el PDF.
+
+---
 
 **File**: `src/main/printing/cups-backend.ts`
 

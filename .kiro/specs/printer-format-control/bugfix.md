@@ -53,3 +53,23 @@ Ambos bugs impiden que el programa tenga control absoluto sobre el formato de im
 3.7 CUANDO se imprimen tiras especiales (E1, E2, E3, E4) ENTONCES el sistema SHALL CONTINUAR usando el layout existente sin modificaciones, ya que estas no usan overlayImage ni los textos evento/fecha posicionados a la derecha
 
 3.8 CUANDO se imprime vía IPP backend (Windows) ENTONCES el sistema SHALL CONTINUAR enviando los trabajos con las mismas opciones IPP actuales sin cambios, ya que el bug de escalado es específico de CUPS/Brother
+
+### Bug 3: Rotación no deseada de etiquetas de sellos
+
+#### Comportamiento Actual (Defecto)
+
+4.1 CUANDO se imprime una etiqueta de sello vía CUPS backend ENTONCES el sistema envía la opción `orientation-requested=6` (landscape) junto con media `DC55x25`, lo que causa que el driver de la impresora Brother TD-4100N rote el contenido 90° porque el papel se alimenta por el lado de 55mm y el driver interpreta "landscape" como una instrucción para rotar
+
+4.2 CUANDO se genera el PDF del sello ENTONCES el sistema ya genera el contenido en formato landscape (55mm ancho × 25mm alto) con el layout correcto — la rotación adicional del driver es redundante y destructiva
+
+#### Comportamiento Esperado (Correcto)
+
+5.1 CUANDO se imprime una etiqueta de sello vía CUPS backend ENTONCES el sistema SHALL enviar la opción `orientation-requested=3` (portrait) para que el driver no rote el contenido, ya que el PDF ya tiene las dimensiones y orientación correctas (55×25mm landscape)
+
+5.2 CUANDO se imprime una etiqueta de sello ENTONCES el contenido SHALL imprimirse horizontalmente con la tarifa y texto en la mitad izquierda y la imagen en la mitad derecha, sin rotación
+
+#### Comportamiento Sin Cambios (Prevención de Regresión)
+
+6.1 CUANDO se imprimen tickets vía CUPS backend ENTONCES el sistema SHALL CONTINUAR usando `orientation-requested=3` (portrait) sin cambios
+
+6.2 CUANDO se imprime vía IPP backend (Windows) ENTONCES el sistema SHALL CONTINUAR usando las mismas orientaciones actuales sin cambios

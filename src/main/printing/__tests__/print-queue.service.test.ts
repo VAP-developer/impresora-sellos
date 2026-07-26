@@ -436,7 +436,7 @@ describe('PrintQueueService', () => {
         Buffer.from('stamp'),
         expect.objectContaining({
           media: 'DC55x25',
-          orientation: 6
+          orientation: 3
         })
       )
     })
