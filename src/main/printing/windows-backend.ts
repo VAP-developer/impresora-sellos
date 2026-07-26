@@ -63,43 +63,29 @@ export class WindowsBackend implements PrinterBackend {
 
   /**
    * Sends a PDF to the specified printer.
-   * Writes the buffer to a temp file and prints it via SumatraPDF.
+   * DEBUG MODE: Saves PDF to Desktop instead of printing.
+   * TODO: Restore actual printing when layout is confirmed correct.
    */
   async print(printerUri: string, pdfBuffer: Buffer, options: PrintOptions): Promise<PrintResult> {
-    const { writeFileSync, unlinkSync, mkdirSync } = require('fs')
+    const { writeFileSync, mkdirSync } = require('fs')
     const { join } = require('path')
-    const { tmpdir } = require('os')
-    const { print: printPdf } = require('pdf-to-printer')
+    const { homedir } = require('os')
 
     const printerName = getWindowsPrinterName(printerUri)
     const jobName = options.jobName ?? `print_${Date.now()}`
 
-    const tempDir = join(tmpdir(), 'stamp-sales-print')
-    try { mkdirSync(tempDir, { recursive: true }) } catch { /* exists */ }
+    // Guardar en Escritorio/stamp-debug/ para inspección
+    const debugDir = join(homedir(), 'Desktop', 'stamp-debug')
+    try { mkdirSync(debugDir, { recursive: true }) } catch { /* exists */ }
 
-    const tempFile = join(tempDir, `${jobName}_${Date.now()}.pdf`)
+    const outputFile = join(debugDir, `${jobName}_${Date.now()}.pdf`)
+    writeFileSync(outputFile, pdfBuffer)
 
-    try {
-      writeFileSync(tempFile, pdfBuffer)
+    console.log(`[DEBUG] PDF guardado (NO impreso): ${outputFile}`)
+    console.log(`[DEBUG] Impresora destino: ${printerName}`)
+    console.log(`[DEBUG] Tamaño buffer: ${pdfBuffer.length} bytes`)
 
-      await printPdf(tempFile, {
-        printer: printerName,
-        copies: options.copies ?? 1,
-        silent: true,
-        win32: ['-print-settings', 'noscale,landscape,paper=55x25']
-      })
-
-      // Clean up after delay to let spooler finish reading
-      setTimeout(() => {
-        try { unlinkSync(tempFile) } catch { /* ignore */ }
-      }, 10000)
-
-      return { success: true, jobId: jobName }
-    } catch (err: unknown) {
-      try { unlinkSync(tempFile) } catch { /* ignore */ }
-      const message = err instanceof Error ? err.message : String(err)
-      return { success: false, error: `Windows print failed: ${message}` }
-    }
+    return { success: true, jobId: jobName }
   }
 
   /**
