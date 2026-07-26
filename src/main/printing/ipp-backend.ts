@@ -649,13 +649,12 @@ export class IppBackend implements PrinterBackend {
       // Build SumatraPDF print settings
       let printSettings: string
       if (thermalConfig?.enabled) {
-        // Thermal printer: explicit paper size, no scaling, landscape orientation
-        // The paper is physically WxH (e.g. 55x25), and the PDF is already landscape.
-        // Using "landscape" tells SumatraPDF not to rotate the content to fit portrait paper,
-        // which prevents the double-page issue where SumatraPDF splits a landscape PDF
-        // into two portrait pages.
-        const paperSize = `${thermalConfig.paperWidthMm}x${thermalConfig.paperHeightMm}`
-        printSettings = `noscale,landscape,paper=${paperSize}`
+        // Thermal printer: After 90° rotation the PDF is now portrait (25×55mm).
+        // The Brother TD-4100N has paper configured as 25mm wide × 55mm tall (portrait feed).
+        // We use portrait mode with the exact paper dimensions to prevent SumatraPDF
+        // from splitting or rescaling the content.
+        const paperSize = `${thermalConfig.paperHeightMm}x${thermalConfig.paperWidthMm}`
+        printSettings = `noscale,portrait,paper=${paperSize}`
       } else {
         // Non-thermal printers: generic settings (preserve existing behavior)
         printSettings = 'noscale,portrait'
@@ -692,21 +691,67 @@ export class IppBackend implements PrinterBackend {
    * Rotates all pages of a PDF by the specified degrees.
    * Uses pdf-lib to manipulate the PDF in memory.
    *
+   * For 90° rotation on thermal printers: the original landscape PDF (55×25mm) is
+   * re-embedded into a new portrait page (25×55mm) with the content rotated 90° CW
+   * and positioned at the BOTTOM of the new page. This matches the Brother TD-4100N
+   * paper feed direction where the label exits from the bottom edge.
+   *
    * @param pdfBuffer - Original PDF buffer
    * @param rotation - Degrees to rotate (0, 90, 180, 270)
-   * @returns New PDF buffer with rotated pages
+   * @returns New PDF buffer with rotated and repositioned pages
    */
   private async rotatePdfPages(pdfBuffer: Buffer, rotation: number): Promise<Buffer> {
     const { PDFDocument, degrees } = require('pdf-lib')
-    const pdfDoc = await PDFDocument.load(pdfBuffer)
-    const pages = pdfDoc.getPages()
+    const sourcePdf = await PDFDocument.load(pdfBuffer)
+    const sourcePages = sourcePdf.getPages()
 
-    for (const page of pages) {
+    // For 90° rotation: create a new document with portrait pages (swapped dimensions)
+    // and embed the original content rotated and positioned at the bottom
+    if (rotation === 90) {
+      const newPdf = await PDFDocument.create()
+
+      for (let i = 0; i < sourcePages.length; i++) {
+        const sourcePage = sourcePages[i]
+        const origWidth = sourcePage.getWidth()   // 55mm in pts (~155.91)
+        const origHeight = sourcePage.getHeight() // 25mm in pts (~70.87)
+
+        // New page: portrait orientation (swap width and height)
+        // Height = original width (55mm), Width = original height (25mm)
+        const newPage = newPdf.addPage([origHeight, origWidth])
+
+        // Embed the source page as a form XObject
+        const [embedded] = await newPdf.embedPdf(sourcePdf, [i])
+
+        // Draw the embedded page rotated 90° CW and positioned at the bottom.
+        // After 90° CW rotation around origin:
+        // - The content that was landscape (55w × 25h) becomes portrait
+        // - We translate to position it at the bottom of the new page
+        //
+        // New page is origHeight(25) wide × origWidth(55) tall.
+        // Content after 90° CW needs to be at y=0 (bottom).
+        // Transformation: translate(origHeight, 0) then rotate(90°) places
+        // content at bottom-left. But we want it at the BOTTOM of the page,
+        // meaning y position starts at 0.
+        newPage.drawPage(embedded, {
+          x: origHeight,  // shift right by page width after rotation
+          y: 0,           // position at the bottom of the page
+          rotate: degrees(90),
+          width: origWidth,
+          height: origHeight
+        })
+      }
+
+      const rotatedBytes = await newPdf.save()
+      return Buffer.from(rotatedBytes)
+    }
+
+    // For other rotations (180°, 270°): simple page rotation metadata
+    for (const page of sourcePages) {
       const currentRotation = page.getRotation().angle
       page.setRotation(degrees(currentRotation + rotation))
     }
 
-    const rotatedBytes = await pdfDoc.save()
+    const rotatedBytes = await sourcePdf.save()
     return Buffer.from(rotatedBytes)
   }
 
