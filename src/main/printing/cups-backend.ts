@@ -219,6 +219,9 @@ export class CupsBackend implements PrinterBackend {
         args.push('-o', `orientation-requested=${options.orientation}`)
       }
 
+      // Prevent automatic scaling by the CUPS/Brother driver
+      args.push('-o', 'fit-to-page=no')
+
       // Copies
       const copies = options.copies ?? 1
       if (copies > 1) {

@@ -213,6 +213,32 @@ function drawBackground(doc: PDFKit.PDFDocument, imageSource: string | null | un
 }
 
 /**
+ * Draws the overlay image on the right half of the stamp (27.5mm–55mm x, 0–25mm y).
+ * Used for sello layer that should only occupy the right half of the label.
+ * Handles file paths and base64 data URIs.
+ */
+function drawOverlay(doc: PDFKit.PDFDocument, imageSource: string | null | undefined): void {
+  if (!imageSource) return
+
+  const overlayX = 27.5 * MM_TO_PT
+  const overlayWidth = 27.5 * MM_TO_PT
+
+  try {
+    if (imageSource.startsWith('data:')) {
+      const base64Data = imageSource.split(',')[1]
+      if (base64Data) {
+        const buffer = Buffer.from(base64Data, 'base64')
+        doc.image(buffer, overlayX, 0, { width: overlayWidth, height: STAMP_HEIGHT })
+      }
+    } else if (existsSync(imageSource)) {
+      doc.image(imageSource, overlayX, 0, { width: overlayWidth, height: STAMP_HEIGHT })
+    }
+  } catch {
+    // Gracefully ignore image errors (matches legacy behavior)
+  }
+}
+
+/**
  * Resolves the default blank background image path.
  */
 export function getDefaultBackgroundPath(): string | null {
@@ -257,10 +283,10 @@ export async function renderStamp(params: StampRenderParams): Promise<Buffer> {
 
   registerFonts(doc)
   drawBackground(doc, params.backgroundImage)
-  drawBackground(doc, params.overlayImage)
+  drawOverlay(doc, params.overlayImage)
   drawTextLeft(doc, params.tarifa, FONTS.regular, 12, 2, 19.5)
-  drawTextRight(doc, params.evento, FONTS.regular, 9, 53, 19)
-  drawTextRight(doc, params.fecha, FONTS.regular, 9, 53, 15)
+  drawTextRight(doc, params.evento, FONTS.regular, 9, 26, 19)
+  drawTextRight(doc, params.fecha, FONTS.regular, 9, 26, 15)
   drawTextLeft(doc, params.codigo, FONTS.regular, 6, 2, 15)
 
   doc.end()
@@ -409,10 +435,10 @@ export async function renderStampMultiPage(stamps: StampRenderParams[]): Promise
     }
 
     drawBackground(doc, stamp.backgroundImage)
-    drawBackground(doc, stamp.overlayImage)
+    drawOverlay(doc, stamp.overlayImage)
     drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12, 2, 19.5)
-    drawTextRight(doc, stamp.evento, FONTS.regular, 9, 53, 19)
-    drawTextRight(doc, stamp.fecha, FONTS.regular, 9, 53, 15)
+    drawTextRight(doc, stamp.evento, FONTS.regular, 9, 26, 19)
+    drawTextRight(doc, stamp.fecha, FONTS.regular, 9, 26, 15)
     drawTextLeft(doc, stamp.codigo, FONTS.regular, 6, 2, 15)
   })
 
