@@ -649,12 +649,11 @@ export class IppBackend implements PrinterBackend {
       // Build SumatraPDF print settings
       let printSettings: string
       if (thermalConfig?.enabled) {
-        // Thermal printer: After 90° rotation the PDF is now portrait (25×55mm).
-        // The Brother TD-4100N has paper configured as 25mm wide × 55mm tall (portrait feed).
-        // We use portrait mode with the exact paper dimensions to prevent SumatraPDF
-        // from splitting or rescaling the content.
-        const paperSize = `${thermalConfig.paperHeightMm}x${thermalConfig.paperWidthMm}`
-        printSettings = `noscale,portrait,paper=${paperSize}`
+        // Thermal printer: PDF is landscape 55×25mm, paper is configured as 55w×25h.
+        // Use landscape mode with exact paper size. No scaling, no rotation.
+        // This sends the PDF content directly to the printer starting at (0,0).
+        const paperSize = `${thermalConfig.paperWidthMm}x${thermalConfig.paperHeightMm}`
+        printSettings = `noscale,landscape,paper=${paperSize}`
       } else {
         // Non-thermal printers: generic settings (preserve existing behavior)
         printSettings = 'noscale,portrait'

@@ -169,12 +169,12 @@ export interface ThermalPrinterConfig {
 
 /**
  * Default thermal config for Brother TD-4100N with 55×25mm labels.
- * Rotation 90° CW aligns the content with the paper feed direction.
- * The label exits from the bottom, so content must be rotated 90° to print correctly.
+ * No rotation needed — the printer paper is now configured as 55mm wide × 25mm tall
+ * (landscape), matching the PDF dimensions directly.
  */
 export const DEFAULT_THERMAL_CONFIG: ThermalPrinterConfig = {
   enabled: true,
-  rotateDegrees: 90,
+  rotateDegrees: 0,
   paperWidthMm: 55,
   paperHeightMm: 25,
   forceSingleCopy: true
