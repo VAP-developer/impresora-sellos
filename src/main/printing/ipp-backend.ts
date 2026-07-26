@@ -636,10 +636,12 @@ export class IppBackend implements PrinterBackend {
       writeFileSync(tempFile, pdfBuffer)
 
       // Build SumatraPDF print settings
-      // - "noscale": prevent SumatraPDF from scaling content to fit paper
-      // - "landscape": tell SumatraPDF the content is landscape oriented
-      // These are passed as -print-settings to SumatraPDF via win32 options
-      const win32Options: string[] = ['-print-settings', 'noscale,landscape']
+      // The Brother TD-4100N driver has the label configured as 25×55mm with
+      // "horizontal" orientation, meaning the driver rotates content 90° to print
+      // landscape. Since our PDF is already landscape (55×25mm), we tell SumatraPDF
+      // to NOT rotate (use "portrait" mode) so the driver's rotation produces correct output.
+      // "noscale": prevent SumatraPDF from scaling content to fit paper
+      const win32Options: string[] = ['-print-settings', 'noscale,portrait']
 
       // Print using pdf-to-printer (SumatraPDF engine)
       await printPdf(tempFile, {

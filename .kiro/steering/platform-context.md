@@ -31,8 +31,14 @@ The app runs on Windows and uses the following printing stack:
 
 ## Hardware
 
-- **Stamp/label printer**: Brother TD-4100N (thermal label printer, 55×25mm labels)
-  - Feeds paper along the 55mm side (long edge)
-  - Driver may auto-rotate content
+- **Stamp/label printer**: Brother TD-4100N (thermal label printer)
+  - Paper is pre-printed (already has the stamp design/logo)
+  - App only needs to place text (tarifa, código, evento, fecha) in correct positions
+  - Driver config in Windows:
+    - Width: 25mm
+    - Length: 55mm
+    - Orientation: Horizontal (driver rotates content 90° for landscape output)
+  - Paper feed: along the 55mm side (long edge)
   - Connected as local Windows printer (`win://` URI)
+  - Print engine: SumatraPDF via pdf-to-printer with `-print-settings "noscale,portrait"`
 - **Ticket printer**: Thermal receipt printer (78mm wide, variable height)
