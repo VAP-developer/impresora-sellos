@@ -294,7 +294,7 @@ export async function renderStamp(params: StampRenderParams): Promise<Buffer> {
   drawTextLeft(doc, params.tarifa, FONTS.regular, 12, 2, 19.5)
   drawTextRight(doc, params.evento, FONTS.regular, 9, 26, 19)
   drawTextRight(doc, params.fecha, FONTS.regular, 9, 26, 15)
-  drawTextLeft(doc, params.codigo, FONTS.regular, 6, 2, 15)
+  drawTextLeft(doc, params.codigo, FONTS.regular, 6, 2, 11)
 
   doc.end()
   return result
@@ -446,7 +446,7 @@ export async function renderStampMultiPage(stamps: StampRenderParams[]): Promise
     drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12, 2, 19.5)
     drawTextRight(doc, stamp.evento, FONTS.regular, 9, 26, 19)
     drawTextRight(doc, stamp.fecha, FONTS.regular, 9, 26, 15)
-    drawTextLeft(doc, stamp.codigo, FONTS.regular, 6, 2, 15)
+    drawTextLeft(doc, stamp.codigo, FONTS.regular, 6, 2, 11)
   })
 
   doc.end()

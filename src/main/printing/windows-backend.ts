@@ -86,7 +86,7 @@ export class WindowsBackend implements PrinterBackend {
         printer: printerName,
         copies: options.copies ?? 1,
         silent: true,
-        win32: ['-print-settings', 'noscale']
+        win32: ['-print-settings', 'noscale,landscape,paper=55x25']
       })
 
       // Clean up after delay to let spooler finish reading
