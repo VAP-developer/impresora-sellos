@@ -635,11 +635,18 @@ export class IppBackend implements PrinterBackend {
     try {
       writeFileSync(tempFile, pdfBuffer)
 
+      // Build SumatraPDF print settings
+      // - "noscale": prevent SumatraPDF from scaling content to fit paper
+      // - "landscape": tell SumatraPDF the content is landscape oriented
+      // These are passed as -print-settings to SumatraPDF via win32 options
+      const win32Options: string[] = ['-print-settings', 'noscale,landscape']
+
       // Print using pdf-to-printer (SumatraPDF engine)
       await printPdf(tempFile, {
         printer: printerName,
         copies,
-        silent: true
+        silent: true,
+        win32: win32Options
       })
 
       // Clean up temp file after a delay to let the spooler finish reading

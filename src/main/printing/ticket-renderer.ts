@@ -309,6 +309,29 @@ function drawImageCentered(
 }
 
 /**
+ * Draws an image centered horizontally, constrained to fit within both
+ * maxWidth and maxHeight while maintaining aspect ratio.
+ */
+function drawImageConstrained(
+  doc: PDFKit.PDFDocument,
+  imageName: string,
+  y: number,
+  maxWidth: number,
+  maxHeight: number,
+  pageWidth: number
+): boolean {
+  const imgPath = join(getImagesPath(), imageName)
+  if (!existsSync(imgPath)) return false
+  try {
+    const x = (pageWidth - maxWidth) / 2
+    doc.image(imgPath, x, y, { fit: [maxWidth, maxHeight], align: 'center', valign: 'center' })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
  * Collects a PDFDocument stream into a Buffer.
  */
 function collectPdf(doc: PDFKit.PDFDocument): Promise<Buffer> {
@@ -358,7 +381,7 @@ export function calcTicketHeightMm(numItems: number): number {
 
 // Section heights for genTicket (in mm)
 const TICKET_MARGIN_TOP = 5
-const TICKET_LOGO_HEIGHT = 14
+const TICKET_LOGO_HEIGHT = 24
 const TICKET_HEADER_HEIGHT = 32
 const TICKET_COLUMNS_HEIGHT = 5
 const TICKET_ITEM_ROW_HEIGHT = 3.5
@@ -478,7 +501,11 @@ export async function genTicket(params: GenTicketParams): Promise<Buffer> {
   let y = TICKET_MARGIN_TOP
 
   // ─── Section 2: Logo ───
-  drawImageCentered(doc, 'image2.jpg', y * MM_TO_PT, 30 * MM_TO_PT, pageWidth)
+  // Logo image2.jpg is 243×189px. At 30mm width, proportional height is ~23.3mm.
+  // We constrain to fit within TICKET_LOGO_HEIGHT (24mm) with a small gap.
+  const logoWidth = 30 * MM_TO_PT
+  const logoHeight = 23 * MM_TO_PT // constrain height to leave 1mm gap
+  drawImageConstrained(doc, 'image2.jpg', y * MM_TO_PT, logoWidth, logoHeight, pageWidth)
   y += TICKET_LOGO_HEIGHT
 
   // ─── Section 3: Header info ───
@@ -618,8 +645,10 @@ export async function genTicketCaja(params: GenTicketCajaParams): Promise<Buffer
   // ─── Top-down layout ───
   let y = 2
 
-  // 1. Logo centered
-  drawImageCentered(doc, 'image2.jpg', y * MM_TO_PT, 30 * MM_TO_PT, pageWidth)
+  // 1. Logo centered (constrained to prevent overlap)
+  const logoWidth = 30 * MM_TO_PT
+  const logoHeight = 11 * MM_TO_PT
+  drawImageConstrained(doc, 'image2.jpg', y * MM_TO_PT, logoWidth, logoHeight, pageWidth)
   y += 12
 
   // 2. Background watermark
@@ -783,8 +812,8 @@ export async function genTicketMaster(params: GenTicketMasterParams): Promise<Bu
   // ─── Top-down layout ───
   let y = 2
 
-  // 1. Logo centered
-  drawImageCentered(doc, 'image2.jpg', y * MM_TO_PT, 30 * MM_TO_PT, pageWidth)
+  // 1. Logo centered (constrained to prevent overlap)
+  drawImageConstrained(doc, 'image2.jpg', y * MM_TO_PT, 30 * MM_TO_PT, 11 * MM_TO_PT, pageWidth)
   y += 12
 
   // 2. Background watermark
