@@ -15,8 +15,8 @@ inclusion: auto
 
 The app runs on Windows and uses the following printing stack:
 
-- **Backend**: `IppBackend` (detected via `os.platform() === 'win32'`)
-- **Local printers**: Use `win://` URI scheme → routed through `printViaWindowsSpooler()`
+- **Backend**: `WindowsBackend` (detected via `os.platform() === 'win32'`)
+- **Local printers**: Use `win://` URI scheme → all printing goes through Windows spooler
 - **Print engine**: `pdf-to-printer` npm package (wraps SumatraPDF portable)
 - **SumatraPDF options**: Passed via `win32: ['-print-settings', '...']` array
 - **No CUPS/lp commands** are available at runtime
@@ -27,7 +27,7 @@ The app runs on Windows and uses the following printing stack:
 - Print orientation/scaling must be controlled via SumatraPDF `-print-settings` flags
 - The Windows printer driver (e.g., Brother TD-4100N) may apply its own transformations
 - Testing on Linux validates logic/generation but cannot verify actual print output on Windows
-- IPP attributes like `orientation-requested` and `media` are only used for network IPP printers, NOT for `win://` local printers
+- IPP protocol code has been removed; only local `win://` printers are supported
 
 ## Hardware
 

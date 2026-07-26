@@ -2,7 +2,7 @@
  * printer-manager.ts
  *
  * Provides an abstract PrinterBackend interface and a PrinterManager that delegates
- * to the appropriate platform-specific backend (CUPS on Linux, IPP on Windows).
+ * to the appropriate platform-specific backend (CUPS on Linux, WindowsBackend on Windows).
  *
  * The PrinterManager handles:
  * - Auto-detection of the current OS and selection of the correct backend
@@ -15,9 +15,7 @@
  * Correctness Property: 9 (deterministic routing based on target)
  */
 
-import { platform } from 'os'
-import { CupsBackend } from './cups-backend'
-import { IppBackend } from './ipp-backend'
+import { WindowsBackend } from './windows-backend'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -84,7 +82,7 @@ export interface DiscoveredPrinter {
  *
  * Implementations:
  * - CupsBackend (Linux/Ubuntu): Uses `lp`, `lpstat`, `cupsdisable`, `cupsenable`
- * - IppBackend (Windows): Uses IPP protocol over HTTP directly
+ * - WindowsBackend (Windows): Uses pdf-to-printer (SumatraPDF) + PowerShell cmdlets
  *
  * Each backend must implement all methods to provide a uniform API
  * regardless of the underlying printing system.
@@ -462,38 +460,23 @@ export class PrinterManager {
  *
  * @param platformOverride - Optional platform string for testing (defaults to os.platform())
  */
-export function detectPlatformBackend(platformOverride?: string): 'cups' | 'ipp' {
-  const os = platformOverride ?? platform()
-  if (os === 'linux' || os === 'darwin') {
-    return 'cups'
-  }
-  // Windows and others use IPP
-  return 'ipp'
+export function detectPlatformBackend(platformOverride?: string): 'windows' {
+  return 'windows'
 }
 
 /**
- * Creates a PrinterBackend instance based on the detected platform.
+ * Creates a PrinterBackend instance.
+ * Always returns WindowsBackend (the app only runs on Windows).
  *
- * - Linux/macOS → CupsBackend (uses `lp`, `lpstat`, `cupsdisable`, `cupsenable`)
- * - Windows → IppBackend (uses IPP protocol over HTTP)
- *
- * @param platformOverride - Optional platform string for testing (defaults to os.platform())
- * @returns The appropriate PrinterBackend for the current OS
+ * @param platformOverride - Unused, kept for API compatibility
+ * @returns WindowsBackend instance
  */
 export function createPlatformBackend(platformOverride?: string): PrinterBackend {
-  const backendType = detectPlatformBackend(platformOverride)
-  if (backendType === 'cups') {
-    return new CupsBackend()
-  }
-  return new IppBackend()
+  return new WindowsBackend()
 }
 
 /**
- * Creates a PrinterManager with the platform-appropriate backend (auto-detected).
- *
- * Detects the current OS and instantiates:
- * - CupsBackend on Linux/macOS (development)
- * - IppBackend on Windows (production)
+ * Creates a PrinterManager with the WindowsBackend.
  *
  * Optionally accepts a backend override for testing or manual configuration.
  *

@@ -1,22 +1,21 @@
 /**
  * format-control.bug-condition.property.test.ts
  *
- * Property 1: Bug Condition — CUPS fit-to-page ausente y overlay/texto mal posicionados
+ * Property 1: Bug Condition — overlay/texto mal posicionados
  *
  * CRITICAL: This test encodes the EXPECTED (correct) behavior.
  * On UNFIXED code, the test MUST FAIL — failure confirms the bugs exist.
  * After the fix is implemented, this test should PASS.
  *
- * Bug 1: CupsBackend.print() does not include `fit-to-page=no` in lp args
- * Bug 2: renderStamp() draws overlayImage at x=0 full width instead of right half
- * Bug 2: renderStamp() positions evento/fecha text at xRight=53mm instead of <=27.5mm
+ * Bug: renderStamp() draws overlayImage at x=0 full width instead of right half
+ * Bug: renderStamp() positions evento/fecha text at xRight=53mm instead of <=27.5mm
  *
  * Validates: Requirements 1.1, 1.2, 1.3, 1.4, 1.5
  *
  * @vitest-environment node
  */
 
-import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import * as fc from 'fast-check'
 import { join } from 'path'
 
@@ -25,9 +24,6 @@ vi.mock('@electron-toolkit/utils', () => ({
   is: { dev: true }
 }))
 
-import { CupsBackend } from '../cups-backend'
-import type { CommandExecutor, FileIO } from '../cups-backend'
-import type { PrintOptions } from '../printer-manager'
 import {
   renderStamp,
   renderStampMultiPage,
@@ -54,51 +50,7 @@ afterAll(() => {
   setTestImagesPath(null)
 })
 
-// ─── Mock Factories ───────────────────────────────────────────────────────────
-
-function createMockExecutor(): CommandExecutor & {
-  execFile: ReturnType<typeof vi.fn>
-  exec: ReturnType<typeof vi.fn>
-  capturedArgs: string[][]
-} {
-  const capturedArgs: string[][] = []
-  const executor = {
-    exec: vi.fn().mockResolvedValue({ stdout: '', stderr: '' }),
-    execFile: vi.fn().mockImplementation((_file: string, args: string[]) => {
-      capturedArgs.push(args)
-      return Promise.resolve({
-        stdout: 'request id is TestPrinter-1 (1 file(s))',
-        stderr: ''
-      })
-    }),
-    capturedArgs
-  }
-  return executor
-}
-
-function createMockFileIO(): FileIO {
-  return {
-    writeFile: vi.fn().mockResolvedValue(undefined),
-    unlink: vi.fn().mockResolvedValue(undefined),
-    createTempFilePath: () => '/tmp/stamp-print-test.pdf'
-  }
-}
-
 // ─── Arbitraries ──────────────────────────────────────────────────────────────
-
-/** Generate arbitrary PrintOptions for CUPS backend */
-const arbPrintOptions: fc.Arbitrary<PrintOptions> = fc.record({
-  media: fc.oneof(
-    fc.constant('DC55x25'),
-    fc.constant('Custom.78x120mm'),
-    fc.constant('Custom.78x200mm'),
-    fc.constant('Custom.78x250mm'),
-    fc.nat({ max: 400 }).map((h) => `Custom.78x${h}mm`)
-  ),
-  orientation: fc.oneof(fc.constant(3), fc.constant(6)),
-  copies: fc.option(fc.integer({ min: 1, max: 5 }), { nil: undefined }),
-  jobName: fc.option(fc.string({ minLength: 1, maxLength: 30 }), { nil: undefined })
-})
 
 /** Generate arbitrary StampRenderParams with overlayImage present */
 const arbStampParamsWithOverlay: fc.Arbitrary<StampRenderParams> = fc.record({
@@ -113,31 +65,7 @@ const arbStampParamsWithOverlay: fc.Arbitrary<StampRenderParams> = fc.record({
 // ─── Bug Condition Property Tests ─────────────────────────────────────────────
 
 describe('Property 1: Bug Condition — format control bugs exist in unfixed code', () => {
-  describe('Bug 1: CupsBackend.print() MUST include fit-to-page=no', () => {
-    it('for any PrintOptions, lp args SHALL contain "fit-to-page=no"', async () => {
-      await fc.assert(
-        fc.asyncProperty(arbPrintOptions, async (options: PrintOptions) => {
-          const executor = createMockExecutor()
-          const fileIO = createMockFileIO()
-          const backend = new CupsBackend(executor, fileIO)
-
-          const pdfBuffer = Buffer.from('%PDF-1.4 test')
-          await backend.print('TestPrinter', pdfBuffer, options)
-
-          // The lp args should include fit-to-page=no to prevent driver scaling
-          const args = executor.capturedArgs[0]
-          expect(args).toBeDefined()
-
-          // Expected behavior: args MUST contain 'fit-to-page=no'
-          const fitToPageArg = args.find((a) => a === 'fit-to-page=no')
-          expect(fitToPageArg).toBe('fit-to-page=no')
-        }),
-        { numRuns: 50 }
-      )
-    })
-  })
-
-  describe('Bug 2: renderStamp() overlay MUST be positioned in right half', () => {
+  describe('Bug: renderStamp() overlay MUST be positioned in right half', () => {
     it('overlayImage SHALL be drawn at x >= 27.5mm (right half), not x=0 full width', async () => {
       // We spy on PDFDocument.prototype.image to capture draw coordinates
       const PDFDocument = (await import('pdfkit')).default
@@ -236,7 +164,7 @@ describe('Property 1: Bug Condition — format control bugs exist in unfixed cod
     })
   })
 
-  describe('Bug 2: renderStamp() texto evento/fecha MUST be in left half', () => {
+  describe('Bug: renderStamp() texto evento/fecha MUST be in left half', () => {
     it('evento text xRight SHALL be <= 27.5mm (left half), not 53mm', async () => {
       const PDFDocument = (await import('pdfkit')).default
 
@@ -364,7 +292,7 @@ describe('Property 1: Bug Condition — format control bugs exist in unfixed cod
     })
   })
 
-  describe('Bug 2: renderStampMultiPage() same bugs apply', () => {
+  describe('Bug: renderStampMultiPage() same bugs apply', () => {
     it('overlay in multi-page MUST also be in right half', async () => {
       const PDFDocument = (await import('pdfkit')).default
 

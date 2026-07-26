@@ -26,12 +26,12 @@ import { existsSync } from 'fs'
 // Constants
 // ─────────────────────────────────────────────
 
-/** Conversion factor: 1mm = 72/25.4 points */
+/** Conversion factor: 1mm = 72/25.4 points 
+ es la unidad de pdfkit que usa internamente */
 const MM_TO_PT = 72 / 25.4 // ≈ 2.83465
-
-/** Stamp dimensions in points (landscape: 55mm wide × 25mm tall) */
 export const STAMP_WIDTH_MM = 55
 export const STAMP_HEIGHT_MM = 25
+// Constantes finales
 export const STAMP_WIDTH = STAMP_WIDTH_MM * MM_TO_PT // ~155.91 pt
 export const STAMP_HEIGHT = STAMP_HEIGHT_MM * MM_TO_PT // ~70.87 pt
 
@@ -52,10 +52,12 @@ export const FONTS = {
  */
 let _fontsPathOverride: string | null = null
 
+// Función test de fuentes
 export function setTestFontsPath(path: string | null): void {
   _fontsPathOverride = path
 }
 
+// Gestion de las fuentes
 export function getFontsPath(): string {
   if (_fontsPathOverride) return _fontsPathOverride
   if (is.dev) {
@@ -63,6 +65,8 @@ export function getFontsPath(): string {
   }
   return join(process.resourcesPath, 'fonts')
 }
+
+//==============================================================================
 
 /**
  * Resolves path to the resources/images directory.

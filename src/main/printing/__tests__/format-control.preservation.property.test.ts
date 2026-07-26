@@ -10,10 +10,9 @@
  * - drawBackground(doc, backgroundImage) draws at x=0, y=0, width=STAMP_WIDTH, height=STAMP_HEIGHT
  * - drawTextLeft(doc, tarifa, ...) uses x=2mm
  * - drawTextLeft(doc, codigo, ...) uses x=2mm
- * - IppBackend.print() does NOT include fit-to-page in IPP attributes
  * - renderStampEspecialStrip() uses same layout (E1-E4 unchanged)
  *
- * Validates: Requirements 3.1, 3.2, 3.3, 3.4, 3.5, 3.7, 3.8
+ * Validates: Requirements 3.1, 3.2, 3.3, 3.4, 3.5, 3.7
  *
  * @vitest-environment node
  */
@@ -37,9 +36,6 @@ import {
   STAMP_HEIGHT
 } from '../stamp-renderer'
 import type { StampRenderParams } from '../stamp-renderer'
-import { IppBackend, buildPrintJobRequest, IPP_TAGS } from '../ipp-backend'
-import type { HttpTransport } from '../ipp-backend'
-import type { PrintOptions } from '../printer-manager'
 
 // ─── Test Setup ───────────────────────────────────────────────────────────────
 
@@ -86,20 +82,6 @@ const arbStampParams: fc.Arbitrary<StampRenderParams> = fc.record({
   overlayImage: fc.constant(null)
 })
 
-/** Generate arbitrary PrintOptions for IPP backend */
-const arbPrintOptions: fc.Arbitrary<PrintOptions> = fc.record({
-  media: fc.oneof(
-    fc.constant('DC55x25'),
-    fc.constant('Custom.78x120mm'),
-    fc.constant('Custom.78x200mm'),
-    fc.constant('Custom.78x250mm'),
-    fc.nat({ max: 400 }).map((h) => `Custom.78x${h}mm`)
-  ),
-  orientation: fc.oneof(fc.constant(3), fc.constant(6)),
-  copies: fc.option(fc.integer({ min: 1, max: 5 }), { nil: undefined }),
-  jobName: fc.option(fc.string({ minLength: 1, maxLength: 30 }), { nil: undefined })
-})
-
 /** Generate arbitrary StampEspecialParams for tiras especiales */
 const arbEspecialCodigos: fc.Arbitrary<[string, string, string, string]> = fc.tuple(
   fc.string({ minLength: 1, maxLength: 25 }),
@@ -114,32 +96,6 @@ const arbEspecialSuffix: fc.Arbitrary<string> = fc.oneof(
 )
 
 const arbTarifa: fc.Arbitrary<string> = fc.string({ minLength: 1, maxLength: 15 })
-
-// ─── Mock Helpers ─────────────────────────────────────────────────────────────
-
-function createMockHttpTransport(): HttpTransport & { capturedBodies: Buffer[] } {
-  const capturedBodies: Buffer[] = []
-  return {
-    capturedBodies,
-    post: async (
-      _hostname: string,
-      _port: number,
-      _path: string,
-      body: Buffer,
-      _timeoutMs: number
-    ): Promise<Buffer> => {
-      capturedBodies.push(body)
-      // Return a minimal successful IPP response
-      const response = Buffer.alloc(12)
-      response.writeUInt8(1, 0) // version major
-      response.writeUInt8(1, 1) // version minor
-      response.writeUInt16BE(0x0000, 2) // success status
-      response.writeInt32BE(1, 4) // request-id
-      response.writeUInt8(IPP_TAGS.END_OF_ATTRIBUTES, 8) // end of attributes
-      return response
-    }
-  }
-}
 
 // ─── Preservation Property Tests ──────────────────────────────────────────────
 
@@ -249,50 +205,6 @@ describe('Property 2: Preservation — baseline behavior must not change after f
           }
         }),
         { numRuns: 20 }
-      )
-    })
-  })
-
-  describe('Preservation: IppBackend does NOT include fit-to-page in IPP attributes', () => {
-    /**
-     * **Validates: Requirements 3.8**
-     *
-     * For all arbitrary PrintOptions via IppBackend: no fit-to-page option added
-     */
-    it('for any PrintOptions, IppBackend.print() does NOT include fit-to-page in request', async () => {
-      await fc.assert(
-        fc.asyncProperty(arbPrintOptions, async (options: PrintOptions) => {
-          const transport = createMockHttpTransport()
-          const backend = new IppBackend(transport)
-
-          const pdfBuffer = Buffer.from('%PDF-1.4 test content')
-          await backend.print('ipp://192.168.1.100:631/ipp/print', pdfBuffer, options)
-
-          // Check the captured IPP request body does NOT contain 'fit-to-page'
-          expect(transport.capturedBodies.length).toBe(1)
-          const requestBody = transport.capturedBodies[0]
-          const bodyStr = requestBody.toString('utf-8')
-
-          // The IPP request should NOT contain 'fit-to-page' anywhere
-          expect(bodyStr).not.toContain('fit-to-page')
-        }),
-        { numRuns: 50 }
-      )
-    })
-
-    it('buildPrintJobRequest does NOT encode fit-to-page for any PrintOptions', () => {
-      fc.assert(
-        fc.property(arbPrintOptions, (options: PrintOptions) => {
-          const request = buildPrintJobRequest(
-            'ipp://printer.local:631/ipp/print',
-            options,
-            1
-          )
-          const requestStr = request.toString('utf-8')
-          // No fit-to-page keyword should be present
-          expect(requestStr).not.toContain('fit-to-page')
-        }),
-        { numRuns: 50 }
       )
     })
   })
