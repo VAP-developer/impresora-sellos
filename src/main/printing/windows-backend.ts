@@ -63,29 +63,46 @@ export class WindowsBackend implements PrinterBackend {
 
   /**
    * Sends a PDF to the specified printer.
-   * DEBUG MODE: Saves PDF to Desktop instead of printing.
-   * TODO: Restore actual printing when layout is confirmed correct.
+   * Writes the buffer to a temp file and prints it via SumatraPDF.
+   * Each call = one print job. The printer cuts between jobs.
+   * For multi-label strips without cuts, use a single multi-page PDF.
+   * For cuts every N labels, send separate jobs of N pages each.
    */
   async print(printerUri: string, pdfBuffer: Buffer, options: PrintOptions): Promise<PrintResult> {
-    const { writeFileSync, mkdirSync } = require('fs')
+    const { writeFileSync, unlinkSync, mkdirSync } = require('fs')
     const { join } = require('path')
-    const { homedir } = require('os')
+    const { tmpdir } = require('os')
+    const { print: printPdf } = require('pdf-to-printer')
 
     const printerName = getWindowsPrinterName(printerUri)
     const jobName = options.jobName ?? `print_${Date.now()}`
 
-    // Guardar en Escritorio/stamp-debug/ para inspección
-    const debugDir = join(homedir(), 'Desktop', 'stamp-debug')
-    try { mkdirSync(debugDir, { recursive: true }) } catch { /* exists */ }
+    const tempDir = join(tmpdir(), 'stamp-sales-print')
+    try { mkdirSync(tempDir, { recursive: true }) } catch { /* exists */ }
 
-    const outputFile = join(debugDir, `${jobName}_${Date.now()}.pdf`)
-    writeFileSync(outputFile, pdfBuffer)
+    const tempFile = join(tempDir, `${jobName}_${Date.now()}.pdf`)
 
-    console.log(`[DEBUG] PDF guardado (NO impreso): ${outputFile}`)
-    console.log(`[DEBUG] Impresora destino: ${printerName}`)
-    console.log(`[DEBUG] Tamaño buffer: ${pdfBuffer.length} bytes`)
+    try {
+      writeFileSync(tempFile, pdfBuffer)
 
-    return { success: true, jobId: jobName }
+      await printPdf(tempFile, {
+        printer: printerName,
+        copies: options.copies ?? 1,
+        silent: true,
+        win32: ['-print-settings', 'noscale']
+      })
+
+      // Clean up after delay to let spooler finish reading
+      setTimeout(() => {
+        try { unlinkSync(tempFile) } catch { /* ignore */ }
+      }, 10000)
+
+      return { success: true, jobId: jobName }
+    } catch (err: unknown) {
+      try { unlinkSync(tempFile) } catch { /* ignore */ }
+      const message = err instanceof Error ? err.message : String(err)
+      return { success: false, error: `Windows print failed: ${message}` }
+    }
   }
 
   /**
