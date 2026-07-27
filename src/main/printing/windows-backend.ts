@@ -1,12 +1,16 @@
 /**
  * windows-backend.ts
  *
- * Implementation of PrinterBackend for Windows using local printers (USB/spooler).
- * Uses pdf-to-printer (SumatraPDF) to send PDFs silently to the Windows spooler.
- * Uses PowerShell cmdlets for status, pause, resume, cancel, and discovery.
+ * Sends PDFs to local Windows printers via SumatraPDF command line.
+ * Invokes SumatraPDF directly (bundled with pdf-to-printer package)
+ * with minimal settings to avoid any scaling or transformation.
  *
- * Simplified version: no thermal printer distinction, no rotation logic.
- * Just connects PDFs to printers.
+ * Key principle: the PDF is already the correct size (55×25mm for stamps,
+ * 78×variable for tickets). We just tell SumatraPDF "print this at original
+ * size, no scaling" and let the printer driver handle the rest.
+ *
+ * The printer driver in Windows MUST be configured with the correct paper size
+ * (55mm × 25mm for the Brother TD-4100N label printer).
  */
 
 import type {
@@ -22,6 +26,7 @@ import { discoverWindowsLocalPrinters, type DiscoveryCommandExecutor } from './p
 
 export interface WindowsCommandExecutor {
   exec(command: string, options?: { timeout?: number }): Promise<{ stdout: string; stderr: string }>
+  execFile(file: string, args: string[], options?: { timeout?: number }): Promise<{ stdout: string; stderr: string }>
 }
 
 export const defaultWindowsExecutor: WindowsCommandExecutor = {
@@ -30,15 +35,17 @@ export const defaultWindowsExecutor: WindowsCommandExecutor = {
     const { promisify } = require('util')
     const execAsync = promisify(nodeExec)
     return execAsync(command, { timeout: options?.timeout ?? 10000 })
+  },
+  execFile(file: string, args: string[], options?: { timeout?: number }): Promise<{ stdout: string; stderr: string }> {
+    const { execFile: nodeExecFile } = require('child_process')
+    const { promisify } = require('util')
+    const execFileAsync = promisify(nodeExecFile)
+    return execFileAsync(file, args, { timeout: options?.timeout ?? 30000 })
   }
 }
 
 // ─── URI Helpers ──────────────────────────────────────────────────────────────
 
-/**
- * Extracts the printer name from a win:// URI.
- * win://Canon%20PIXMA%20MG3600 → "Canon PIXMA MG3600"
- */
 export function getWindowsPrinterName(printerUri: string): string {
   const encoded = printerUri.replace('win://', '')
   return decodeURIComponent(encoded)
@@ -48,12 +55,32 @@ function escapePsName(name: string): string {
   return name.replace(/'/g, "''")
 }
 
-// ─── WindowsBackend Implementation ───────────────────────────────────────────
+// ─── SumatraPDF Path Resolution ──────────────────────────────────────────────
 
 /**
- * WindowsBackend sends PDFs to local Windows printers via pdf-to-printer (SumatraPDF).
- * Management (status, pause, resume, cancel, discovery) via PowerShell cmdlets.
+ * Resolves the path to SumatraPDF executable bundled with pdf-to-printer.
+ * In an Electron packaged app, the path needs to account for asar unpacking.
  */
+function getSumatraPdfPath(): string {
+  const { join } = require('path')
+
+  // pdf-to-printer bundles SumatraPDF in its dist folder
+  let sumatraPath = join(
+    require.resolve('pdf-to-printer'),
+    '..',
+    'SumatraPDF-3.4.6-32.exe'
+  )
+
+  // Handle Electron asar packaging
+  if (sumatraPath.includes('app.asar')) {
+    sumatraPath = sumatraPath.replace('app.asar', 'app.asar.unpacked')
+  }
+
+  return sumatraPath
+}
+
+// ─── WindowsBackend Implementation ───────────────────────────────────────────
+
 export class WindowsBackend implements PrinterBackend {
   private cmd: WindowsCommandExecutor
 
@@ -62,37 +89,40 @@ export class WindowsBackend implements PrinterBackend {
   }
 
   /**
-   * Sends a PDF to the specified printer.
-   * Writes the buffer to a temp file and prints it via SumatraPDF.
-   * Each call = one print job. The printer cuts between jobs.
-   * For multi-label strips without cuts, use a single multi-page PDF.
-   * For cuts every N labels, send separate jobs of N pages each.
+   * Prints a PDF by invoking SumatraPDF directly with:
+   *   SumatraPDF.exe -print-to "PrinterName" -print-settings "noscale" -silent file.pdf
+   *
+   * "noscale" = print at 100% original size, no fitting, no shrinking.
+   * The printer driver's paper size configuration determines the output.
    */
   async print(printerUri: string, pdfBuffer: Buffer, options: PrintOptions): Promise<PrintResult> {
     const { writeFileSync, unlinkSync, mkdirSync } = require('fs')
     const { join } = require('path')
     const { tmpdir } = require('os')
-    const { print: printPdf } = require('pdf-to-printer')
 
     const printerName = getWindowsPrinterName(printerUri)
     const jobName = options.jobName ?? `print_${Date.now()}`
 
+    // Write PDF to temp file
     const tempDir = join(tmpdir(), 'stamp-sales-print')
     try { mkdirSync(tempDir, { recursive: true }) } catch { /* exists */ }
-
     const tempFile = join(tempDir, `${jobName}_${Date.now()}.pdf`)
 
     try {
       writeFileSync(tempFile, pdfBuffer)
 
-      await printPdf(tempFile, {
-        printer: printerName,
-        copies: options.copies ?? 1,
-        silent: true,
-        win32: ['-print-settings', 'noscale']
-      })
+      // Invoke SumatraPDF directly
+      const sumatraPath = getSumatraPdfPath()
+      const args = [
+        '-print-to', printerName,
+        '-print-settings', 'noscale',
+        '-silent',
+        tempFile
+      ]
 
-      // Clean up after delay to let spooler finish reading
+      await this.cmd.execFile(sumatraPath, args, { timeout: 30000 })
+
+      // Clean up after delay
       setTimeout(() => {
         try { unlinkSync(tempFile) } catch { /* ignore */ }
       }, 10000)
@@ -101,13 +131,10 @@ export class WindowsBackend implements PrinterBackend {
     } catch (err: unknown) {
       try { unlinkSync(tempFile) } catch { /* ignore */ }
       const message = err instanceof Error ? err.message : String(err)
-      return { success: false, error: `Windows print failed: ${message}` }
+      return { success: false, error: `Print failed: ${message}` }
     }
   }
 
-  /**
-   * Queries printer status via PowerShell Get-Printer.
-   */
   async getStatus(printerUri: string): Promise<PrinterStatus> {
     const printerName = getWindowsPrinterName(printerUri)
     try {
