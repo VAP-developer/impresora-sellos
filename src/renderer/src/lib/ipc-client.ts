@@ -182,10 +182,9 @@ export async function print(
   quantities: KioskoQuantities,
   profile: string,
   imageFlags?: { printFondo: boolean; printSello: boolean }
-): Promise<void> {
+): Promise<SaleOutcome> {
   // Triggers the full sale flow: atomic transaction + PDF generation + print queue enqueue.
-  // Previously called printer:print which is a no-op stub.
-  await getAPI().sale.execute(config, quantities, profile, imageFlags)
+  return getAPI().sale.execute(config, quantities, profile, imageFlags)
 }
 
 export async function pausePrinter(): Promise<void> {

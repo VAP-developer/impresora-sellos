@@ -16,6 +16,7 @@ import { handleIpc, notifyConfigChanged } from './handlers'
 import { ConfigRepository } from '../database/repositories/config.repository'
 import { ImagesRepository } from '../database/repositories/images.repository'
 import { TariffGroupsRepository } from '../database/repositories/tariff-groups.repository'
+import { EventosRepository } from '../database/repositories/eventos.repository'
 import { executeSale, cancelSale } from '../sales/sale.service'
 import { generateSalePdfs } from '../printing/pdf-generator'
 import { buildImageName } from '../images/sync-images'
@@ -88,43 +89,57 @@ export function registerSaleHandlers(): void {
       let dynamicTariffCtx: DynamicTariffContext | undefined
 
       if (isDynamic) {
-        // Determine tariff group from the active event
-        const eventoIndex = typedConfig.sello.elevento
-        const evento = typedConfig.sello.eventos?.[eventoIndex]
-        const tariffGroupId = evento?.tariff_group_id
+        // elevento stores the DB event ID (not an array index)
+        const activeEventoId = typedConfig.sello.elevento
 
-        if (tariffGroupId) {
-          const tariffGroupsRepo = new TariffGroupsRepository()
-          const group = tariffGroupsRepo.getById(tariffGroupId)
+        if (activeEventoId && activeEventoId > 0) {
+          // Look up the event in the eventos table to get tariff_group_id
+          const eventosRepo = new EventosRepository()
+          const evento = eventosRepo.getById(activeEventoId)
+          const tariffGroupId = evento?.tariff_group_id
 
-          if (group) {
-            tariffGroupCtx = {
-              id: group.id,
-              title: group.title,
-              currency: group.currency,
-              tariffs: group.tariffs.map((t) => ({
-                id: t.id!,
-                name: t.name,
-                price: t.price,
-                position: t.position
-              }))
-            }
-            dynamicTariffCtx = {
-              groupId: group.id,
-              title: group.title,
-              currency: group.currency,
-              tariffs: group.tariffs.map((t) => ({
-                id: t.id!,
-                name: t.name,
-                price: t.price,
-                position: t.position
-              }))
+          if (tariffGroupId) {
+            const tariffGroupsRepo = new TariffGroupsRepository()
+            const group = tariffGroupsRepo.getById(tariffGroupId)
+
+            if (group) {
+              tariffGroupCtx = {
+                id: group.id,
+                title: group.title,
+                currency: group.currency,
+                tariffs: group.tariffs.map((t) => ({
+                  id: t.id!,
+                  name: t.name,
+                  price: t.price,
+                  position: t.position
+                }))
+              }
+              dynamicTariffCtx = {
+                groupId: group.id,
+                title: group.title,
+                currency: group.currency,
+                tariffs: group.tariffs.map((t) => ({
+                  id: t.id!,
+                  name: t.name,
+                  price: t.price,
+                  position: t.position
+                }))
+              }
             }
           }
         }
       }
 
       // Step 1: Execute atomic sale transaction (synchronous SQLite)
+      // If dynamic quantities were detected but we couldn't load the tariff group,
+      // fail early to prevent incorrect sale execution.
+      if (isDynamic && !tariffGroupCtx) {
+        return {
+          success: false,
+          error: 'No se pudo cargar el grupo de tarifas del evento activo. Revise la configuración del evento.'
+        } as SaleOutcome
+      }
+
       const result = executeSale(typedConfig, typedQuantities, typedProfile, undefined, tariffGroupCtx)
 
       // If transaction failed, return error immediately (no PDFs generated per Req 11.3)

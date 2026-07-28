@@ -151,7 +151,13 @@ export default function CartControls({
         //   - 'protocolo' -> "Protocolo de: {titulo_base}"
         //   - 'spde' -> "SPDE de: {titulo_base}"
         //   - 'normal' -> unchanged titulo_base
-        await ipc.print(config, quantities as unknown as ipc.KioskoQuantities, profile, { printFondo, printSello })
+        const saleResult = await ipc.print(config, quantities as unknown as ipc.KioskoQuantities, profile, { printFondo, printSello })
+
+        // Check if the sale failed
+        if (saleResult && !saleResult.success) {
+          window.alert(saleResult.error || 'Error al procesar la venta')
+          return
+        }
 
         // 4. Reset all quantities to zero after successful sale
         reset()
