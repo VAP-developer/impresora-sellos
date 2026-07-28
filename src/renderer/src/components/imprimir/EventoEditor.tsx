@@ -9,11 +9,11 @@
  * 4. If selecting existing: shows form with current data, user can edit or delete
  *
  * Events are persisted in the SQLite `eventos` table via IPC.
- * Includes the new `codigo` field.
+ * Includes tariff group selector (required field).
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import type { EventoRow, EventoInput } from '@renderer/lib/ipc-client'
+import type { EventoRow, EventoInput, TariffGroup } from '@renderer/lib/ipc-client'
 import {
   getEventoYears,
   getEventosByYear,
@@ -22,6 +22,7 @@ import {
   deleteEvento,
   getImageByName
 } from '@renderer/lib/ipc-client'
+import { useTariffGroupsStore } from '@renderer/stores/tariff-groups.store'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,7 +42,8 @@ const EMPTY_FORM: EventoInput = {
   motivoi: '',
   motivod: '',
   fecha: '',
-  localidad: ''
+  localidad: '',
+  tariff_group_id: null
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -64,6 +66,11 @@ export default function EventoEditor({
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState<EventoInput>({ ...EMPTY_FORM })
 
+  // Tariff group selector
+  const { groups: tariffGroups, loadAll: loadAllTariffGroups } = useTariffGroupsStore()
+  const [selectedTariffGroupId, setSelectedTariffGroupId] = useState<number | null>(null)
+  const [tariffGroupError, setTariffGroupError] = useState<string | null>(null)
+
   // Image previews
   const [motivoiUrl, setMotivoiUrl] = useState<string | null>(null)
   const [motivodUrl, setMotivodUrl] = useState<string | null>(null)
@@ -83,6 +90,13 @@ export default function EventoEditor({
     const eventos = await getEventosByYear(selectedYear)
     setEventosForYear(eventos)
   }, [selectedYear])
+
+  // Load tariff groups on mount
+  useEffect(() => {
+    if (expanded) {
+      loadAllTariffGroups()
+    }
+  }, [expanded, loadAllTariffGroups])
 
   useEffect(() => {
     if (expanded) {
@@ -138,6 +152,7 @@ export default function EventoEditor({
       setMode('idle')
       setEditingId(null)
       setMessage(null)
+      setTariffGroupError(null)
     }
   }
 
@@ -148,6 +163,7 @@ export default function EventoEditor({
       setMode('idle')
       setEditingId(null)
       setMessage(null)
+      setTariffGroupError(null)
     }
   }
 
@@ -161,6 +177,7 @@ export default function EventoEditor({
       setNewYearInput('')
       setMode('idle')
       setMessage(null)
+      setTariffGroupError(null)
     }
   }
 
@@ -168,7 +185,9 @@ export default function EventoEditor({
     setMode('creating')
     setEditingId(null)
     setForm({ ...EMPTY_FORM, year: selectedYear })
+    setSelectedTariffGroupId(null)
     setMessage(null)
+    setTariffGroupError(null)
   }
 
   const handleSelectEvento = (evento: EventoRow): void => {
@@ -183,30 +202,61 @@ export default function EventoEditor({
       motivoi: evento.motivoi,
       motivod: evento.motivod,
       fecha: evento.fecha,
-      localidad: evento.localidad
+      localidad: evento.localidad,
+      tariff_group_id: evento.tariff_group_id
     })
+    setSelectedTariffGroupId(evento.tariff_group_id ?? null)
     setMessage(null)
+    setTariffGroupError(null)
   }
 
   const handleCancel = (): void => {
     setMode('idle')
     setEditingId(null)
     setMessage(null)
+    setTariffGroupError(null)
   }
 
   const handleFieldChange = (field: keyof EventoInput, value: string | number): void => {
     setForm((prev) => ({ ...prev, [field]: value }))
   }
 
+  const handleTariffGroupChange = (e: React.ChangeEvent<HTMLSelectElement>): void => {
+    const value = e.target.value
+    if (value === '') {
+      setSelectedTariffGroupId(null)
+    } else {
+      setSelectedTariffGroupId(parseInt(value, 10))
+    }
+    setTariffGroupError(null)
+  }
+
+  const formatTariffGroupLabel = (group: TariffGroup): string => {
+    return `${group.title} (${group.year}) - ${group.currency}`
+  }
+
   const handleSave = async (): Promise<void> => {
+    // Validate tariff group selection
+    if (!selectedTariffGroupId) {
+      setTariffGroupError('Debe seleccionar un grupo de tarifas')
+      return
+    }
+
     setSaving(true)
     setMessage(null)
+    setTariffGroupError(null)
+
     try {
+      const formWithGroup: EventoInput = {
+        ...form,
+        tariff_group_id: selectedTariffGroupId
+      }
+
       if (mode === 'creating') {
-        await createEvento(form)
+        await createEvento(formWithGroup)
         setMessage({ type: 'success', text: 'Evento creado correctamente' })
       } else if (mode === 'editing' && editingId !== null) {
-        await updateEvento(editingId, form)
+        await updateEvento(editingId, formWithGroup)
         setMessage({ type: 'success', text: 'Evento actualizado correctamente' })
       }
       setMode('idle')
@@ -466,6 +516,33 @@ export default function EventoEditor({
                     className="w-full border border-gray-300 rounded p-2"
                     placeholder="Ej: Madrid"
                   />
+                </div>
+
+                {/* Tariff group selector */}
+                <div>
+                  <label htmlFor="ev-tariff-group" className="block text-sm text-gray-600">
+                    Grupo de tarifas <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    id="ev-tariff-group"
+                    value={selectedTariffGroupId ?? ''}
+                    onChange={handleTariffGroupChange}
+                    className={`w-full border rounded p-2 ${
+                      tariffGroupError ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    aria-label="Seleccionar grupo de tarifas"
+                    aria-required="true"
+                  >
+                    <option value="">-- Seleccionar grupo de tarifas --</option>
+                    {tariffGroups.map((group) => (
+                      <option key={group.id} value={group.id}>
+                        {formatTariffGroupLabel(group)}
+                      </option>
+                    ))}
+                  </select>
+                  {tariffGroupError && (
+                    <p className="text-red-600 text-xs mt-1">{tariffGroupError}</p>
+                  )}
                 </div>
 
                 {/* Motif images */}

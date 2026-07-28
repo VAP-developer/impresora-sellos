@@ -18,7 +18,7 @@
  */
 
 import type { AppConfig, PreciosConfig } from '../../renderer/src/types/config'
-import { renderStamp, renderStampMultiPage, renderStampEspecialStrip } from './stamp-renderer'
+import { renderStampMultiPage, renderStampEspecialStrip } from './stamp-renderer'
 import type { StampRenderParams } from './stamp-renderer'
 import { genTicket, genTicketCaja, genTicketMaster, calcTicketHeightMm, calcTicketCajaHeightMm, calcTicketMasterHeightMm, countActiveItems } from './ticket-renderer'
 import type { TicketItem, TicketProduct } from './ticket-renderer'
@@ -508,9 +508,11 @@ export async function generateSalePdfs(
         })
       }
     } else {
-      // Simple stamps: one single-page PDF per stamp
+      // Simple stamps: group all stamps of same tariff/model into one multi-page PDF
+      // so the printer prints them as a continuous strip without cutting between them.
+      const stamps: StampRenderParams[] = []
       for (let i = 0; i < qty; i++) {
-        const pdfBuffer = await renderStamp({
+        stamps.push({
           tarifa: tariff.label,
           fecha: stampFecha,
           evento: stampEvento,
@@ -519,13 +521,15 @@ export async function generateSalePdfs(
           overlayImage: overlay
         })
         productoCounter++
-        pdfs.push({
-          buffer: pdfBuffer,
-          target: tariff.target,
-          pdfType: 'stamp_simple',
-          description: `${tariff.label} modelo${tariff.model} #${i + 1}`
-        })
       }
+
+      const pdfBuffer = await renderStampMultiPage(stamps)
+      pdfs.push({
+        buffer: pdfBuffer,
+        target: tariff.target,
+        pdfType: 'stamp_simple',
+        description: `${tariff.label} modelo${tariff.model} x${qty}`
+      })
     }
   }
 

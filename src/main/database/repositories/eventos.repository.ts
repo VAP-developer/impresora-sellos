@@ -14,6 +14,7 @@ export interface EventoRow {
   motivod: string
   fecha: string
   localidad: string
+  tariff_group_id: number | null
   created_at: string
   updated_at: string
 }
@@ -28,6 +29,7 @@ export interface EventoInput {
   motivod: string
   fecha: string
   localidad: string
+  tariff_group_id?: number | null
 }
 
 /**
@@ -75,8 +77,8 @@ export class EventosRepository {
    */
   create(input: EventoInput): EventoRow {
     const stmt = this.db.prepare(`
-      INSERT INTO eventos (year, codigo, nevento, nferia, nlugar, motivoi, motivod, fecha, localidad)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO eventos (year, codigo, nevento, nferia, nlugar, motivoi, motivod, fecha, localidad, tariff_group_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     const result = stmt.run(
       input.year,
@@ -87,7 +89,8 @@ export class EventosRepository {
       input.motivoi,
       input.motivod,
       input.fecha,
-      input.localidad
+      input.localidad,
+      input.tariff_group_id ?? null
     )
     return this.getById(Number(result.lastInsertRowid))!
   }
@@ -108,13 +111,15 @@ export class EventosRepository {
       motivoi: input.motivoi ?? existing.motivoi,
       motivod: input.motivod ?? existing.motivod,
       fecha: input.fecha ?? existing.fecha,
-      localidad: input.localidad ?? existing.localidad
+      localidad: input.localidad ?? existing.localidad,
+      tariff_group_id: input.tariff_group_id !== undefined ? input.tariff_group_id : existing.tariff_group_id
     }
 
     this.db.prepare(`
       UPDATE eventos SET
         year = ?, codigo = ?, nevento = ?, nferia = ?, nlugar = ?,
         motivoi = ?, motivod = ?, fecha = ?, localidad = ?,
+        tariff_group_id = ?,
         updated_at = datetime('now')
       WHERE id = ?
     `).run(
@@ -127,6 +132,7 @@ export class EventosRepository {
       updated.motivod,
       updated.fecha,
       updated.localidad,
+      updated.tariff_group_id ?? null,
       id
     )
 

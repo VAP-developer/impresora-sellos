@@ -21,7 +21,6 @@ import { useCallback, useMemo, useState } from 'react'
 import { useConfigStore } from '@renderer/stores/config.store'
 import { useKioskoStore } from '@renderer/stores/kiosko.store'
 import { useImagesStore } from '@renderer/stores/images.store'
-import { calcUsedRollo1, calcUsedRollo2, calcUsedTickets } from '@renderer/lib/tariff-calc'
 import * as ipc from '@renderer/lib/ipc-client'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -60,6 +59,9 @@ export default function CartControls({
   const recordLastSale = useKioskoStore((state) => state.recordLastSale)
   const clearLastSale = useKioskoStore((state) => state.clearLastSale)
   const reset = useKioskoStore((state) => state.reset)
+  const getUsedRollo1 = useKioskoStore((state) => state.getUsedRollo1)
+  const getUsedRollo2 = useKioskoStore((state) => state.getUsedRollo2)
+  const getUsedTickets = useKioskoStore((state) => state.getUsedTickets)
 
   // Image layer flags from images store
   const printFondo = useImagesStore((state) => state.printFondo)
@@ -136,9 +138,9 @@ export default function CartControls({
 
       try {
         // 2. Record consumption for potential error reversal
-        const sellos1 = calcUsedRollo1(quantities)
-        const sellos2 = calcUsedRollo2(quantities)
-        const ticketsUsed = 2 + calcUsedTickets(quantities)
+        const sellos1 = getUsedRollo1()
+        const sellos2 = getUsedRollo2()
+        const ticketsUsed = 2 + getUsedTickets()
         recordLastSale(sellos1, sellos2, ticketsUsed)
 
         // 3. Call IPC to trigger the full sale flow in main process
@@ -149,7 +151,7 @@ export default function CartControls({
         //   - 'protocolo' -> "Protocolo de: {titulo_base}"
         //   - 'spde' -> "SPDE de: {titulo_base}"
         //   - 'normal' -> unchanged titulo_base
-        await ipc.print(config, quantities, profile, { printFondo, printSello })
+        await ipc.print(config, quantities as unknown as ipc.KioskoQuantities, profile, { printFondo, printSello })
 
         // 4. Reset all quantities to zero after successful sale
         reset()

@@ -233,6 +233,7 @@ export interface EventoRow {
   motivod: string
   fecha: string
   localidad: string
+  tariff_group_id: number | null
   created_at: string
   updated_at: string
 }
@@ -247,6 +248,46 @@ export interface EventoInput {
   motivod: string
   fecha: string
   localidad: string
+  tariff_group_id?: number | null
+}
+
+// === Tariff Group Types ===
+
+export interface Tariff {
+  id?: number
+  name: string
+  price: number
+  position: number
+}
+
+export interface TariffGroup {
+  id: number
+  year: number
+  title: string
+  currency: string
+  tariffs: Tariff[]
+  created_at: string
+  updated_at: string
+}
+
+export interface TariffGroupInput {
+  year: number
+  title: string
+  currency: string
+  tariffs: TariffInput[]
+}
+
+export interface TariffInput {
+  name: string
+  price: number
+  position: number
+}
+
+export interface TariffGroupUpdateInput {
+  year?: number
+  title?: string
+  currency?: string
+  tariffs: TariffInput[]
 }
 
 // === ElectronAPI Interface ===
@@ -339,6 +380,15 @@ export interface ElectronAPI {
     update(id: number, input: Partial<EventoInput>): Promise<EventoRow | null>
     delete(id: number): Promise<boolean>
   }
+  tariffGroups: {
+    getYears(): Promise<number[]>
+    getAll(): Promise<TariffGroup[]>
+    getByYear(year: number): Promise<TariffGroup[]>
+    getById(id: number): Promise<TariffGroup | null>
+    create(input: TariffGroupInput): Promise<TariffGroup>
+    update(id: number, input: TariffGroupUpdateInput): Promise<TariffGroup | null>
+    delete(id: number): Promise<{ success: boolean; error?: string }>
+  }
 }
 
 // === IPC API Implementation ===
@@ -412,6 +462,15 @@ const api: ElectronAPI = {
     create: (input) => ipcRenderer.invoke('eventos:create', input),
     update: (id, input) => ipcRenderer.invoke('eventos:update', id, input),
     delete: (id) => ipcRenderer.invoke('eventos:delete', id)
+  },
+  tariffGroups: {
+    getYears: () => ipcRenderer.invoke('tariff-groups:getYears'),
+    getAll: () => ipcRenderer.invoke('tariff-groups:getAll'),
+    getByYear: (year) => ipcRenderer.invoke('tariff-groups:getByYear', year),
+    getById: (id) => ipcRenderer.invoke('tariff-groups:getById', id),
+    create: (input) => ipcRenderer.invoke('tariff-groups:create', input),
+    update: (id, input) => ipcRenderer.invoke('tariff-groups:update', id, input),
+    delete: (id) => ipcRenderer.invoke('tariff-groups:delete', id)
   }
 }
 

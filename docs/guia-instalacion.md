@@ -107,6 +107,8 @@ npm run rebuild
 
 ```bash
 npm run build:win
+# Path personalizado
+npm run build:win:local
 ```
 
 Los artefactos se generan en `dist/`:

@@ -13,6 +13,7 @@
     "build": "electron-vite build",
     "build:linux": "electron-vite build && electron-builder --linux",
     "build:win": "electron-vite build && electron-builder --win",
+    "build:win:local": "electron-vite build && electron-builder --win -c.directories.output=%USERPROFILE%/Desktop/kiosko",
     "preview": "electron-vite preview",
     "postinstall": "electron-vite build",
     "rebuild": "npx @electron/rebuild -f -w better-sqlite3",

@@ -6,12 +6,17 @@
  * calculates per-tariff limits based on remaining budget and roll stock,
  * and provides sale/reset/revert actions.
  *
- * Replicates the computed logic from the legacy KioskoView.vue.
+ * Refactored to support dynamic tariff groups: quantities are now stored
+ * as a Record<string, number> keyed by `tariff_${tariffId}_s${model}`.
+ * Legacy fixed-field access is maintained for backward compatibility
+ * during the migration period.
+ *
  * Pure calculation functions are in @renderer/lib/tariff-calc.ts.
  */
 
 import { create } from 'zustand'
 import type { AppConfig, PreciosConfig, TicketConfig, SelloConfig } from '@renderer/types/config'
+import type { TariffGroup } from '@renderer/lib/ipc-client'
 import {
   normalizeQty,
   calcTotal,
@@ -32,6 +37,12 @@ import {
 // Re-export types from tariff-calc for backward compatibility
 export type { KioskoQuantities, KioskoLimits }
 
+/** Dynamic quantities keyed by `tariff_${tariffId}_s${model}` */
+export type DynamicQuantities = Record<string, number>
+
+/** Dynamic limits keyed similarly */
+export type DynamicLimits = Record<string, number>
+
 /** Tracks amounts consumed in the last sale (for error reversal) */
 export interface LastSaleConsumption {
   sellos1: number
@@ -39,19 +50,39 @@ export interface LastSaleConsumption {
   tickets: number
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Build a dynamic quantity key from tariffId and model */
+export function buildQuantityKey(tariffId: number, model: 1 | 2): string {
+  return `tariff_${tariffId}_s${model}`
+}
+
+/** Parse a dynamic quantity key into tariffId and model */
+export function parseQuantityKey(key: string): { tariffId: number; model: 1 | 2 } | null {
+  const match = key.match(/^tariff_(\d+)_s([12])$/)
+  if (!match) return null
+  return { tariffId: Number(match[1]), model: Number(match[2]) as 1 | 2 }
+}
+
 // ─── Store ────────────────────────────────────────────────────────────────────
 
 export interface KioskoState {
-  /** Current quantities selected per tariff/model */
-  quantities: KioskoQuantities
+  /** Current quantities selected per tariff/model (dynamic keys) */
+  quantities: DynamicQuantities
+
+  /** The active tariff group determining which tariffs are available */
+  activeTariffGroup: TariffGroup | null
 
   /** Consumption data from the last completed sale (for error reversal) */
   lastSale: LastSaleConsumption
 
   // --- Derived getters (computed from quantities + config) ---
 
-  /** Calculate the total cost of the basket given prices config */
+  /** Calculate the total cost of the basket given prices config (legacy) */
   getTotal: (precios: PreciosConfig) => number
+
+  /** Calculate the total using the active tariff group (dynamic) */
+  getDynamicTotal: () => number
 
   /** Calculate the spending limit based on config */
   getLimite: (ticket: TicketConfig, sello: SelloConfig) => number
@@ -59,7 +90,7 @@ export interface KioskoState {
   /** Calculate the remaining budget */
   getBudgetRemaining: (precios: PreciosConfig, ticket: TicketConfig, sello: SelloConfig) => number
 
-  /** Get all tariff limits given current config */
+  /** Get all tariff limits given current config (legacy) */
   getLimits: (precios: PreciosConfig, ticket: TicketConfig, sello: SelloConfig) => KioskoLimits
 
   /** Get stamps consumed from roll 1 */
@@ -82,10 +113,13 @@ export interface KioskoState {
 
   // --- Actions ---
 
-  /** Set a specific quantity field. Negative/NaN values are normalized to 0. */
-  setQuantity: (field: keyof KioskoQuantities, value: number) => void
+  /**
+   * Set a quantity for a dynamic tariff by tariffId and model.
+   * Negative/NaN values are normalized to 0.
+   */
+  setQuantity: (tariffIdOrField: number | keyof KioskoQuantities, modelOrValue: (1 | 2) | number, value?: number) => void
 
-  /** Set multiple quantity fields at once. */
+  /** Set multiple quantity fields at once (legacy). */
   setQuantities: (partial: Partial<KioskoQuantities>) => void
 
   /** Reset all quantities to zero. */
@@ -104,13 +138,19 @@ export interface KioskoState {
   clearLastSale: () => void
 
   /**
+   * Set the active tariff group. Resets quantities when changing group.
+   */
+  setActiveTariffGroup: (group: TariffGroup | null) => void
+
+  /**
    * Validate whether the current basket can be sold.
    * Returns null if valid, or an error message string if invalid.
    */
   validateSale: (config: AppConfig) => string | null
 }
 
-const EMPTY_QUANTITIES: KioskoQuantities = {
+/** Legacy empty quantities for backward compatibility when no dynamic group is active */
+const LEGACY_EMPTY_QUANTITIES: DynamicQuantities = {
   tarifaAS1: 0,
   tarifaA2S1: 0,
   tarifaBS1: 0,
@@ -125,14 +165,58 @@ const EMPTY_QUANTITIES: KioskoQuantities = {
   tarifa4T2: 0
 }
 
+/**
+ * Convert DynamicQuantities to legacy KioskoQuantities format.
+ * This is used for backward compatibility with legacy calc functions.
+ */
+function toLegacyQuantities(quantities: DynamicQuantities): KioskoQuantities {
+  return {
+    tarifaAS1: quantities['tarifaAS1'] ?? 0,
+    tarifaA2S1: quantities['tarifaA2S1'] ?? 0,
+    tarifaBS1: quantities['tarifaBS1'] ?? 0,
+    tarifaCS1: quantities['tarifaCS1'] ?? 0,
+    tarifaAT1: quantities['tarifaAT1'] ?? 0,
+    tarifa4T1: quantities['tarifa4T1'] ?? 0,
+    tarifaAS2: quantities['tarifaAS2'] ?? 0,
+    tarifaA2S2: quantities['tarifaA2S2'] ?? 0,
+    tarifaBS2: quantities['tarifaBS2'] ?? 0,
+    tarifaCS2: quantities['tarifaCS2'] ?? 0,
+    tarifaAT2: quantities['tarifaAT2'] ?? 0,
+    tarifa4T2: quantities['tarifa4T2'] ?? 0
+  }
+}
+
 export const useKioskoStore = create<KioskoState>((set, get) => ({
-  quantities: { ...EMPTY_QUANTITIES },
+  quantities: { ...LEGACY_EMPTY_QUANTITIES },
+  activeTariffGroup: null,
   lastSale: { sellos1: 0, sellos2: 0, tickets: 0 },
 
   // --- Derived getters ---
 
   getTotal: (precios) => {
-    return calcTotal(get().quantities, precios)
+    const state = get()
+    // If there's an active tariff group, use dynamic calculation
+    if (state.activeTariffGroup) {
+      return state.getDynamicTotal()
+    }
+    // Legacy: convert to KioskoQuantities and use calcTotal
+    return calcTotal(toLegacyQuantities(state.quantities), precios)
+  },
+
+  getDynamicTotal: () => {
+    const { quantities, activeTariffGroup } = get()
+    if (!activeTariffGroup) return 0
+
+    let total = 0
+    for (const tariff of activeTariffGroup.tariffs) {
+      if (!tariff.id) continue
+      const key1 = buildQuantityKey(tariff.id, 1)
+      const key2 = buildQuantityKey(tariff.id, 2)
+      const qty1 = quantities[key1] ?? 0
+      const qty2 = quantities[key2] ?? 0
+      total += (qty1 + qty2) * tariff.price
+    }
+    return total
   },
 
   getLimite: (ticket, sello) => {
@@ -141,55 +225,97 @@ export const useKioskoStore = create<KioskoState>((set, get) => ({
 
   getBudgetRemaining: (precios, ticket, sello) => {
     const limite = calcLimite(ticket, sello)
-    const total = calcTotal(get().quantities, precios)
+    const total = get().getTotal(precios)
     return limite - total
   },
 
   getLimits: (precios, ticket, sello) => {
-    return calcAllLimits(get().quantities, precios, ticket, sello)
+    return calcAllLimits(toLegacyQuantities(get().quantities), precios, ticket, sello)
   },
 
   getUsedRollo1: () => {
-    return calcUsedRollo1(get().quantities)
+    const state = get()
+    if (state.activeTariffGroup) {
+      // Dynamic: sum all quantities for model 1 (each stamp = 1 unit from rollo1)
+      let used = 0
+      for (const tariff of state.activeTariffGroup.tariffs) {
+        if (!tariff.id) continue
+        const key = buildQuantityKey(tariff.id, 1)
+        used += state.quantities[key] ?? 0
+      }
+      return used
+    }
+    return calcUsedRollo1(toLegacyQuantities(state.quantities))
   },
 
   getUsedRollo2: () => {
-    return calcUsedRollo2(get().quantities)
+    const state = get()
+    if (state.activeTariffGroup) {
+      // Dynamic: sum all quantities for model 2 (each stamp = 1 unit from rollo2)
+      let used = 0
+      for (const tariff of state.activeTariffGroup.tariffs) {
+        if (!tariff.id) continue
+        const key = buildQuantityKey(tariff.id, 2)
+        used += state.quantities[key] ?? 0
+      }
+      return used
+    }
+    return calcUsedRollo2(toLegacyQuantities(state.quantities))
   },
 
   getUsedTickets: () => {
-    return calcUsedTickets(get().quantities)
+    // In the dynamic model, tickets are not consumed per-tariff
+    // (tiras are a legacy concept). Return 0 when using dynamic tariffs.
+    const state = get()
+    if (state.activeTariffGroup) {
+      return 0
+    }
+    return calcUsedTickets(toLegacyQuantities(state.quantities))
   },
 
   getRemainingRollo1: (ticket) => {
-    return (ticket.rollo1 ?? 0) - calcUsedRollo1(get().quantities)
+    return (ticket.rollo1 ?? 0) - get().getUsedRollo1()
   },
 
   getRemainingRollo2: (ticket) => {
-    return (ticket.rollo2 ?? 0) - calcUsedRollo2(get().quantities)
+    return (ticket.rollo2 ?? 0) - get().getUsedRollo2()
   },
 
   getRemainingTickets: (ticket) => {
-    return (ticket.tickets ?? 0) - 2 - calcUsedTickets(get().quantities)
+    return (ticket.tickets ?? 0) - 2 - get().getUsedTickets()
   },
 
   // --- Actions ---
 
-  setQuantity: (field, value) => {
-    set((state) => ({
-      quantities: {
-        ...state.quantities,
-        [field]: normalizeQty(value)
-      }
-    }))
+  setQuantity: (tariffIdOrField: number | keyof KioskoQuantities, modelOrValue: (1 | 2) | number, value?: number) => {
+    if (typeof tariffIdOrField === 'number' && value !== undefined) {
+      // New dynamic API: setQuantity(tariffId, model, value)
+      const key = buildQuantityKey(tariffIdOrField, modelOrValue as 1 | 2)
+      set((state) => ({
+        quantities: {
+          ...state.quantities,
+          [key]: normalizeQty(value)
+        }
+      }))
+    } else {
+      // Legacy API: setQuantity(field, value)
+      const field = tariffIdOrField as keyof KioskoQuantities
+      const val = modelOrValue as number
+      set((state) => ({
+        quantities: {
+          ...state.quantities,
+          [field]: normalizeQty(val)
+        }
+      }))
+    }
   },
 
   setQuantities: (partial) => {
     set((state) => {
       const updated = { ...state.quantities }
       for (const [key, value] of Object.entries(partial)) {
-        if (key in updated && value !== undefined) {
-          updated[key as keyof KioskoQuantities] = normalizeQty(value)
+        if (value !== undefined) {
+          updated[key] = normalizeQty(value)
         }
       }
       return { quantities: updated }
@@ -197,28 +323,23 @@ export const useKioskoStore = create<KioskoState>((set, get) => ({
   },
 
   reset: () => {
-    set({ quantities: { ...EMPTY_QUANTITIES } })
+    const { activeTariffGroup } = get()
+    if (activeTariffGroup) {
+      // Dynamic mode: reset to empty map
+      set({ quantities: {} })
+    } else {
+      // Legacy mode: reset to fixed field structure
+      set({ quantities: { ...LEGACY_EMPTY_QUANTITIES } })
+    }
   },
 
   normalizeAll: () => {
     set((state) => {
-      const q = state.quantities
-      return {
-        quantities: {
-          tarifaAS1: normalizeQty(q.tarifaAS1),
-          tarifaA2S1: normalizeQty(q.tarifaA2S1),
-          tarifaBS1: normalizeQty(q.tarifaBS1),
-          tarifaCS1: normalizeQty(q.tarifaCS1),
-          tarifaAT1: normalizeQty(q.tarifaAT1),
-          tarifa4T1: normalizeQty(q.tarifa4T1),
-          tarifaAS2: normalizeQty(q.tarifaAS2),
-          tarifaA2S2: normalizeQty(q.tarifaA2S2),
-          tarifaBS2: normalizeQty(q.tarifaBS2),
-          tarifaCS2: normalizeQty(q.tarifaCS2),
-          tarifaAT2: normalizeQty(q.tarifaAT2),
-          tarifa4T2: normalizeQty(q.tarifa4T2)
-        }
+      const normalized: DynamicQuantities = {}
+      for (const [key, value] of Object.entries(state.quantities)) {
+        normalized[key] = normalizeQty(value)
       }
+      return { quantities: normalized }
     })
   },
 
@@ -230,9 +351,65 @@ export const useKioskoStore = create<KioskoState>((set, get) => ({
     set({ lastSale: { sellos1: 0, sellos2: 0, tickets: 0 } })
   },
 
+  setActiveTariffGroup: (group) => {
+    if (group) {
+      // Switching to dynamic mode: reset quantities to empty map
+      set({
+        activeTariffGroup: group,
+        quantities: {}
+      })
+    } else {
+      // Switching back to legacy mode: reset to fixed field structure
+      set({
+        activeTariffGroup: null,
+        quantities: { ...LEGACY_EMPTY_QUANTITIES }
+      })
+    }
+  },
+
   validateSale: (config) => {
-    const q = get().quantities
-    const { precios, ticket, sello, codigo } = config
+    const state = get()
+    const { ticket, sello, codigo } = config
+
+    if (state.activeTariffGroup) {
+      // Dynamic validation
+      const total = state.getDynamicTotal()
+      const limite = calcLimite(ticket, sello)
+      const usedRollo1 = state.getUsedRollo1()
+      const usedRollo2 = state.getUsedRollo2()
+
+      // Check if basket is empty
+      if (total === 0) {
+        return 'empty'
+      }
+
+      // Check client ID overflow
+      if (codigo.cliente > 9999) {
+        return 'Límite de ID Cliente, haga reset en menú MÁQUINA'
+      }
+
+      // Check roll stock
+      if (usedRollo1 > ticket.rollo1 && usedRollo2 > ticket.rollo2) {
+        return 'No hay suficientes sellos del primer motivo ni del segundo'
+      }
+      if (usedRollo1 > ticket.rollo1) {
+        return 'No hay suficientes sellos del primer motivo'
+      }
+      if (usedRollo2 > ticket.rollo2) {
+        return 'No hay suficientes sellos del segundo motivo'
+      }
+
+      // Check spending limit
+      if (total > limite) {
+        return `Ha excedido el límite de compra de ${limite}€`
+      }
+
+      return null
+    }
+
+    // Legacy validation
+    const q = toLegacyQuantities(state.quantities)
+    const { precios } = config
     return validateSale(q, precios, ticket, sello, codigo.cliente)
   }
 }))

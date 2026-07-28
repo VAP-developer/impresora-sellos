@@ -214,24 +214,29 @@ describe('database/migrator', () => {
       expect(result).toEqual([
         '001_initial.sql',
         '002_printer_assignments.sql',
-        '003_image_sync.sql'
+        '003_image_sync.sql',
+        '004_eventos_table.sql',
+        '005_tariff_groups.sql'
       ])
 
       // Verify expected tables exist
       const tables = db
         .prepare(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('config', 'orders', 'images', 'print_queue', 'sync_log', 'printer_assignments', 'image_sync')"
+          "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('config', 'orders', 'images', 'print_queue', 'sync_log', 'printer_assignments', 'image_sync', 'eventos', 'tariff_groups', 'tariffs')"
         )
         .all() as Array<{ name: string }>
       const tableNames = tables.map((t) => t.name).sort()
       expect(tableNames).toEqual([
         'config',
+        'eventos',
         'image_sync',
         'images',
         'orders',
         'print_queue',
         'printer_assignments',
-        'sync_log'
+        'sync_log',
+        'tariff_groups',
+        'tariffs'
       ])
     })
   })

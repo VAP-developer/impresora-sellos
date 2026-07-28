@@ -11,6 +11,7 @@
  */
 
 import type { PreciosConfig, TicketConfig, SelloConfig } from '@renderer/types/config'
+import type { Tariff } from '@renderer/lib/ipc-client'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -238,6 +239,110 @@ export function calcAllLimits(
     limiteCS1: calcLimiteSimple(budgetRemaining, tarifaC, rollo1Available),
     limiteCS2: calcLimiteSimple(budgetRemaining, tarifaC, rollo2Available)
   }
+}
+
+// ─── Dynamic tariff types ─────────────────────────────────────────────────────
+
+/** Dynamic quantities keyed by `tariff_${tariffId}_s${model}` */
+export type DynamicQuantities = Record<string, number>
+
+/** Dynamic limits keyed by `tariff_${tariffId}_s${model}` */
+export type DynamicLimits = Record<string, number>
+
+// ─── Dynamic tariff helpers ───────────────────────────────────────────────────
+
+/**
+ * Build a dynamic quantity key from tariffId and model.
+ * Mirrors the helper in kiosko.store.ts.
+ */
+function buildKey(tariffId: number, model: 1 | 2): string {
+  return `tariff_${tariffId}_s${model}`
+}
+
+// ─── Dynamic total calculation ────────────────────────────────────────────────
+
+/**
+ * Calculate the total cost using dynamic tariffs.
+ * total = Σ(qty × price) for each tariff across both models (1 and 2).
+ *
+ * Property 11: For any set of tariffs and non-negative quantities,
+ * total = Σ(quantity × price) for all tariff/model combinations.
+ */
+export function calcDynamicTotal(quantities: DynamicQuantities, tariffs: Tariff[]): number {
+  let total = 0
+  for (const tariff of tariffs) {
+    if (tariff.id == null) continue
+    const key1 = buildKey(tariff.id, 1)
+    const key2 = buildKey(tariff.id, 2)
+    const qty1 = quantities[key1] ?? 0
+    const qty2 = quantities[key2] ?? 0
+    total += (qty1 + qty2) * tariff.price
+  }
+  return total
+}
+
+// ─── Dynamic roll consumption ─────────────────────────────────────────────────
+
+/**
+ * Calculate stamps consumed from a specific roll (model) using dynamic tariffs.
+ * In the dynamic model, each stamp counts as 1 unit from the roll.
+ */
+export function calcDynamicUsedRollo(
+  quantities: DynamicQuantities,
+  tariffs: Tariff[],
+  model: 1 | 2
+): number {
+  let used = 0
+  for (const tariff of tariffs) {
+    if (tariff.id == null) continue
+    const key = buildKey(tariff.id, model)
+    used += quantities[key] ?? 0
+  }
+  return used
+}
+
+// ─── Dynamic limits computation ───────────────────────────────────────────────
+
+/**
+ * Compute dynamic tariff limits given the current quantities, tariffs, and config.
+ *
+ * For each tariff+model combo, calculates the max additional quantity as:
+ *   min(floor(budgetRemaining / price), availableRollStock)
+ *
+ * Returns a Record keyed by `tariff_${tariffId}_s${model}` with integer limits.
+ */
+export function calcDynamicLimits(
+  quantities: DynamicQuantities,
+  tariffs: Tariff[],
+  ticket: TicketConfig,
+  sello: SelloConfig
+): DynamicLimits {
+  const limite = calcLimite(ticket, sello)
+  const total = calcDynamicTotal(quantities, tariffs)
+  const budgetRemaining = limite - total
+
+  const usedRollo1 = calcDynamicUsedRollo(quantities, tariffs, 1)
+  const usedRollo2 = calcDynamicUsedRollo(quantities, tariffs, 2)
+
+  const rollo1Available = (ticket.rollo1 ?? 0) - usedRollo1
+  const rollo2Available = (ticket.rollo2 ?? 0) - usedRollo2
+
+  const limits: DynamicLimits = {}
+
+  for (const tariff of tariffs) {
+    if (tariff.id == null) continue
+    const price = tariff.price
+
+    // Model 1 (rollo 1)
+    const key1 = buildKey(tariff.id, 1)
+    limits[key1] = calcLimiteSimple(budgetRemaining, price, rollo1Available)
+
+    // Model 2 (rollo 2)
+    const key2 = buildKey(tariff.id, 2)
+    limits[key2] = calcLimiteSimple(budgetRemaining, price, rollo2Available)
+  }
+
+  return limits
 }
 
 // ─── Sale validation ──────────────────────────────────────────────────────────

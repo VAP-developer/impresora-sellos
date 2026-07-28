@@ -200,14 +200,14 @@ describe('Sale E2E Integration: Kiosko → Transaction → PDFs → Printer', ()
 
     // Verify PDFs generated for each tariff with qty > 0
     expect(pdfResult.pdfs.length).toBeGreaterThan(0)
-    expect(pdfResult.stampCount).toBe(3) // 2 + 1 stamps
+    expect(pdfResult.stampCount).toBe(2) // 1 PDF for tarifaAS1 (2 pages) + 1 PDF for tarifaBS2 (1 page)
 
     // Verify stamp PDFs have correct targets
     const stampPdfs = pdfResult.pdfs.filter(p => p.pdfType === 'stamp_simple')
     const printer1Stamps = stampPdfs.filter(p => p.target === 'printer1')
     const printer2Stamps = stampPdfs.filter(p => p.target === 'printer2')
-    expect(printer1Stamps.length).toBe(2) // 2 Tarifa A stamps for model 1
-    expect(printer2Stamps.length).toBe(1) // 1 Tarifa B stamp for model 2
+    expect(printer1Stamps.length).toBe(1) // 1 multi-page PDF (2 pages) for Tarifa A model 1
+    expect(printer2Stamps.length).toBe(1) // 1 PDF for Tarifa B model 2
 
     // Verify tickets routed to ticket printer
     const ticketPdfs = pdfResult.pdfs.filter(p => p.target === 'ticket')
@@ -237,8 +237,8 @@ describe('Sale E2E Integration: Kiosko → Transaction → PDFs → Printer', ()
     const printer2Calls = calls.filter(c => c.printerUri === 'ipp://printer2.local/ipp/print')
     const ticketCalls = calls.filter(c => c.printerUri === 'ipp://ticket-printer.local/ipp/print')
 
-    expect(printer1Calls.length).toBe(2)  // 2 stamps to printer1
-    expect(printer2Calls.length).toBe(1)  // 1 stamp to printer2
+    expect(printer1Calls.length).toBe(1)  // 1 multi-page PDF (2 stamps) to printer1
+    expect(printer2Calls.length).toBe(1)  // 1 PDF (1 stamp) to printer2
     expect(ticketCalls.length).toBe(2)    // ticket + copy to ticket printer
 
     // Verify print options: stamps get DC55x25 media with landscape orientation
@@ -381,10 +381,10 @@ describe('Sale E2E Integration: Kiosko → Transaction → PDFs → Printer', ()
     const stamps2 = calls.filter(c => c.printerUri === 'ipp://stamps2/print')
     const tickets = calls.filter(c => c.printerUri === 'ipp://tickets/print')
 
-    // Model 1: 1 simple + 1 tira = 2 print jobs to printer1
+    // Model 1: 1 simple PDF (1 page) + 1 tira PDF = 2 print jobs to printer1
     expect(stamps1.length).toBe(2)
-    // Model 2: 2 simple + 1 tira = 3 print jobs to printer2
-    expect(stamps2.length).toBe(3)
+    // Model 2: 1 simple PDF (2 pages) + 1 tira PDF = 2 print jobs to printer2
+    expect(stamps2.length).toBe(2)
     // Tickets: at least main + copy (default config has ImprimeCopiaTicket='S')
     expect(tickets.length).toBeGreaterThanOrEqual(2)
   })

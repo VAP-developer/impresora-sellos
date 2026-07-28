@@ -20,14 +20,18 @@
 import { useMemo } from 'react'
 import { useConfigStore } from '@renderer/stores/config.store'
 import { useKioskoStore } from '@renderer/stores/kiosko.store'
+import type { KioskoQuantities } from '@renderer/lib/tariff-calc'
 import TariffRow from './TariffRow'
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function TariffTable(): JSX.Element {
   const config = useConfigStore((state) => state.config)
-  const quantities = useKioskoStore((state) => state.quantities)
+  const rawQuantities = useKioskoStore((state) => state.quantities)
   const getLimits = useKioskoStore((state) => state.getLimits)
+
+  // Cast to legacy KioskoQuantities — TariffTable is only rendered in legacy mode
+  const quantities = rawQuantities as unknown as KioskoQuantities
 
   // Extract prices from config, falling back to 0 if not loaded
   const precios = config?.precios

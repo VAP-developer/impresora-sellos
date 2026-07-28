@@ -243,7 +243,7 @@ describe('Property 7: Generación correcta de PDFs por venta', () => {
       expect(result.stampCount).toBe(0)
     })
 
-    it('for simple tariffs: generates exactly qty PDFs per tariff/model with qty > 0', async () => {
+    it('for simple tariffs: generates exactly one PDF per tariff/model with qty > 0', async () => {
       await fc.assert(
         fc.asyncProperty(
           fc.record({
@@ -265,11 +265,10 @@ describe('Property 7: Generación correcta de PDFs por venta', () => {
 
             const simplePdfs = result.pdfs.filter((p) => p.pdfType === 'stamp_simple')
 
-            // Total simple PDFs = sum of all simple quantities
-            const expectedSimpleCount = SIMPLE_KEYS.reduce(
-              (sum, key) => sum + quantities[key],
-              0
-            )
+            // Total simple PDFs = number of tariff/model combinations with qty > 0
+            const expectedSimpleCount = SIMPLE_KEYS.filter(
+              (key) => quantities[key] > 0
+            ).length
             expect(simplePdfs).toHaveLength(expectedSimpleCount)
           }
         ),
@@ -311,7 +310,7 @@ describe('Property 7: Generación correcta de PDFs por venta', () => {
       )
     }, 30000)
 
-    it('total stamp PDFs = sum of simple quantities + sum of tira quantities (no especiales)', async () => {
+    it('total stamp PDFs = count of simple tariffs with qty>0 + sum of tira quantities (no especiales)', async () => {
       await fc.assert(
         fc.asyncProperty(arbQuantities, async (quantities: SaleQuantities) => {
           const result = await generateSalePdfs(config, quantities, 'FERIA')
@@ -320,7 +319,11 @@ describe('Property 7: Generación correcta de PDFs por venta', () => {
             (p) => p.pdfType === 'stamp_simple' || p.pdfType === 'stamp_tira'
           )
 
-          const expectedTotal = Object.values(quantities).reduce((sum, v) => sum + v, 0)
+          // Simple stamps: one PDF per tariff/model with qty > 0
+          const simpleCount = SIMPLE_KEYS.filter((key) => quantities[key] > 0).length
+          // Tiras: one PDF per tira unit
+          const tiraCount = TIRA_KEYS.reduce((sum, key) => sum + quantities[key], 0)
+          const expectedTotal = simpleCount + tiraCount
           expect(stampPdfs).toHaveLength(expectedTotal)
           expect(result.stampCount).toBe(expectedTotal)
         }),
@@ -440,12 +443,12 @@ describe('Property 7: Generación correcta de PDFs por venta', () => {
     })
   })
 
-  describe('Simple stamps generate exactly 1 page per PDF', () => {
-    it('each simple stamp PDF contains exactly 1 page', async () => {
+  describe('Simple stamps generate correct number of pages per PDF', () => {
+    it('each simple stamp PDF contains pages matching the quantity', async () => {
       const quantities: SaleQuantities = {
         ...emptyQuantities(),
-        tarifaAS1: 1,
-        tarifaBS2: 1
+        tarifaAS1: 3,
+        tarifaBS2: 2
       }
 
       const result = await generateSalePdfs(config, quantities, 'FERIA')
@@ -453,12 +456,36 @@ describe('Property 7: Generación correcta de PDFs por venta', () => {
       const simplePdfs = result.pdfs.filter((p) => p.pdfType === 'stamp_simple')
       expect(simplePdfs).toHaveLength(2)
 
-      for (const pdf of simplePdfs) {
-        const pdfContent = pdf.buffer.toString('latin1')
-        const pageMatches = pdfContent.match(/\/Type\s*\/Page[^s]/g)
-        expect(pageMatches).not.toBeNull()
-        expect(pageMatches!.length).toBe(1)
+      // tarifaAS1 with qty=3 → 3 pages in one PDF
+      const pdf1 = simplePdfs[0]
+      const pdfContent1 = pdf1.buffer.toString('latin1')
+      const pageMatches1 = pdfContent1.match(/\/Type\s*\/Page[^s]/g)
+      expect(pageMatches1).not.toBeNull()
+      expect(pageMatches1!.length).toBe(3)
+
+      // tarifaBS2 with qty=2 → 2 pages in one PDF
+      const pdf2 = simplePdfs[1]
+      const pdfContent2 = pdf2.buffer.toString('latin1')
+      const pageMatches2 = pdfContent2.match(/\/Type\s*\/Page[^s]/g)
+      expect(pageMatches2).not.toBeNull()
+      expect(pageMatches2!.length).toBe(2)
+    })
+
+    it('single quantity still generates 1 page', async () => {
+      const quantities: SaleQuantities = {
+        ...emptyQuantities(),
+        tarifaAS1: 1
       }
+
+      const result = await generateSalePdfs(config, quantities, 'FERIA')
+
+      const simplePdfs = result.pdfs.filter((p) => p.pdfType === 'stamp_simple')
+      expect(simplePdfs).toHaveLength(1)
+
+      const pdfContent = simplePdfs[0].buffer.toString('latin1')
+      const pageMatches = pdfContent.match(/\/Type\s*\/Page[^s]/g)
+      expect(pageMatches).not.toBeNull()
+      expect(pageMatches!.length).toBe(1)
     })
   })
 
@@ -797,17 +824,17 @@ describe('Property 7: Generación correcta de PDFs por venta', () => {
   })
 
   describe('One PDF per tariff/model combination with qty > 0 (Req 6.6)', () => {
-    it('generates independent PDFs for each tariff even at qty=1', async () => {
+    it('generates one multi-page PDF per tariff/model combination', async () => {
       const quantities: SaleQuantities = {
-        tarifaAS1: 1,
-        tarifaA2S1: 1,
+        tarifaAS1: 3,
+        tarifaA2S1: 2,
         tarifaBS1: 1,
         tarifaCS1: 1,
         tarifaAT1: 0,
         tarifa4T1: 0,
-        tarifaAS2: 1,
+        tarifaAS2: 2,
         tarifaA2S2: 1,
-        tarifaBS2: 1,
+        tarifaBS2: 3,
         tarifaCS2: 1,
         tarifaAT2: 0,
         tarifa4T2: 0
@@ -816,7 +843,7 @@ describe('Property 7: Generación correcta de PDFs por venta', () => {
       const result = await generateSalePdfs(config, quantities, 'FERIA')
 
       const simplePdfs = result.pdfs.filter((p) => p.pdfType === 'stamp_simple')
-      // 4 tariffs × 2 models = 8 PDFs
+      // 4 tariffs × 2 models = 8 PDFs (one per tariff/model with qty > 0)
       expect(simplePdfs).toHaveLength(8)
 
       // 4 for printer1, 4 for printer2
@@ -824,6 +851,12 @@ describe('Property 7: Generación correcta de PDFs por venta', () => {
       const printer2Pdfs = simplePdfs.filter((p) => p.target === 'printer2')
       expect(printer1Pdfs).toHaveLength(4)
       expect(printer2Pdfs).toHaveLength(4)
+
+      // First PDF (tarifaAS1 qty=3) should have 3 pages
+      const pdfContent = printer1Pdfs[0].buffer.toString('latin1')
+      const pageMatches = pdfContent.match(/\/Type\s*\/Page[^s]/g)
+      expect(pageMatches).not.toBeNull()
+      expect(pageMatches!.length).toBe(3)
     })
   })
 })

@@ -45,7 +45,7 @@ describe('database/repositories/config.repository', () => {
       repo.initConfig()
       const config = repo.get()
       expect(config).not.toBeNull()
-      expect(config!.ticket.feria).toBe('XLIX Feria Nacional Sello')
+      expect(config!.ticket.feria).toBe('XLIX Feria Nacional SelloJC')
     })
   })
 
@@ -74,8 +74,8 @@ describe('database/repositories/config.repository', () => {
       repo.initConfig()
       const config = repo.get()!
 
-      expect(config.ticket.feria).toBe('XLIX Feria Nacional Sello')
-      expect(config.ticket.lugar).toBe('Plaza Mayor - Madrid')
+      expect(config.ticket.feria).toBe('XLIX Feria Nacional SelloJC')
+      expect(config.ticket.lugar).toBe('Plaza Mayor - MadridJC')
       expect(config.ticket.rollo1).toBe(1500)
       expect(config.ticket.rollo2).toBe(1500)
       expect(config.ticket.tickets).toBe(450)
@@ -135,7 +135,7 @@ describe('database/repositories/config.repository', () => {
       repo.resetConfig()
 
       const config = repo.get()!
-      expect(config.ticket.feria).toBe('XLIX Feria Nacional Sello')
+      expect(config.ticket.feria).toBe('XLIX Feria Nacional SelloJC')
       expect(config.codigo.cliente).toBe(1)
     })
   })

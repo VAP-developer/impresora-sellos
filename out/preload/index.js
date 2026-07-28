@@ -64,6 +64,15 @@ const api = {
     create: (input) => electron.ipcRenderer.invoke("eventos:create", input),
     update: (id, input) => electron.ipcRenderer.invoke("eventos:update", id, input),
     delete: (id) => electron.ipcRenderer.invoke("eventos:delete", id)
+  },
+  tariffGroups: {
+    getYears: () => electron.ipcRenderer.invoke("tariff-groups:getYears"),
+    getAll: () => electron.ipcRenderer.invoke("tariff-groups:getAll"),
+    getByYear: (year) => electron.ipcRenderer.invoke("tariff-groups:getByYear", year),
+    getById: (id) => electron.ipcRenderer.invoke("tariff-groups:getById", id),
+    create: (input) => electron.ipcRenderer.invoke("tariff-groups:create", input),
+    update: (id, input) => electron.ipcRenderer.invoke("tariff-groups:update", id, input),
+    delete: (id) => electron.ipcRenderer.invoke("tariff-groups:delete", id)
   }
 };
 if (process.contextIsolated) {

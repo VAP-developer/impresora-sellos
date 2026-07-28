@@ -3358,8 +3358,8 @@ class EventosRepository {
    */
   create(input) {
     const stmt = this.db.prepare(`
-      INSERT INTO eventos (year, codigo, nevento, nferia, nlugar, motivoi, motivod, fecha, localidad)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO eventos (year, codigo, nevento, nferia, nlugar, motivoi, motivod, fecha, localidad, tariff_group_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const result = stmt.run(
       input.year,
@@ -3370,7 +3370,8 @@ class EventosRepository {
       input.motivoi,
       input.motivod,
       input.fecha,
-      input.localidad
+      input.localidad,
+      input.tariff_group_id ?? null
     );
     return this.getById(Number(result.lastInsertRowid));
   }
@@ -3389,12 +3390,14 @@ class EventosRepository {
       motivoi: input.motivoi ?? existing.motivoi,
       motivod: input.motivod ?? existing.motivod,
       fecha: input.fecha ?? existing.fecha,
-      localidad: input.localidad ?? existing.localidad
+      localidad: input.localidad ?? existing.localidad,
+      tariff_group_id: input.tariff_group_id !== void 0 ? input.tariff_group_id : existing.tariff_group_id
     };
     this.db.prepare(`
       UPDATE eventos SET
         year = ?, codigo = ?, nevento = ?, nferia = ?, nlugar = ?,
         motivoi = ?, motivod = ?, fecha = ?, localidad = ?,
+        tariff_group_id = ?,
         updated_at = datetime('now')
       WHERE id = ?
     `).run(
@@ -3407,6 +3410,7 @@ class EventosRepository {
       updated.motivod,
       updated.fecha,
       updated.localidad,
+      updated.tariff_group_id ?? null,
       id
     );
     return this.getById(id);
@@ -3446,6 +3450,219 @@ function registerEventosHandlers() {
     return repo.delete(id);
   });
 }
+const TARIFF_GROUP_ERRORS = {
+  DUPLICATE_YEAR_TITLE: "Ya existe un grupo con ese año y título",
+  MIN_TARIFFS: "Se requieren al menos 2 tarifas",
+  MAX_TARIFFS: "El máximo permitido es 10 tarifas",
+  EMPTY_TITLE: "El título es obligatorio",
+  EMPTY_CURRENCY: "El tipo de moneda es obligatorio",
+  EMPTY_TARIFF_NAME: "El nombre de la tarifa es obligatorio",
+  TARIFF_NAME_TOO_LONG: "El nombre no puede exceder 16 caracteres",
+  INVALID_PRICE: "El precio debe ser un número positivo",
+  GROUP_IN_USE: "No se puede eliminar: el grupo está asociado a eventos",
+  NOT_FOUND: "Grupo de tarifas no encontrado"
+};
+class TariffGroupsRepository {
+  db;
+  constructor(db2) {
+    this.db = db2 ?? getDatabase();
+  }
+  /**
+   * Validates tariff group input fields.
+   * Throws an error with a descriptive message if validation fails.
+   */
+  validate(input) {
+    if (input.title !== void 0 && !input.title.trim()) {
+      throw new Error(TARIFF_GROUP_ERRORS.EMPTY_TITLE);
+    }
+    if (input.currency !== void 0 && !input.currency.trim()) {
+      throw new Error(TARIFF_GROUP_ERRORS.EMPTY_CURRENCY);
+    }
+    if (input.tariffs.length < 2) {
+      throw new Error(TARIFF_GROUP_ERRORS.MIN_TARIFFS);
+    }
+    if (input.tariffs.length > 10) {
+      throw new Error(TARIFF_GROUP_ERRORS.MAX_TARIFFS);
+    }
+    for (const tariff of input.tariffs) {
+      if (!tariff.name || !tariff.name.trim()) {
+        throw new Error(TARIFF_GROUP_ERRORS.EMPTY_TARIFF_NAME);
+      }
+      if (tariff.name.length > 16) {
+        throw new Error(TARIFF_GROUP_ERRORS.TARIFF_NAME_TOO_LONG);
+      }
+      if (tariff.price <= 0 || typeof tariff.price !== "number" || isNaN(tariff.price)) {
+        throw new Error(TARIFF_GROUP_ERRORS.INVALID_PRICE);
+      }
+    }
+  }
+  /**
+   * Attaches tariffs to an array of group rows, returning full TariffGroup objects.
+   */
+  _attachTariffs(groups) {
+    return groups.map((group) => {
+      const tariffs = this.db.prepare("SELECT id, group_id, name, price, position FROM tariffs WHERE group_id = ? ORDER BY position ASC").all(group.id);
+      return {
+        ...group,
+        tariffs: tariffs.map((t) => ({
+          id: t.id,
+          name: t.name,
+          price: t.price,
+          position: t.position
+        }))
+      };
+    });
+  }
+  /**
+   * Returns all distinct years that have tariff groups, sorted descending.
+   */
+  getYears() {
+    const rows = this.db.prepare("SELECT DISTINCT year FROM tariff_groups ORDER BY year DESC").all();
+    return rows.map((r) => r.year);
+  }
+  /**
+   * Returns all tariff groups with their tariffs included.
+   */
+  getAll() {
+    const groups = this.db.prepare("SELECT * FROM tariff_groups ORDER BY year DESC, title ASC").all();
+    return this._attachTariffs(groups);
+  }
+  /**
+   * Returns tariff groups for a given year with their tariffs.
+   */
+  getByYear(year) {
+    const groups = this.db.prepare("SELECT * FROM tariff_groups WHERE year = ? ORDER BY title ASC").all(year);
+    return this._attachTariffs(groups);
+  }
+  /**
+   * Returns a single tariff group by ID with its tariffs, or null if not found.
+   */
+  getById(id) {
+    const group = this.db.prepare("SELECT * FROM tariff_groups WHERE id = ?").get(id);
+    if (!group) return null;
+    return this._attachTariffs([group])[0];
+  }
+  /**
+   * Creates a new tariff group with its tariffs atomically in a transaction.
+   * Returns the created group with its tariffs.
+   */
+  create(input) {
+    this.validate({ title: input.title, currency: input.currency, tariffs: input.tariffs });
+    const insertGroup = this.db.prepare(`
+      INSERT INTO tariff_groups (year, title, currency)
+      VALUES (?, ?, ?)
+    `);
+    const insertTariff = this.db.prepare(`
+      INSERT INTO tariffs (group_id, name, price, position)
+      VALUES (?, ?, ?, ?)
+    `);
+    const createTransaction = this.db.transaction(() => {
+      let result;
+      try {
+        result = insertGroup.run(input.year, input.title, input.currency);
+      } catch (err) {
+        if (err instanceof Error && err.message.includes("UNIQUE constraint failed")) {
+          throw new Error(TARIFF_GROUP_ERRORS.DUPLICATE_YEAR_TITLE);
+        }
+        throw err;
+      }
+      const groupId2 = Number(result.lastInsertRowid);
+      for (const tariff of input.tariffs) {
+        insertTariff.run(groupId2, tariff.name, tariff.price, tariff.position);
+      }
+      return groupId2;
+    });
+    const groupId = createTransaction();
+    return this.getById(groupId);
+  }
+  /**
+   * Updates an existing tariff group and syncs its tariffs (delete + re-insert) atomically.
+   * Returns the updated group or null if not found.
+   */
+  update(id, input) {
+    const existing = this.getById(id);
+    if (!existing) return null;
+    const title = input.title ?? existing.title;
+    const currency = input.currency ?? existing.currency;
+    this.validate({ title, currency, tariffs: input.tariffs });
+    const updateGroup = this.db.prepare(`
+      UPDATE tariff_groups SET
+        year = ?, title = ?, currency = ?,
+        updated_at = datetime('now')
+      WHERE id = ?
+    `);
+    const deleteTariffs = this.db.prepare("DELETE FROM tariffs WHERE group_id = ?");
+    const insertTariff = this.db.prepare(`
+      INSERT INTO tariffs (group_id, name, price, position)
+      VALUES (?, ?, ?, ?)
+    `);
+    const updateTransaction = this.db.transaction(() => {
+      const year = input.year ?? existing.year;
+      try {
+        updateGroup.run(year, title, currency, id);
+      } catch (err) {
+        if (err instanceof Error && err.message.includes("UNIQUE constraint failed")) {
+          throw new Error(TARIFF_GROUP_ERRORS.DUPLICATE_YEAR_TITLE);
+        }
+        throw err;
+      }
+      deleteTariffs.run(id);
+      for (const tariff of input.tariffs) {
+        insertTariff.run(id, tariff.name, tariff.price, tariff.position);
+      }
+    });
+    updateTransaction();
+    return this.getById(id);
+  }
+  /**
+   * Deletes a tariff group by ID.
+   * Verifies no events reference the group before deleting.
+   * Returns { success: true } on success, or { success: false, error } if the group is in use.
+   */
+  delete(id) {
+    const existing = this.getById(id);
+    if (!existing) {
+      return { success: false, error: TARIFF_GROUP_ERRORS.NOT_FOUND };
+    }
+    const events = this.getEventsByGroupId(id);
+    if (events.length > 0) {
+      return { success: false, error: TARIFF_GROUP_ERRORS.GROUP_IN_USE };
+    }
+    this.db.prepare("DELETE FROM tariff_groups WHERE id = ?").run(id);
+    return { success: true };
+  }
+  /**
+   * Returns IDs of events that reference the given tariff group.
+   */
+  getEventsByGroupId(groupId) {
+    const rows = this.db.prepare("SELECT id FROM eventos WHERE tariff_group_id = ?").all(groupId);
+    return rows.map((r) => r.id);
+  }
+}
+function registerTariffGroupsHandlers() {
+  const repo = new TariffGroupsRepository();
+  handleIpc("tariff-groups:getYears", () => {
+    return repo.getYears();
+  });
+  handleIpc("tariff-groups:getAll", () => {
+    return repo.getAll();
+  });
+  handleIpc("tariff-groups:getByYear", (year) => {
+    return repo.getByYear(year);
+  });
+  handleIpc("tariff-groups:getById", (id) => {
+    return repo.getById(id);
+  });
+  handleIpc("tariff-groups:create", (input) => {
+    return repo.create(input);
+  });
+  handleIpc("tariff-groups:update", (id, input) => {
+    return repo.update(id, input);
+  });
+  handleIpc("tariff-groups:delete", (id) => {
+    return repo.delete(id);
+  });
+}
 function registerAllHandlers() {
   registerConfigHandlers();
   registerOrdersHandlers();
@@ -3454,6 +3671,7 @@ function registerAllHandlers() {
   registerSaleHandlers();
   registerAutoLaunchHandlers();
   registerEventosHandlers();
+  registerTariffGroupsHandlers();
 }
 function notifyConfigChanged(config) {
   const windows = electron.BrowserWindow.getAllWindows();

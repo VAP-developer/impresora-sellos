@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useConfigStore } from '@renderer/stores/config.store'
 import type { PreciosConfig, SelloConfig } from '@renderer/types/config'
-import type { EventoRow } from '@renderer/lib/ipc-client'
+import type { EventoRow, TariffGroup } from '@renderer/lib/ipc-client'
 import { getEventoById } from '@renderer/lib/ipc-client'
 import PerfilSection from '@renderer/components/imprimir/PerfilSection'
 import EventoSection from '@renderer/components/imprimir/EventoSection'
@@ -10,6 +10,9 @@ import EventoEditor from '@renderer/components/imprimir/EventoEditor'
 import PerfilesSection from '@renderer/components/imprimir/PerfilesSection'
 import TarifaSection from '@renderer/components/imprimir/TarifaSection'
 import PrinterSection from '@renderer/components/imprimir/PrinterSection'
+import TariffGroupSection from '@renderer/components/imprimir/TariffGroupSection'
+import TariffGroupEditor from '@renderer/components/imprimir/TariffGroupEditor'
+import { useTariffGroupsStore } from '@renderer/stores/tariff-groups.store'
 
 export default function ImprimirView(): JSX.Element {
   const config = useConfigStore((s) => s.config)
@@ -28,6 +31,11 @@ export default function ImprimirView(): JSX.Element {
 
   // Key to force EventoSection to re-fetch after edits
   const [eventosRefreshKey, setEventosRefreshKey] = useState(0)
+
+  // Tariff group editor state
+  const [showTariffGroupEditor, setShowTariffGroupEditor] = useState(false)
+  const [editingTariffGroup, setEditingTariffGroup] = useState<TariffGroup | null>(null)
+  const { loadByYear: loadTariffGroupsByYear, loadYears: loadTariffGroupYears, selectedYear: tariffGroupSelectedYear } = useTariffGroupsStore()
 
   // Local editable profile names (only nperfil4 is actually editable)
   const [localProfileNames, setLocalProfileNames] = useState<Record<number, string>>(() => ({
@@ -99,6 +107,32 @@ export default function ImprimirView(): JSX.Element {
 
   const handleEventosChanged = useCallback(() => {
     setEventosRefreshKey((k) => k + 1)
+  }, [])
+
+  // Tariff group callbacks
+  const handleCreateTariffGroup = useCallback(() => {
+    setEditingTariffGroup(null)
+    setShowTariffGroupEditor(true)
+  }, [])
+
+  const handleEditTariffGroup = useCallback((group: TariffGroup) => {
+    setEditingTariffGroup(group)
+    setShowTariffGroupEditor(true)
+  }, [])
+
+  const handleTariffGroupSave = useCallback(() => {
+    setShowTariffGroupEditor(false)
+    setEditingTariffGroup(null)
+    // Refresh the tariff groups list
+    if (tariffGroupSelectedYear !== null) {
+      loadTariffGroupsByYear(tariffGroupSelectedYear)
+    }
+    loadTariffGroupYears()
+  }, [tariffGroupSelectedYear, loadTariffGroupsByYear, loadTariffGroupYears])
+
+  const handleTariffGroupCancel = useCallback(() => {
+    setShowTariffGroupEditor(false)
+    setEditingTariffGroup(null)
   }, [])
 
   const handleProfileNameChange = useCallback(
@@ -250,6 +284,21 @@ export default function ImprimirView(): JSX.Element {
       <EventoEditor
         onEventosChanged={handleEventosChanged}
       />
+
+      {/* Tariff groups section - list and manage tariff groups */}
+      <TariffGroupSection
+        onCreateGroup={handleCreateTariffGroup}
+        onEditGroup={handleEditTariffGroup}
+      />
+
+      {/* Tariff group editor - create/edit form */}
+      {showTariffGroupEditor && (
+        <TariffGroupEditor
+          group={editingTariffGroup}
+          onSave={handleTariffGroupSave}
+          onCancel={handleTariffGroupCancel}
+        />
+      )}
 
       {/* Profiles name editor (collapsible) */}
       <PerfilesSection

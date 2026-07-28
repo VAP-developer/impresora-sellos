@@ -281,6 +281,7 @@ export interface EventoRow {
   motivod: string
   fecha: string
   localidad: string
+  tariff_group_id: number | null
   created_at: string
   updated_at: string
 }
@@ -295,6 +296,7 @@ export interface EventoInput {
   motivod: string
   fecha: string
   localidad: string
+  tariff_group_id?: number | null
 }
 
 export async function getEventoYears(): Promise<number[]> {
@@ -319,4 +321,76 @@ export async function updateEvento(id: number, input: Partial<EventoInput>): Pro
 
 export async function deleteEvento(id: number): Promise<boolean> {
   return getAPI().eventos.delete(id)
+}
+
+// === Tariff Groups ===
+
+export interface Tariff {
+  id?: number
+  name: string
+  price: number
+  position: number
+}
+
+export interface TariffGroup {
+  id: number
+  year: number
+  title: string
+  currency: string
+  tariffs: Tariff[]
+  created_at: string
+  updated_at: string
+}
+
+export interface TariffGroupInput {
+  year: number
+  title: string
+  currency: string
+  tariffs: TariffInput[]
+}
+
+export interface TariffInput {
+  name: string
+  price: number
+  position: number
+}
+
+export interface TariffGroupUpdateInput {
+  year?: number
+  title?: string
+  currency?: string
+  tariffs: TariffInput[]
+}
+
+export async function getTariffGroupYears(): Promise<number[]> {
+  return getAPI().tariffGroups.getYears()
+}
+
+export async function getAllTariffGroups(): Promise<TariffGroup[]> {
+  return getAPI().tariffGroups.getAll()
+}
+
+export async function getTariffGroupsByYear(year: number): Promise<TariffGroup[]> {
+  return getAPI().tariffGroups.getByYear(year)
+}
+
+export async function getTariffGroupById(id: number): Promise<TariffGroup | null> {
+  return getAPI().tariffGroups.getById(id)
+}
+
+export async function createTariffGroup(input: TariffGroupInput): Promise<TariffGroup> {
+  return getAPI().tariffGroups.create(input)
+}
+
+export async function updateTariffGroup(
+  id: number,
+  input: TariffGroupUpdateInput
+): Promise<TariffGroup | null> {
+  return getAPI().tariffGroups.update(id, input)
+}
+
+export async function deleteTariffGroup(
+  id: number
+): Promise<{ success: boolean; error?: string }> {
+  return getAPI().tariffGroups.delete(id)
 }
