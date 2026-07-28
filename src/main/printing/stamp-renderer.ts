@@ -26,11 +26,11 @@ import { existsSync } from 'fs'
 // Constants
 // ─────────────────────────────────────────────
 
-/** Conversion factor: 1mm = 72/25.4 points 
+/** Conversion factor: 1mm = 72/25.4 points ------------------------ AQUI: 1 mm más en la etiqueta = pdf tamaño verdadero -----------
  es la unidad de pdfkit que usa internamente */
 const MM_TO_PT = 72 / 25.4 // ≈ 2.83465
-export const STAMP_WIDTH_MM = 55
-export const STAMP_HEIGHT_MM = 25
+export const STAMP_WIDTH_MM = 55 // medida MAYOR (ROTACIÓN 90)
+export const STAMP_HEIGHT_MM = 55 // medida mayor O IGUAL (ROTACIÓN 0) COORDENADAS TEXTO EN BASE HEIGHT
 // Constantes finales
 export const STAMP_WIDTH = STAMP_WIDTH_MM * MM_TO_PT // ~155.91 pt
 export const STAMP_HEIGHT = STAMP_HEIGHT_MM * MM_TO_PT // ~70.87 pt
@@ -150,13 +150,13 @@ function registerFonts(doc: PDFKit.PDFDocument): void {
 }
 
 /**
- * Converts a bottom-left Y coordinate (reportlab convention) to pdfkit top-left Y.
+ * Converts a bottom-left Y coordinate (reportlab convention) to pdfkit top-left Y. ---------- AQUI
  * In reportlab: Y=0 is bottom, increases upward.
  * In pdfkit: Y=0 is top, increases downward.
  */
 function bottomToTop(bottomY_mm: number, fontSizePt: number): number {
   const bottomYPt = bottomY_mm * MM_TO_PT
-  return STAMP_HEIGHT - bottomYPt - fontSizePt
+ return STAMP_HEIGHT - bottomYPt - fontSizePt
 }
 
 /**
@@ -217,13 +217,15 @@ function drawBackground(doc: PDFKit.PDFDocument, imageSource: string | null | un
 }
 
 /**
- * Draws the overlay image on the right half of the stamp (27.5mm–55mm x, 0–25mm y).
+ * Draws the overlay image on the right half of the stamp (27.5mm–55mm x, 0–25mm y). --------------- AQUI 27.5 ----------
  * Used for sello layer that should only occupy the right half of the label.
  * Handles file paths and base64 data URIs.
  */
 function drawOverlay(doc: PDFKit.PDFDocument, imageSource: string | null | undefined): void {
   if (!imageSource) return
 
+ // const overlayX = 27.5 * MM_TO_PT
+  //const overlayWidth = 27.5 * MM_TO_PT
   const overlayX = 27.5 * MM_TO_PT
   const overlayWidth = 27.5 * MM_TO_PT
 
@@ -267,7 +269,7 @@ function collectPdf(doc: PDFKit.PDFDocument): Promise<Buffer> {
 // ─────────────────────────────────────────────
 
 /**
- * Generates a single stamp PDF as a Buffer.
+ * Generates a single stamp PDF as a Buffer./ evento / fecha -------------------------------------------------- individual
  * Page is portrait (25×55mm) with content rotated 90° CCW so that the Brother
  * TD-4100N prints it horizontally when feeding along the 55mm side.
  *
@@ -281,27 +283,40 @@ function collectPdf(doc: PDFKit.PDFDocument): Promise<Buffer> {
  */
 export async function renderStamp(params: StampRenderParams): Promise<Buffer> {
   const doc = new PDFDocument({
-    size: [STAMP_WIDTH, STAMP_HEIGHT],
+    size: [STAMP_WIDTH, STAMP_HEIGHT], // ancho x alto en puntos (55mm  160 x 25mm 71 )
     margin: 0,
+    //layout: 'portrait',
     info: { Title: 'Etiqueta', Author: 'Stamp Sales App' }
   })
 
   const result = collectPdf(doc)
 
+
+
   registerFonts(doc)
   drawBackground(doc, params.backgroundImage)
   drawOverlay(doc, params.overlayImage)
-  drawTextLeft(doc, params.tarifa, FONTS.regular, 12, 2, 19.5)
-  drawTextRight(doc, params.evento, FONTS.regular, 9, 26, 19)
-  drawTextRight(doc, params.fecha, FONTS.regular, 9, 26, 15)
-  drawTextLeft(doc, params.codigo, FONTS.regular, 6, 2, 11)
+  drawTextLeft(doc, params.tarifa, FONTS.regular, 12, 2, 49)
+  drawTextRight(doc, params.tarifa, FONTS.regular, 12, 53, 49)
+  drawTextLeft(doc, params.codigo, FONTS.regular, 8.2, 2, 40)
+  drawTextLeft(doc, params.codigo, FONTS.regular, 8, 2, 37)
+  drawTextRight(doc, params.codigo, FONTS.regular, 8, 53, 40)
+  drawTextLeft(doc, params.codigo, FONTS.regular, 6, 2, 32)
 
-  doc.end()
+  // Como el "lienzo" ahora está rotado, para que el texto quede centrado
+  // y vertical hay que pensar las coordenadas como si el alto y ancho
+  // estuvieran invertidos
+
+      doc.end()
+
+
+  // ... resto del contenido que no quieras rotado
+
   return result
 }
 
 /**
- * Generates a stamp PDF without background (mdcc mode).
+ * Generates a stamp PDF without background (mdcc mode).------------------- modo MDCC --------------------- AQUI PTE. ---
  * Used for machine codes like "MD" or "FI" that don't print motif backgrounds.
  * Uses "fondoetiqueta-nada.png" if available.
  */
@@ -311,7 +326,7 @@ export function renderStampBlank(params: StampRenderParams): Promise<Buffer> {
 }
 
 /**
- * Generates a special strip stamp (Tira Especial 1) PDF.
+ * Generates a special strip stamp (Tira Especial 1) PDF.----------------- TIRA ESPECIAL 1 --------------
  * Background: TiraEspecial1.png
  * Layout: código (6pt at 1.5mm, 2mm) + especial suffix (at 23.3mm, 2mm)
  */
@@ -327,15 +342,15 @@ export async function renderStampE1(params: StampEspecialParams): Promise<Buffer
 
   const bgPath = join(getImagesPath(), 'TiraEspecial1.png')
   drawBackground(doc, existsSync(bgPath) ? bgPath : null)
-  drawTextLeft(doc, params.codigo, FONTS.regular, 6, 1.5, 2)
-  drawTextLeft(doc, params.especial, FONTS.regular, 6, 23.3, 2)
+  drawTextLeft(doc, params.codigo, FONTS.regular, 6, 2, 32)
+  drawTextLeft(doc, params.especial, FONTS.regular, 6, 24, 32)
 
   doc.end()
   return result
 }
 
 /**
- * Generates a special strip stamp (Tira Especial 2) PDF.
+ * Generates a special strip stamp (Tira Especial 2) PDF. -------------- TIRA ESPECIAL 2 ---------------
  * Background: TiraEspecial2.png
  * Layout: tarifa (12pt) + código (6pt) + especial (6pt)
  */
@@ -353,17 +368,17 @@ export async function renderStampE2(params: StampEspecialParams): Promise<Buffer
   drawBackground(doc, existsSync(bgPath) ? bgPath : null)
 
   if (params.tarifa) {
-    drawTextLeft(doc, params.tarifa, FONTS.regular, 12, 1.5, 19.5)
+    drawTextLeft(doc, params.tarifa, FONTS.regular, 12, 2, 49)
   }
-  drawTextLeft(doc, params.codigo, FONTS.regular, 6, 1.5, 2)
-  drawTextLeft(doc, params.especial, FONTS.regular, 6, 23.3, 2)
+  drawTextLeft(doc, params.codigo, FONTS.regular, 6, 2, 32)
+  drawTextLeft(doc, params.especial, FONTS.regular, 6, 24, 32)
 
   doc.end()
   return result
 }
 
 /**
- * Generates a special strip stamp (Tira Especial 3) PDF.
+ * Generates a special strip stamp (Tira Especial 3) PDF. -------------- TIRA ESPECIAL 3 -----------------
  * Background: TiraEspecial3.png
  * Layout: Same as E2 (tarifa + código + especial)
  */
@@ -381,17 +396,17 @@ export async function renderStampE3(params: StampEspecialParams): Promise<Buffer
   drawBackground(doc, existsSync(bgPath) ? bgPath : null)
 
   if (params.tarifa) {
-    drawTextLeft(doc, params.tarifa, FONTS.regular, 12, 1.5, 19.5)
+    drawTextLeft(doc, params.tarifa, FONTS.regular, 12, 2, 49)
   }
-  drawTextLeft(doc, params.codigo, FONTS.regular, 6, 1.5, 2)
-  drawTextLeft(doc, params.especial, FONTS.regular, 6, 23.3, 2)
+  drawTextLeft(doc, params.codigo, FONTS.regular, 6, 2, 32)
+  drawTextLeft(doc, params.especial, FONTS.regular, 6, 24, 32)
 
   doc.end()
   return result
 }
 
 /**
- * Generates a special strip stamp (Tira Especial 4) PDF.
+ * Generates a special strip stamp (Tira Especial 4) PDF. ------------- TIRA ESPECIAL 4 -------------------
  * Background: TiraEspecial4.png
  * Layout: Same as E1 (only código + especial)
  */
@@ -408,15 +423,15 @@ export async function renderStampE4(params: StampEspecialParams): Promise<Buffer
   const bgPath = join(getImagesPath(), 'TiraEspecial4.png')
   drawBackground(doc, existsSync(bgPath) ? bgPath : null)
 
-  drawTextLeft(doc, params.codigo, FONTS.regular, 6, 1.5, 2)
-  drawTextLeft(doc, params.especial, FONTS.regular, 6, 23.3, 2)
+  drawTextLeft(doc, params.codigo, FONTS.regular, 6, 2, 32)
+  drawTextLeft(doc, params.especial, FONTS.regular, 6, 24, 32)
 
   doc.end()
   return result
 }
 
 /**
- * Generates a multi-page PDF with multiple stamps (for tiras/strips of 4).
+ * Generates a multi-page PDF with multiple stamps (for tiras/strips of 4).--------------- T AAAA / T4T ----------- AMBAS TIRAS ---
  * Each page is one stamp (55×25mm).
  *
  * @param stamps - Array of StampRenderParams, one per stamp page
@@ -443,10 +458,10 @@ export async function renderStampMultiPage(stamps: StampRenderParams[]): Promise
 
     drawBackground(doc, stamp.backgroundImage)
     drawOverlay(doc, stamp.overlayImage)
-    drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12, 2, 19.5)
-    drawTextRight(doc, stamp.evento, FONTS.regular, 9, 26, 19)
-    drawTextRight(doc, stamp.fecha, FONTS.regular, 9, 26, 15)
-    drawTextLeft(doc, stamp.codigo, FONTS.regular, 6, 2, 11)
+    drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12, 2, 49)
+    drawTextRight(doc, stamp.evento, FONTS.regular, 9, 53, 49)
+    drawTextRight(doc, stamp.fecha, FONTS.regular, 9, 53, 40)
+    drawTextLeft(doc, stamp.codigo, FONTS.regular, 6, 2, 32)
   })
 
   doc.end()
@@ -470,11 +485,19 @@ export async function renderStampEspecialStrip(
   const doc = new PDFDocument({
     size: [STAMP_WIDTH, STAMP_HEIGHT],
     margin: 0,
+     layout: 'portrait',
     info: { Title: 'Tira Especial', Author: 'Stamp Sales App' }
   })
 
   const result = collectPdf(doc)
-  registerFonts(doc)
+  const pageWidth = doc.page.width   // 156
+  const pageHeight = doc.page.height // 71
+
+  doc.save() // guardamos el estado antes de rotar  // const pageWidth = doc.page.width   // 156
+   // Rotamos 90° (o -90° según el sentido que quieras) // const pageHeight = doc.page.height // 71
+  // el origin es el punto sobre el que pivota la rotación
+  // doc.rotate(90, { origin: [pageWidth / 2, pageHeight / 2] })
+  doc.rotate(90, { origin: [pageWidth / 2, pageHeight / 2] })
 
   const imagesPath = getImagesPath()
 

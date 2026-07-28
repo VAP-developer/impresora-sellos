@@ -1,14 +1,33 @@
 "use strict";
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
 const electron = require("electron");
 const path = require("path");
 const fs = require("fs");
 const utils = require("@electron-toolkit/utils");
 const Database = require("better-sqlite3");
-const os = require("os");
 const child_process = require("child_process");
 const util = require("util");
-const promises = require("fs/promises");
-const crypto = require("crypto");
 const PDFDocument = require("pdfkit");
 function ensureMigrationsTable(db2) {
   db2.exec(`
@@ -98,11 +117,11 @@ function closeDatabase() {
 }
 const DEFAULT_CONFIG = {
   ticket: {
-    feria: "XLIX Feria Nacional Sello",
-    lugar: "Plaza Mayor - Madrid",
+    feria: "XLIX Feria Nacional SelloJC",
+    lugar: "Plaza Mayor - MadridJC",
     fecha: "auto",
     hora: "auto",
-    titulo: "Factura Simplificada",
+    titulo: "Factura SimplificadaJC",
     tituloCopia: "COPIA Factura Simplificada",
     rollo1: 1500,
     rollo2: 1500,
@@ -151,7 +170,7 @@ const DEFAULT_CONFIG = {
     nperfil5: "Abono/Envio",
     nperfil6: "FERIA",
     eventos: [
-      { nevento: "Feria Madrid", nferia: "XLIX Feria Nacional Sello", nlugar: "Plaza Mayor Madrid", motivoi: "", motivod: "", fecha: "21-24 abril 2025", localidad: "Madrid" },
+      { nevento: "Feria MadridJJ", nferia: "XLIX Feria Nacional SelloJJ", nlugar: "Plaza Mayor MadridJJ", motivoi: "", motivod: "", fecha: "21-24 abril 2025", localidad: "Madrid" },
       { nevento: "", nferia: "", nlugar: "", motivoi: "", motivod: "", fecha: "", localidad: "" },
       { nevento: "", nferia: "", nlugar: "", motivoi: "", motivod: "", fecha: "", localidad: "" },
       { nevento: "", nferia: "", nlugar: "", motivoi: "", motivod: "", fecha: "", localidad: "" },
@@ -969,231 +988,10 @@ function registerImagesHandlers() {
     return result;
   });
 }
-const execAsync$1 = util.promisify(child_process.exec);
+const execAsync = util.promisify(child_process.exec);
 const defaultDiscoveryExecutor = {
-  exec: (command) => execAsync$1(command, { timeout: 1e4 })
+  exec: (command) => execAsync(command, { timeout: 1e4 })
 };
-const defaultHttpProbe = {
-  probe(hostname, port, path2, timeoutMs) {
-    const http = require("http");
-    const printerUri = `ipp://${hostname}:${port}${path2}`;
-    const ippRequest = buildMinimalGetAttributesRequest(printerUri);
-    return new Promise((resolve) => {
-      const options = {
-        hostname,
-        port,
-        path: path2,
-        method: "POST",
-        headers: {
-          "Content-Type": "application/ipp",
-          "Content-Length": ippRequest.length
-        },
-        timeout: timeoutMs
-      };
-      const req = http.request(
-        options,
-        (res) => {
-          const chunks = [];
-          res.on("data", (chunk) => chunks.push(chunk));
-          res.on("end", () => {
-            if (res.statusCode === 200) {
-              const responseData = Buffer.concat(chunks);
-              const name = extractPrinterName(responseData) ?? `IPP@${hostname}`;
-              resolve(name);
-            } else {
-              resolve(null);
-            }
-          });
-        }
-      );
-      req.on("error", () => resolve(null));
-      req.on("timeout", () => {
-        req.destroy();
-        resolve(null);
-      });
-      req.write(ippRequest);
-      req.end();
-    });
-  }
-};
-const IPP_V_MAJOR = 1;
-const IPP_V_MINOR = 1;
-const OP_GET_PRINTER_ATTRIBUTES = 11;
-const TAG_OPERATION_ATTRIBUTES = 1;
-const TAG_END_OF_ATTRIBUTES = 3;
-const TAG_CHARSET = 71;
-const TAG_NATURAL_LANGUAGE = 72;
-const TAG_URI = 69;
-const TAG_KEYWORD = 68;
-const TAG_NAME_WITHOUT_LANGUAGE = 66;
-function encodeStrAttr(tag, name, value) {
-  const nameBytes = Buffer.from(name, "utf-8");
-  const valueBytes = Buffer.from(value, "utf-8");
-  const buf = Buffer.alloc(1 + 2 + nameBytes.length + 2 + valueBytes.length);
-  let offset = 0;
-  buf.writeUInt8(tag, offset);
-  offset += 1;
-  buf.writeUInt16BE(nameBytes.length, offset);
-  offset += 2;
-  nameBytes.copy(buf, offset);
-  offset += nameBytes.length;
-  buf.writeUInt16BE(valueBytes.length, offset);
-  offset += 2;
-  valueBytes.copy(buf, offset);
-  return buf;
-}
-function buildMinimalGetAttributesRequest(printerUri) {
-  const parts = [];
-  const header = Buffer.alloc(8);
-  header.writeUInt8(IPP_V_MAJOR, 0);
-  header.writeUInt8(IPP_V_MINOR, 1);
-  header.writeUInt16BE(OP_GET_PRINTER_ATTRIBUTES, 2);
-  header.writeInt32BE(1, 4);
-  parts.push(header);
-  parts.push(Buffer.from([TAG_OPERATION_ATTRIBUTES]));
-  parts.push(encodeStrAttr(TAG_CHARSET, "attributes-charset", "utf-8"));
-  parts.push(encodeStrAttr(TAG_NATURAL_LANGUAGE, "attributes-natural-language", "en"));
-  parts.push(encodeStrAttr(TAG_URI, "printer-uri", printerUri));
-  parts.push(encodeStrAttr(TAG_NAME_WITHOUT_LANGUAGE, "requesting-user-name", "stamp-sales-app"));
-  parts.push(encodeStrAttr(TAG_KEYWORD, "requested-attributes", "printer-name"));
-  parts.push(Buffer.from([TAG_END_OF_ATTRIBUTES]));
-  return Buffer.concat(parts);
-}
-function extractPrinterName(data) {
-  if (data.length < 8) return null;
-  let offset = 8;
-  while (offset < data.length) {
-    const tag = data.readUInt8(offset);
-    offset += 1;
-    if (tag === TAG_END_OF_ATTRIBUTES) break;
-    if (tag <= 15) continue;
-    if (offset + 2 > data.length) break;
-    const nameLength = data.readUInt16BE(offset);
-    offset += 2;
-    if (offset + nameLength > data.length) break;
-    const name = data.subarray(offset, offset + nameLength).toString("utf-8");
-    offset += nameLength;
-    if (offset + 2 > data.length) break;
-    const valueLength = data.readUInt16BE(offset);
-    offset += 2;
-    if (offset + valueLength > data.length) break;
-    if (name === "printer-name" && valueLength > 0) {
-      return data.subarray(offset, offset + valueLength).toString("utf-8");
-    }
-    offset += valueLength;
-  }
-  return null;
-}
-function parseAvahiBrowse(output) {
-  const printers = [];
-  const lines = output.split("\n").filter((l) => l.startsWith("="));
-  for (const line of lines) {
-    const fields = line.split(";");
-    if (fields.length < 9) continue;
-    const name = fields[3]?.trim();
-    const hostname = fields[7]?.trim();
-    const portStr = fields[8]?.trim();
-    const txtRaw = fields[9]?.trim() ?? "";
-    if (!name || !hostname || !portStr) continue;
-    const port = parseInt(portStr, 10);
-    if (isNaN(port)) continue;
-    const txt = parseTxtRecord(txtRaw);
-    printers.push({ name, hostname, port, txt });
-  }
-  const seen = /* @__PURE__ */ new Set();
-  return printers.filter((p) => {
-    const key = `${p.hostname}:${p.port}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-function parseTxtRecord(raw) {
-  const result = {};
-  const cleaned = raw.replace(/^"/, "").replace(/"$/, "");
-  const parts = cleaned.split('" "');
-  for (const part of parts) {
-    const eqIndex = part.indexOf("=");
-    if (eqIndex > 0) {
-      const key = part.substring(0, eqIndex).trim();
-      const value = part.substring(eqIndex + 1).trim().replace(/"/g, "");
-      result[key] = value;
-    }
-  }
-  return result;
-}
-function avahiToDiscoveredPrinters(avahiPrinters) {
-  return avahiPrinters.map((p) => {
-    const rp = p.txt["rp"] ?? "ipp/print";
-    const path2 = rp.startsWith("/") ? rp : `/${rp}`;
-    const uri = `ipp://${p.hostname}:${p.port}${path2}`;
-    const model = p.txt["ty"] ?? p.txt["product"] ?? "";
-    const info = model ? `${p.name} (${model})` : p.name;
-    return {
-      name: p.name,
-      uri,
-      accepting: true,
-      // mDNS-advertised printers are generally accepting
-      info
-    };
-  });
-}
-async function discoverLinuxPrinters(executor = defaultDiscoveryExecutor) {
-  const results = [];
-  const seenUris = /* @__PURE__ */ new Set();
-  try {
-    const { stdout } = await executor.exec(
-      "avahi-browse -tpr _ipp._tcp 2>/dev/null"
-    );
-    const avahiPrinters = parseAvahiBrowse(stdout);
-    const discovered = avahiToDiscoveredPrinters(avahiPrinters);
-    for (const printer of discovered) {
-      if (!seenUris.has(printer.uri)) {
-        seenUris.add(printer.uri);
-        results.push(printer);
-      }
-    }
-  } catch {
-  }
-  try {
-    const { stdout } = await executor.exec(
-      "avahi-browse -tpr _ipps._tcp 2>/dev/null"
-    );
-    const avahiPrinters = parseAvahiBrowse(stdout);
-    const discovered = avahiToDiscoveredPrinters(avahiPrinters);
-    for (const printer of discovered) {
-      const ippsUri = printer.uri.replace("ipp://", "ipps://");
-      if (!seenUris.has(ippsUri)) {
-        seenUris.add(ippsUri);
-        results.push({ ...printer, uri: ippsUri });
-      }
-    }
-  } catch {
-  }
-  try {
-    const { stdout } = await executor.exec("lpstat -a 2>/dev/null");
-    const lines = stdout.split("\n").filter((l) => l.trim().length > 0);
-    for (const line of lines) {
-      const match = line.match(/^(\S+)\s+(accepting|not accepting)\s+requests/);
-      if (match) {
-        const name = match[1];
-        const accepting = match[2] === "accepting";
-        const uri = name;
-        if (!seenUris.has(uri)) {
-          seenUris.add(uri);
-          results.push({
-            name,
-            uri,
-            accepting,
-            info: line.trim()
-          });
-        }
-      }
-    }
-  } catch {
-  }
-  return results;
-}
 async function discoverWindowsLocalPrinters(executor = defaultDiscoveryExecutor) {
   const results = [];
   try {
@@ -1235,595 +1033,57 @@ async function discoverWindowsLocalPrinters(executor = defaultDiscoveryExecutor)
   }
   return results;
 }
-const DEFAULT_IPP_PORTS = [631];
-const DEFAULT_IPP_PATHS = ["/ipp/print", "/ipp/printer", "/"];
-const DEFAULT_PROBE_TIMEOUT = 2e3;
-const DEFAULT_CONCURRENCY = 20;
-async function getSubnetTargets(executor = defaultDiscoveryExecutor) {
-  const targets = [];
-  try {
-    const { stdout } = await executor.exec("arp -a");
-    const ipRegex = /(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/g;
-    let match;
-    while ((match = ipRegex.exec(stdout)) !== null) {
-      const ip = match[1];
-      if (!ip.endsWith(".255") && !ip.endsWith(".0") && ip !== "255.255.255.255") {
-        targets.push(ip);
-      }
-    }
-  } catch {
-  }
-  return [...new Set(targets)];
-}
-async function discoverWindowsPrinters(config = {}, executor = defaultDiscoveryExecutor, probe = defaultHttpProbe) {
-  const localPrinters = await discoverWindowsLocalPrinters(executor);
-  const networkPrinters = await discoverWindowsNetworkPrinters(config, executor, probe);
-  const seenNames = new Set(localPrinters.map((p) => p.name.toLowerCase()));
-  const merged = [...localPrinters];
-  for (const netPrinter of networkPrinters) {
-    if (!seenNames.has(netPrinter.name.toLowerCase())) {
-      seenNames.add(netPrinter.name.toLowerCase());
-      merged.push(netPrinter);
-    }
-  }
-  return merged;
-}
-async function discoverWindowsNetworkPrinters(config = {}, executor = defaultDiscoveryExecutor, probe = defaultHttpProbe) {
-  const ports = config.ports ?? DEFAULT_IPP_PORTS;
-  const paths = config.paths ?? DEFAULT_IPP_PATHS;
-  const timeoutMs = config.timeoutMs ?? DEFAULT_PROBE_TIMEOUT;
-  const concurrency = config.concurrency ?? DEFAULT_CONCURRENCY;
-  const targets = config.targets ?? await getSubnetTargets(executor);
-  if (targets.length === 0) {
-    return [];
-  }
-  const probes = [];
-  for (const host of targets) {
-    for (const port of ports) {
-      for (const path2 of paths) {
-        probes.push({ host, port, path: path2 });
-      }
-    }
-  }
-  const hostPortGroups = /* @__PURE__ */ new Map();
-  for (const p of probes) {
-    const key = `${p.host}:${p.port}`;
-    if (!hostPortGroups.has(key)) {
-      hostPortGroups.set(key, []);
-    }
-    hostPortGroups.get(key).push(p);
-  }
-  const groups = Array.from(hostPortGroups.values());
-  const results = [];
-  for (let i = 0; i < groups.length; i += concurrency) {
-    const batch = groups.slice(i, i + concurrency);
-    const batchResults = await Promise.all(
-      batch.map(async (pathsForHost) => {
-        for (const { host, port, path: path2 } of pathsForHost) {
-          try {
-            const name = await probe.probe(host, port, path2, timeoutMs);
-            if (name) {
-              return {
-                name,
-                uri: `ipp://${host}:${port}${path2}`,
-                accepting: true,
-                info: `IPP printer at ${host}:${port}`
-              };
-            }
-          } catch {
-          }
-        }
-        return null;
-      })
-    );
-    for (const result of batchResults) {
-      if (result) {
-        results.push(result);
-      }
-    }
-  }
-  return results;
-}
-const execAsync = util.promisify(child_process.exec);
-const execFileAsync = util.promisify(child_process.execFile);
-const defaultExecutor = {
-  exec: (command) => execAsync(command),
-  execFile: (file, args) => execFileAsync(file, args)
-};
-const defaultFileIO = {
-  writeFile: (path2, data) => promises.writeFile(path2, data),
-  unlink: (path2) => promises.unlink(path2),
-  createTempFilePath: () => {
-    const id = crypto.randomBytes(8).toString("hex");
-    return path.join(os.tmpdir(), `stamp-print-${id}.pdf`);
+const defaultWindowsExecutor = {
+  exec(command, options) {
+    const { exec: nodeExec } = require("child_process");
+    const { promisify } = require("util");
+    const execAsync2 = promisify(nodeExec);
+    return execAsync2(command, { timeout: options?.timeout ?? 1e4 });
+  },
+  execFile(file, args, options) {
+    const { execFile: nodeExecFile } = require("child_process");
+    const { promisify } = require("util");
+    const execFileAsync = promisify(nodeExecFile);
+    return execFileAsync(file, args, { timeout: options?.timeout ?? 3e4 });
   }
 };
-function extractQueueName(uri) {
-  if (!uri.includes("/") && !uri.includes(":")) {
-    return uri;
-  }
-  const printerMatch = uri.match(/\/printers\/([^/]+)\/?$/);
-  if (printerMatch) {
-    return printerMatch[1];
-  }
-  const pathMatch = uri.match(/\/([^/]+)\/?$/);
-  if (pathMatch) {
-    return pathMatch[1];
-  }
-  return uri;
+function getWindowsPrinterName(printerUri) {
+  const encoded = printerUri.replace("win://", "");
+  return decodeURIComponent(encoded);
 }
-function parseLpstatStatus(output) {
-  const lower = output.toLowerCase();
-  if (lower.includes("disabled") || lower.includes("not accepting")) {
-    return "paused";
-  }
-  if (lower.includes("printing")) {
-    return "busy";
-  }
-  if (lower.includes("idle") || lower.includes("enabled")) {
-    return "ready";
-  }
-  if (lower.includes("error") || lower.includes("fault")) {
-    return "error";
-  }
-  return "ready";
+function escapePsName(name) {
+  return name.replace(/'/g, "''");
 }
-function parseJobId(output) {
-  const match = output.match(/request id is (\S+)/);
-  return match ? match[1] : void 0;
+function getSumatraPdfPath() {
+  const { join } = require("path");
+  let sumatraPath = join(
+    require.resolve("pdf-to-printer"),
+    "..",
+    "SumatraPDF-3.4.6-32.exe"
+  );
+  if (sumatraPath.includes("app.asar")) {
+    sumatraPath = sumatraPath.replace("app.asar", "app.asar.unpacked");
+  }
+  return sumatraPath;
 }
-class CupsBackend {
+class WindowsBackend {
   cmd;
-  io;
-  constructor(executor, fileIO) {
-    this.cmd = executor ?? defaultExecutor;
-    this.io = fileIO ?? defaultFileIO;
+  constructor(executor) {
+    this.cmd = executor ?? defaultWindowsExecutor;
   }
   /**
-   * Sends a PDF buffer to the specified CUPS printer queue.
+   * Prints a PDF by invoking SumatraPDF directly with:
+   *   SumatraPDF.exe -print-to "PrinterName" -print-settings "noscale" -silent file.pdf
    *
-   * Workflow:
-   * 1. Write PDF buffer to a temp file
-   * 2. Execute `lp -d <queue> -o media=<media> -o orientation-requested=<n> -n <copies> -t <jobName> <file>`
-   * 3. Parse job ID from output
-   * 4. Clean up temp file
+   * "noscale" = print at 100% original size, no fitting, no shrinking.
+   * The printer driver's paper size configuration determines the output.
    */
   async print(printerUri, pdfBuffer, options) {
-    const queue = extractQueueName(printerUri);
-    const tempFile = this.io.createTempFilePath();
-    try {
-      await this.io.writeFile(tempFile, pdfBuffer);
-      const args = ["-d", queue];
-      if (options.media) {
-        args.push("-o", `media=${options.media}`);
-      }
-      if (options.orientation) {
-        args.push("-o", `orientation-requested=${options.orientation}`);
-      }
-      const copies = options.copies ?? 1;
-      if (copies > 1) {
-        args.push("-n", String(copies));
-      }
-      if (options.jobName) {
-        args.push("-t", options.jobName);
-      }
-      args.push(tempFile);
-      const { stdout } = await this.cmd.execFile("lp", args);
-      const jobId = parseJobId(stdout);
-      return {
-        success: true,
-        jobId
-      };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return {
-        success: false,
-        error: `CUPS print failed: ${message}`
-      };
-    } finally {
-      try {
-        await this.io.unlink(tempFile);
-      } catch {
-      }
-    }
-  }
-  /**
-   * Queries the status of a CUPS printer queue using `lpstat -p <queue>`.
-   */
-  async getStatus(printerUri) {
-    const queue = extractQueueName(printerUri);
-    try {
-      const { stdout } = await this.cmd.exec(`lpstat -p ${queue}`);
-      return parseLpstatStatus(stdout);
-    } catch {
-      return "disconnected";
-    }
-  }
-  /**
-   * Pauses a CUPS printer queue using `cupsdisable <queue>`.
-   * This prevents the printer from processing new jobs but preserves the queue.
-   */
-  async pause(printerUri) {
-    const queue = extractQueueName(printerUri);
-    try {
-      await this.cmd.execFile("cupsdisable", [queue]);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-  /**
-   * Resumes a previously paused CUPS printer queue using `cupsenable <queue>`.
-   * This allows the printer to resume processing queued jobs.
-   */
-  async resume(printerUri) {
-    const queue = extractQueueName(printerUri);
-    try {
-      await this.cmd.execFile("cupsenable", [queue]);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-  /**
-   * Discovers available printers using avahi-browse (mDNS/DNS-SD) for network
-   * printers and `lpstat -a` for locally configured CUPS printers.
-   *
-   * Uses the discoverLinuxPrinters function from printer-discovery.ts which:
-   * 1. Runs `avahi-browse -tpr _ipp._tcp` for IPP printers on the network
-   * 2. Runs `avahi-browse -tpr _ipps._tcp` for IPP-over-TLS printers
-   * 3. Falls back to `lpstat -a` for locally configured CUPS queues
-   *
-   * Results are deduplicated by URI.
-   */
-  async discover() {
-    const discoveryExecutor = {
-      exec: (command) => this.cmd.exec(command)
-    };
-    return discoverLinuxPrinters(discoveryExecutor);
-  }
-  /**
-   * Cancels a specific print job using the `cancel` command.
-   *
-   * @param _printerUri - Not used for CUPS cancel (job IDs are global)
-   * @param jobId - The CUPS job ID (e.g. "MyPrinter-123")
-   */
-  async cancelJob(_printerUri, jobId) {
-    try {
-      await this.cmd.execFile("cancel", [jobId]);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-}
-const IPP_VERSION_MAJOR = 1;
-const IPP_VERSION_MINOR = 1;
-const IPP_OPERATIONS = {
-  PRINT_JOB: 2,
-  GET_PRINTER_ATTRIBUTES: 11,
-  CANCEL_JOB: 8,
-  PAUSE_PRINTER: 16,
-  RESUME_PRINTER: 17
-};
-const IPP_TAGS = {
-  /** Delimiter tags */
-  OPERATION_ATTRIBUTES: 1,
-  JOB_ATTRIBUTES: 2,
-  END_OF_ATTRIBUTES: 3,
-  /** Value tags */
-  INTEGER: 33,
-  ENUM: 35,
-  NAME_WITHOUT_LANGUAGE: 66,
-  KEYWORD: 68,
-  URI: 69,
-  CHARSET: 71,
-  NATURAL_LANGUAGE: 72,
-  MIME_MEDIA_TYPE: 73
-};
-const IPP_STATUS = {
-  SERVER_ERROR_INTERNAL: 1280
-};
-const IPP_PRINTER_STATE = {
-  IDLE: 3,
-  PROCESSING: 4,
-  STOPPED: 5
-};
-const defaultHttpTransport = {
-  post(hostname, port, path2, body, timeoutMs) {
-    const http = require("http");
-    return new Promise((resolve, reject) => {
-      const options = {
-        hostname,
-        port,
-        path: path2,
-        method: "POST",
-        headers: {
-          "Content-Type": "application/ipp",
-          "Content-Length": body.length
-        },
-        timeout: timeoutMs
-      };
-      const req = http.request(options, (res) => {
-        const chunks = [];
-        res.on("data", (chunk) => chunks.push(chunk));
-        res.on("end", () => resolve(Buffer.concat(chunks)));
-      });
-      req.on("error", (err) => reject(err));
-      req.on("timeout", () => {
-        req.destroy();
-        reject(new Error("IPP request timed out"));
-      });
-      req.write(body);
-      req.end();
-    });
-  }
-};
-function parseIppUri(uri) {
-  if (!uri.includes("://") && !uri.includes("/")) {
-    return {
-      hostname: uri,
-      port: 631,
-      path: "/ipp/print",
-      printerUri: `ipp://${uri}:631/ipp/print`
-    };
-  }
-  let normalizedUri = uri;
-  if (uri.startsWith("ipp://")) {
-    normalizedUri = "http://" + uri.slice(6);
-  }
-  try {
-    const parsed = new URL(normalizedUri);
-    const hostname = parsed.hostname;
-    const port = parsed.port ? parseInt(parsed.port, 10) : 631;
-    const path2 = parsed.pathname || "/ipp/print";
-    const printerUri = `ipp://${hostname}:${port}${path2}`;
-    return { hostname, port, path: path2, printerUri };
-  } catch {
-    return {
-      hostname: uri,
-      port: 631,
-      path: "/ipp/print",
-      printerUri: `ipp://${uri}:631/ipp/print`
-    };
-  }
-}
-function encodeStringAttribute(tag, name, value) {
-  const nameBytes = Buffer.from(name, "utf-8");
-  const valueBytes = Buffer.from(value, "utf-8");
-  const buf = Buffer.alloc(1 + 2 + nameBytes.length + 2 + valueBytes.length);
-  let offset = 0;
-  buf.writeUInt8(tag, offset);
-  offset += 1;
-  buf.writeUInt16BE(nameBytes.length, offset);
-  offset += 2;
-  nameBytes.copy(buf, offset);
-  offset += nameBytes.length;
-  buf.writeUInt16BE(valueBytes.length, offset);
-  offset += 2;
-  valueBytes.copy(buf, offset);
-  return buf;
-}
-function encodeIntegerAttribute(tag, name, value) {
-  const nameBytes = Buffer.from(name, "utf-8");
-  const buf = Buffer.alloc(1 + 2 + nameBytes.length + 2 + 4);
-  let offset = 0;
-  buf.writeUInt8(tag, offset);
-  offset += 1;
-  buf.writeUInt16BE(nameBytes.length, offset);
-  offset += 2;
-  nameBytes.copy(buf, offset);
-  offset += nameBytes.length;
-  buf.writeUInt16BE(4, offset);
-  offset += 2;
-  buf.writeInt32BE(value, offset);
-  return buf;
-}
-function encodeIppHeader(operationId, requestId) {
-  const buf = Buffer.alloc(8);
-  buf.writeUInt8(IPP_VERSION_MAJOR, 0);
-  buf.writeUInt8(IPP_VERSION_MINOR, 1);
-  buf.writeUInt16BE(operationId, 2);
-  buf.writeInt32BE(requestId, 4);
-  return buf;
-}
-function encodeOperationAttributes(printerUri, jobName) {
-  const parts = [];
-  parts.push(Buffer.from([IPP_TAGS.OPERATION_ATTRIBUTES]));
-  parts.push(encodeStringAttribute(IPP_TAGS.CHARSET, "attributes-charset", "utf-8"));
-  parts.push(
-    encodeStringAttribute(IPP_TAGS.NATURAL_LANGUAGE, "attributes-natural-language", "en")
-  );
-  parts.push(encodeStringAttribute(IPP_TAGS.URI, "printer-uri", printerUri));
-  if (jobName) {
-    parts.push(encodeStringAttribute(IPP_TAGS.NAME_WITHOUT_LANGUAGE, "job-name", jobName));
-  }
-  parts.push(
-    encodeStringAttribute(IPP_TAGS.NAME_WITHOUT_LANGUAGE, "requesting-user-name", "stamp-sales-app")
-  );
-  parts.push(
-    encodeStringAttribute(IPP_TAGS.MIME_MEDIA_TYPE, "document-format", "application/pdf")
-  );
-  return Buffer.concat(parts);
-}
-function buildPrintJobRequest(printerUri, options, requestId) {
-  const parts = [];
-  parts.push(encodeIppHeader(IPP_OPERATIONS.PRINT_JOB, requestId));
-  parts.push(encodeOperationAttributes(printerUri, options.jobName));
-  parts.push(Buffer.from([IPP_TAGS.JOB_ATTRIBUTES]));
-  if (options.media) {
-    parts.push(encodeStringAttribute(IPP_TAGS.KEYWORD, "media", options.media));
-  }
-  if (options.orientation) {
-    parts.push(encodeIntegerAttribute(IPP_TAGS.ENUM, "orientation-requested", options.orientation));
-  }
-  const copies = options.copies ?? 1;
-  if (copies > 1) {
-    parts.push(encodeIntegerAttribute(IPP_TAGS.INTEGER, "copies", copies));
-  }
-  parts.push(Buffer.from([IPP_TAGS.END_OF_ATTRIBUTES]));
-  return Buffer.concat(parts);
-}
-function buildGetPrinterAttributesRequest(printerUri, requestId) {
-  const parts = [];
-  parts.push(encodeIppHeader(IPP_OPERATIONS.GET_PRINTER_ATTRIBUTES, requestId));
-  parts.push(Buffer.from([IPP_TAGS.OPERATION_ATTRIBUTES]));
-  parts.push(encodeStringAttribute(IPP_TAGS.CHARSET, "attributes-charset", "utf-8"));
-  parts.push(
-    encodeStringAttribute(IPP_TAGS.NATURAL_LANGUAGE, "attributes-natural-language", "en")
-  );
-  parts.push(encodeStringAttribute(IPP_TAGS.URI, "printer-uri", printerUri));
-  parts.push(
-    encodeStringAttribute(IPP_TAGS.KEYWORD, "requested-attributes", "printer-state")
-  );
-  parts.push(Buffer.from([IPP_TAGS.END_OF_ATTRIBUTES]));
-  return Buffer.concat(parts);
-}
-function buildPausePrinterRequest(printerUri, requestId) {
-  const parts = [];
-  parts.push(encodeIppHeader(IPP_OPERATIONS.PAUSE_PRINTER, requestId));
-  parts.push(Buffer.from([IPP_TAGS.OPERATION_ATTRIBUTES]));
-  parts.push(encodeStringAttribute(IPP_TAGS.CHARSET, "attributes-charset", "utf-8"));
-  parts.push(
-    encodeStringAttribute(IPP_TAGS.NATURAL_LANGUAGE, "attributes-natural-language", "en")
-  );
-  parts.push(encodeStringAttribute(IPP_TAGS.URI, "printer-uri", printerUri));
-  parts.push(
-    encodeStringAttribute(IPP_TAGS.NAME_WITHOUT_LANGUAGE, "requesting-user-name", "stamp-sales-app")
-  );
-  parts.push(Buffer.from([IPP_TAGS.END_OF_ATTRIBUTES]));
-  return Buffer.concat(parts);
-}
-function buildResumePrinterRequest(printerUri, requestId) {
-  const parts = [];
-  parts.push(encodeIppHeader(IPP_OPERATIONS.RESUME_PRINTER, requestId));
-  parts.push(Buffer.from([IPP_TAGS.OPERATION_ATTRIBUTES]));
-  parts.push(encodeStringAttribute(IPP_TAGS.CHARSET, "attributes-charset", "utf-8"));
-  parts.push(
-    encodeStringAttribute(IPP_TAGS.NATURAL_LANGUAGE, "attributes-natural-language", "en")
-  );
-  parts.push(encodeStringAttribute(IPP_TAGS.URI, "printer-uri", printerUri));
-  parts.push(
-    encodeStringAttribute(IPP_TAGS.NAME_WITHOUT_LANGUAGE, "requesting-user-name", "stamp-sales-app")
-  );
-  parts.push(Buffer.from([IPP_TAGS.END_OF_ATTRIBUTES]));
-  return Buffer.concat(parts);
-}
-function buildCancelJobRequest(printerUri, jobId, requestId) {
-  const parts = [];
-  parts.push(encodeIppHeader(IPP_OPERATIONS.CANCEL_JOB, requestId));
-  parts.push(Buffer.from([IPP_TAGS.OPERATION_ATTRIBUTES]));
-  parts.push(encodeStringAttribute(IPP_TAGS.CHARSET, "attributes-charset", "utf-8"));
-  parts.push(
-    encodeStringAttribute(IPP_TAGS.NATURAL_LANGUAGE, "attributes-natural-language", "en")
-  );
-  parts.push(encodeStringAttribute(IPP_TAGS.URI, "printer-uri", printerUri));
-  parts.push(encodeIntegerAttribute(IPP_TAGS.INTEGER, "job-id", jobId));
-  parts.push(
-    encodeStringAttribute(IPP_TAGS.NAME_WITHOUT_LANGUAGE, "requesting-user-name", "stamp-sales-app")
-  );
-  parts.push(Buffer.from([IPP_TAGS.END_OF_ATTRIBUTES]));
-  return Buffer.concat(parts);
-}
-function parseIppResponse(data) {
-  if (data.length < 8) {
-    return {
-      versionMajor: 0,
-      versionMinor: 0,
-      statusCode: IPP_STATUS.SERVER_ERROR_INTERNAL,
-      requestId: 0
-    };
-  }
-  const response = {
-    versionMajor: data.readUInt8(0),
-    versionMinor: data.readUInt8(1),
-    statusCode: data.readUInt16BE(2),
-    requestId: data.readInt32BE(4)
-  };
-  let offset = 8;
-  while (offset < data.length) {
-    const tag = data.readUInt8(offset);
-    offset += 1;
-    if (tag === IPP_TAGS.END_OF_ATTRIBUTES) {
-      break;
-    }
-    if (tag <= 15) {
-      continue;
-    }
-    if (offset + 2 > data.length) break;
-    const nameLength = data.readUInt16BE(offset);
-    offset += 2;
-    if (offset + nameLength > data.length) break;
-    const name = data.subarray(offset, offset + nameLength).toString("utf-8");
-    offset += nameLength;
-    if (offset + 2 > data.length) break;
-    const valueLength = data.readUInt16BE(offset);
-    offset += 2;
-    if (offset + valueLength > data.length) break;
-    if (name === "printer-state" && valueLength === 4) {
-      response.printerState = data.readInt32BE(offset);
-    } else if (name === "job-id" && valueLength === 4) {
-      response.jobId = data.readInt32BE(offset);
-    }
-    offset += valueLength;
-  }
-  return response;
-}
-function mapPrinterState(state) {
-  switch (state) {
-    case IPP_PRINTER_STATE.IDLE:
-      return "ready";
-    case IPP_PRINTER_STATE.PROCESSING:
-      return "busy";
-    case IPP_PRINTER_STATE.STOPPED:
-      return "paused";
-    default:
-      return "disconnected";
-  }
-}
-class IppBackend {
-  transport;
-  requestId;
-  timeoutMs;
-  constructor(transport, timeoutMs) {
-    this.transport = transport ?? defaultHttpTransport;
-    this.requestId = 1;
-    this.timeoutMs = timeoutMs ?? 1e4;
-  }
-  /** Gets the next request ID (incrementing counter) */
-  nextRequestId() {
-    return this.requestId++;
-  }
-  /**
-   * Checks if a printer URI refers to a local Windows printer (win:// scheme).
-   */
-  isLocalWindowsPrinter(printerUri) {
-    return printerUri.startsWith("win://");
-  }
-  /**
-   * Extracts the printer name from a win:// URI.
-   * win://Canon%20PIXMA%20MG3600 → "Canon PIXMA MG3600"
-   */
-  getWindowsPrinterName(printerUri) {
-    const encoded = printerUri.replace("win://", "");
-    return decodeURIComponent(encoded);
-  }
-  /**
-   * Prints a PDF to a local Windows printer using pdf-to-printer (SumatraPDF engine).
-   *
-   * This library bundles SumatraPDF which handles PDF rendering and silent printing
-   * directly to the Windows spooler without opening any visible window or requiring
-   * any external PDF viewer (Adobe, Edge, etc.).
-   *
-   * Supports label printers, network printers, and USB printers alike.
-   */
-  async printViaWindowsSpooler(printerName, pdfBuffer, options) {
     const { writeFileSync, unlinkSync, mkdirSync } = require("fs");
     const { join } = require("path");
     const { tmpdir } = require("os");
-    const { print: printPdf } = require("pdf-to-printer");
+    const printerName = getWindowsPrinterName(printerUri);
     const jobName = options.jobName ?? `print_${Date.now()}`;
-    const copies = options.copies ?? 1;
     const tempDir = join(tmpdir(), "stamp-sales-print");
     try {
       mkdirSync(tempDir, { recursive: true });
@@ -1832,11 +1092,16 @@ class IppBackend {
     const tempFile = join(tempDir, `${jobName}_${Date.now()}.pdf`);
     try {
       writeFileSync(tempFile, pdfBuffer);
-      await printPdf(tempFile, {
-        printer: printerName,
-        copies,
-        silent: true
-      });
+      const sumatraPath = getSumatraPdfPath();
+      const args = [
+        "-print-to",
+        printerName,
+        "-print-settings",
+        "noscale",
+        "-silent",
+        tempFile
+      ];
+      await this.cmd.execFile(sumatraPath, args, { timeout: 3e4 });
       setTimeout(() => {
         try {
           unlinkSync(tempFile);
@@ -1850,109 +1115,18 @@ class IppBackend {
       } catch {
       }
       const message = err instanceof Error ? err.message : String(err);
-      return { success: false, error: `Windows print failed: ${message}` };
+      return { success: false, error: `Print failed: ${message}` };
     }
   }
-  /**
-   * Sends a PDF buffer to the specified printer.
-   * Routes to either IPP (network printers) or Windows spooler (local/USB printers)
-   * based on the URI scheme.
-   *
-   * Workflow for IPP (ipp:// URIs):
-   * 1. Parse the printer URI to get hostname/port/path
-   * 2. Build IPP Print-Job request with options (media, orientation, copies)
-   * 3. Concatenate IPP request header + PDF document data
-   * 4. Send via HTTP POST to the printer
-   * 5. Parse response for job ID and status
-   *
-   * Workflow for local printers (win:// URIs):
-   * 1. Extract printer name from URI
-   * 2. Write PDF to temp file
-   * 3. Print via PowerShell using Windows spooler
-   */
-  async print(printerUri, pdfBuffer, options) {
-    if (this.isLocalWindowsPrinter(printerUri)) {
-      const printerName = this.getWindowsPrinterName(printerUri);
-      return this.printViaWindowsSpooler(printerName, pdfBuffer, options);
-    }
-    const uri = parseIppUri(printerUri);
-    const reqId = this.nextRequestId();
-    try {
-      const ippRequest = buildPrintJobRequest(uri.printerUri, options, reqId);
-      const body = Buffer.concat([ippRequest, pdfBuffer]);
-      const responseData = await this.transport.post(
-        uri.hostname,
-        uri.port,
-        uri.path,
-        body,
-        this.timeoutMs
-      );
-      const response = parseIppResponse(responseData);
-      if (response.statusCode <= 255) {
-        return {
-          success: true,
-          jobId: response.jobId ? String(response.jobId) : void 0
-        };
-      } else {
-        return {
-          success: false,
-          error: `IPP error: status code 0x${response.statusCode.toString(16).padStart(4, "0")}`
-        };
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return {
-        success: false,
-        error: `IPP print failed: ${message}`
-      };
-    }
-  }
-  /**
-   * Queries the current status of a printer.
-   * For IPP printers: uses Get-Printer-Attributes.
-   * For local Windows printers (win://): uses PowerShell Get-Printer.
-   */
   async getStatus(printerUri) {
-    if (this.isLocalWindowsPrinter(printerUri)) {
-      return this.getWindowsPrinterStatus(printerUri);
-    }
-    const uri = parseIppUri(printerUri);
-    const reqId = this.nextRequestId();
+    const printerName = getWindowsPrinterName(printerUri);
     try {
-      const request = buildGetPrinterAttributesRequest(uri.printerUri, reqId);
-      const responseData = await this.transport.post(
-        uri.hostname,
-        uri.port,
-        uri.path,
-        request,
-        this.timeoutMs
-      );
-      const response = parseIppResponse(responseData);
-      if (response.statusCode > 255) {
-        return "error";
-      }
-      return mapPrinterState(response.printerState);
-    } catch {
-      return "disconnected";
-    }
-  }
-  /**
-   * Queries a local Windows printer's status via PowerShell.
-   */
-  async getWindowsPrinterStatus(printerUri) {
-    const printerName = this.getWindowsPrinterName(printerUri);
-    try {
-      const { exec: nodeExec } = require("child_process");
-      const { promisify: nodePromisify } = require("util");
-      const execAsync2 = nodePromisify(nodeExec);
-      const escapedName = printerName.replace(/'/g, "''");
-      const { stdout } = await execAsync2(
-        `powershell -NoProfile -Command "Get-Printer -Name '${escapedName}' | Select-Object PrinterStatus | ConvertTo-Json -Compress"`,
+      const escaped = escapePsName(printerName);
+      const { stdout } = await this.cmd.exec(
+        `powershell -NoProfile -Command "Get-Printer -Name '${escaped}' | Select-Object PrinterStatus | ConvertTo-Json -Compress"`,
         { timeout: 5e3 }
       );
-      if (!stdout || stdout.trim().length === 0) {
-        return "disconnected";
-      }
+      if (!stdout || stdout.trim().length === 0) return "disconnected";
       const result = JSON.parse(stdout.trim());
       switch (result.PrinterStatus) {
         case 0:
@@ -1968,178 +1142,37 @@ class IppBackend {
       return "disconnected";
     }
   }
-  /**
-   * Pauses a printer.
-   * For IPP printers: uses Pause-Printer operation.
-   * For local Windows printers (win://): uses PowerShell Set-Printer.
-   */
   async pause(printerUri) {
-    if (this.isLocalWindowsPrinter(printerUri)) {
-      return this.pauseWindowsPrinter(printerUri);
-    }
-    const uri = parseIppUri(printerUri);
-    const reqId = this.nextRequestId();
+    const escaped = escapePsName(getWindowsPrinterName(printerUri));
     try {
-      const request = buildPausePrinterRequest(uri.printerUri, reqId);
-      const responseData = await this.transport.post(
-        uri.hostname,
-        uri.port,
-        uri.path,
-        request,
-        this.timeoutMs
-      );
-      const response = parseIppResponse(responseData);
-      return response.statusCode <= 255;
-    } catch {
-      return false;
-    }
-  }
-  /**
-   * Pauses a local Windows printer via PowerShell.
-   */
-  async pauseWindowsPrinter(printerUri) {
-    const printerName = this.getWindowsPrinterName(printerUri);
-    try {
-      const { exec: nodeExec } = require("child_process");
-      const { promisify: nodePromisify } = require("util");
-      const execAsync2 = nodePromisify(nodeExec);
-      const escapedName = printerName.replace(/'/g, "''");
-      await execAsync2(
-        `powershell -NoProfile -Command "Stop-Printer -Name '${escapedName}'"`,
-        { timeout: 5e3 }
-      );
+      await this.cmd.exec(`powershell -NoProfile -Command "Stop-Printer -Name '${escaped}'"`, { timeout: 5e3 });
       return true;
     } catch {
       return false;
     }
   }
-  /**
-   * Resumes a printer.
-   * For IPP printers: uses Resume-Printer operation.
-   * For local Windows printers (win://): uses PowerShell Restart-Printer.
-   */
   async resume(printerUri) {
-    if (this.isLocalWindowsPrinter(printerUri)) {
-      return this.resumeWindowsPrinter(printerUri);
-    }
-    const uri = parseIppUri(printerUri);
-    const reqId = this.nextRequestId();
+    const escaped = escapePsName(getWindowsPrinterName(printerUri));
     try {
-      const request = buildResumePrinterRequest(uri.printerUri, reqId);
-      const responseData = await this.transport.post(
-        uri.hostname,
-        uri.port,
-        uri.path,
-        request,
-        this.timeoutMs
-      );
-      const response = parseIppResponse(responseData);
-      return response.statusCode <= 255;
-    } catch {
-      return false;
-    }
-  }
-  /**
-   * Resumes a local Windows printer via PowerShell.
-   */
-  async resumeWindowsPrinter(printerUri) {
-    const printerName = this.getWindowsPrinterName(printerUri);
-    try {
-      const { exec: nodeExec } = require("child_process");
-      const { promisify: nodePromisify } = require("util");
-      const execAsync2 = nodePromisify(nodeExec);
-      const escapedName = printerName.replace(/'/g, "''");
-      await execAsync2(
-        `powershell -NoProfile -Command "Restart-Printer -Name '${escapedName}'"`,
-        { timeout: 5e3 }
-      );
+      await this.cmd.exec(`powershell -NoProfile -Command "Restart-Printer -Name '${escaped}'"`, { timeout: 5e3 });
       return true;
     } catch {
       return false;
     }
   }
-  /**
-   * Discovers printers available on the system using two strategies:
-   * 1. Local printers via PowerShell Get-Printer (USB, local network, spooler-registered)
-   * 2. Network printers via IPP subnet scan (probes hosts from ARP table)
-   *
-   * Uses the discoverWindowsPrinters function from printer-discovery.ts which
-   * merges both sources and deduplicates.
-   */
   async discover() {
-    const probe = {
-      probe: async (hostname, port, path2, timeoutMs) => {
-        try {
-          const printerUri = `ipp://${hostname}:${port}${path2}`;
-          const request = buildGetPrinterAttributesRequest(printerUri, this.nextRequestId());
-          const responseData = await this.transport.post(hostname, port, path2, request, timeoutMs);
-          const response = parseIppResponse(responseData);
-          if (response.statusCode <= 255) {
-            return `IPP@${hostname}`;
-          }
-          return null;
-        } catch {
-          return null;
-        }
-      }
-    };
     const executor = {
-      exec: (command) => {
-        const { exec: nodeExec } = require("child_process");
-        const { promisify: nodePromisify } = require("util");
-        const execPromise = nodePromisify(nodeExec);
-        return execPromise(command, { timeout: 15e3 });
-      }
+      exec: (command) => this.cmd.exec(command, { timeout: 15e3 })
     };
-    return discoverWindowsPrinters({}, executor, probe);
+    return discoverWindowsLocalPrinters(executor);
   }
-  /**
-   * Cancels a specific print job.
-   * For IPP printers: uses Cancel-Job operation.
-   * For local Windows printers (win://): uses PowerShell Remove-PrintJob.
-   *
-   * @param printerUri - The printer URI where the job is queued
-   * @param jobId - The job ID as a string (will be parsed to integer)
-   */
   async cancelJob(printerUri, jobId) {
-    if (this.isLocalWindowsPrinter(printerUri)) {
-      return this.cancelWindowsJob(printerUri, jobId);
-    }
-    const uri = parseIppUri(printerUri);
-    const reqId = this.nextRequestId();
-    const numericJobId = parseInt(jobId, 10);
-    if (isNaN(numericJobId)) {
-      return false;
-    }
-    try {
-      const request = buildCancelJobRequest(uri.printerUri, numericJobId, reqId);
-      const responseData = await this.transport.post(
-        uri.hostname,
-        uri.port,
-        uri.path,
-        request,
-        this.timeoutMs
-      );
-      const response = parseIppResponse(responseData);
-      return response.statusCode <= 255;
-    } catch {
-      return false;
-    }
-  }
-  /**
-   * Cancels a print job on a local Windows printer via PowerShell.
-   */
-  async cancelWindowsJob(printerUri, jobId) {
-    const printerName = this.getWindowsPrinterName(printerUri);
+    const escaped = escapePsName(getWindowsPrinterName(printerUri));
     const numericJobId = parseInt(jobId, 10);
     if (isNaN(numericJobId)) return false;
     try {
-      const { exec: nodeExec } = require("child_process");
-      const { promisify: nodePromisify } = require("util");
-      const execAsync2 = nodePromisify(nodeExec);
-      const escapedName = printerName.replace(/'/g, "''");
-      await execAsync2(
-        `powershell -NoProfile -Command "Remove-PrintJob -PrinterName '${escapedName}' -ID ${numericJobId}"`,
+      await this.cmd.exec(
+        `powershell -NoProfile -Command "Remove-PrintJob -PrinterName '${escaped}' -ID ${numericJobId}"`,
         { timeout: 5e3 }
       );
       return true;
@@ -2148,9 +1181,16 @@ class IppBackend {
     }
   }
 }
-const STAMP_MEDIA = "DC55x25";
+const DEFAULT_THERMAL_CONFIG = {
+  enabled: true,
+  rotateDegrees: 0,
+  paperWidthMm: 55,
+  paperHeightMm: 25,
+  forceSingleCopy: true
+};
+const STAMP_MEDIA = "DC55x55";
 const STAMP_ORIENTATION = 6;
-const TICKET_ORIENTATION = 3;
+const TICKET_ORIENTATION = 0;
 function buildTicketMedia(heightMm) {
   return `Custom.78x${Math.ceil(heightMm)}mm`;
 }
@@ -2210,7 +1250,9 @@ class PrinterManager {
         error: `Printer "${target}" is paused`
       };
     }
-    return this.backend.print(uri, pdfBuffer, options);
+    const thermalConfig = this.assignments.thermalConfig?.[target];
+    const optionsWithThermal = thermalConfig?.enabled ? { ...options, thermalConfig } : options;
+    return this.backend.print(uri, pdfBuffer, optionsWithThermal);
   }
   /**
    * Sends a stamp PDF to the appropriate printer.
@@ -2346,19 +1388,8 @@ class PrinterManager {
     return this.backend.cancelJob(uri, jobId);
   }
 }
-function detectPlatformBackend(platformOverride) {
-  const os$1 = os.platform();
-  if (os$1 === "linux" || os$1 === "darwin") {
-    return "cups";
-  }
-  return "ipp";
-}
 function createPlatformBackend(platformOverride) {
-  const backendType = detectPlatformBackend();
-  if (backendType === "cups") {
-    return new CupsBackend();
-  }
-  return new IppBackend();
+  return new WindowsBackend();
 }
 function createPrinterManager(backendOrAssignments, assignments) {
   let backend;
@@ -2692,7 +1723,7 @@ class PrintQueueService {
       };
     }
     return {
-      media: STAMP_MEDIA,
+      media: buildTicketMedia,
       orientation: STAMP_ORIENTATION,
       jobName: `${job.pdfType}_${job.id}`
     };
@@ -2844,9 +1875,14 @@ function getPrinterManager() {
     } catch (err) {
       console.warn("[Services] Failed to load printer assignments:", err);
     }
-    printerManager = createPrinterManager(
-      Object.keys(savedAssignments).length > 0 ? savedAssignments : void 0
-    );
+    const assignments = Object.keys(savedAssignments).length > 0 ? {
+      ...savedAssignments,
+      thermalConfig: {
+        printer1: DEFAULT_THERMAL_CONFIG,
+        printer2: DEFAULT_THERMAL_CONFIG
+      }
+    } : void 0;
+    printerManager = createPrinterManager(assignments);
   }
   return printerManager;
 }
@@ -3184,7 +2220,7 @@ function cancelSale(input, db2) {
 }
 const MM_TO_PT$1 = 72 / 25.4;
 const STAMP_WIDTH_MM = 55;
-const STAMP_HEIGHT_MM = 25;
+const STAMP_HEIGHT_MM = 55;
 const STAMP_WIDTH = STAMP_WIDTH_MM * MM_TO_PT$1;
 const STAMP_HEIGHT = STAMP_HEIGHT_MM * MM_TO_PT$1;
 const FONTS = {
@@ -3251,6 +2287,23 @@ function drawBackground(doc, imageSource) {
   } catch {
   }
 }
+function drawOverlay(doc, imageSource) {
+  if (!imageSource) return;
+  const overlayX = 27.5 * MM_TO_PT$1;
+  const overlayWidth = 27.5 * MM_TO_PT$1;
+  try {
+    if (imageSource.startsWith("data:")) {
+      const base64Data = imageSource.split(",")[1];
+      if (base64Data) {
+        const buffer = Buffer.from(base64Data, "base64");
+        doc.image(buffer, overlayX, 0, { width: overlayWidth, height: STAMP_HEIGHT });
+      }
+    } else if (fs.existsSync(imageSource)) {
+      doc.image(imageSource, overlayX, 0, { width: overlayWidth, height: STAMP_HEIGHT });
+    }
+  } catch {
+  }
+}
 function collectPdf$1(doc) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -3262,17 +2315,21 @@ function collectPdf$1(doc) {
 async function renderStamp(params) {
   const doc = new PDFDocument({
     size: [STAMP_WIDTH, STAMP_HEIGHT],
+    // ancho x alto en puntos (55mm  160 x 25mm 71 )
     margin: 0,
+    //layout: 'portrait',
     info: { Title: "Etiqueta", Author: "Stamp Sales App" }
   });
   const result = collectPdf$1(doc);
   registerFonts$1(doc);
   drawBackground(doc, params.backgroundImage);
-  drawBackground(doc, params.overlayImage);
-  drawTextLeft(doc, params.tarifa, FONTS.regular, 12, 2, 19.5);
-  drawTextRight(doc, params.evento, FONTS.regular, 9, 53, 19);
-  drawTextRight(doc, params.fecha, FONTS.regular, 9, 53, 15);
-  drawTextLeft(doc, params.codigo, FONTS.regular, 6, 2, 15);
+  drawOverlay(doc, params.overlayImage);
+  drawTextLeft(doc, params.tarifa, FONTS.regular, 12, 2, 49);
+  drawTextRight(doc, params.tarifa, FONTS.regular, 12, 53, 49);
+  drawTextLeft(doc, params.codigo, FONTS.regular, 8.2, 2, 40);
+  drawTextLeft(doc, params.codigo, FONTS.regular, 8, 2, 37);
+  drawTextRight(doc, params.codigo, FONTS.regular, 8, 53, 40);
+  drawTextLeft(doc, params.codigo, FONTS.regular, 6, 2, 32);
   doc.end();
   return result;
 }
@@ -3292,11 +2349,11 @@ async function renderStampMultiPage(stamps) {
       doc.addPage({ size: [STAMP_WIDTH, STAMP_HEIGHT], margin: 0 });
     }
     drawBackground(doc, stamp.backgroundImage);
-    drawBackground(doc, stamp.overlayImage);
-    drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12, 2, 19.5);
-    drawTextRight(doc, stamp.evento, FONTS.regular, 9, 53, 19);
-    drawTextRight(doc, stamp.fecha, FONTS.regular, 9, 53, 15);
-    drawTextLeft(doc, stamp.codigo, FONTS.regular, 6, 2, 15);
+    drawOverlay(doc, stamp.overlayImage);
+    drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12, 2, 49);
+    drawTextRight(doc, stamp.evento, FONTS.regular, 9, 53, 49);
+    drawTextRight(doc, stamp.fecha, FONTS.regular, 9, 53, 40);
+    drawTextLeft(doc, stamp.codigo, FONTS.regular, 6, 2, 32);
   });
   doc.end();
   return result;
@@ -3305,10 +2362,14 @@ async function renderStampEspecialStrip(codigos, especial, tarifa) {
   const doc = new PDFDocument({
     size: [STAMP_WIDTH, STAMP_HEIGHT],
     margin: 0,
+    layout: "portrait",
     info: { Title: "Tira Especial", Author: "Stamp Sales App" }
   });
   const result = collectPdf$1(doc);
-  registerFonts$1(doc);
+  const pageWidth = doc.page.width;
+  const pageHeight = doc.page.height;
+  doc.save();
+  doc.rotate(90, { origin: [pageWidth / 2, pageHeight / 2] });
   const imagesPath = getImagesPath();
   const bg1 = path.join(imagesPath, "TiraEspecial1.png");
   drawBackground(doc, fs.existsSync(bg1) ? bg1 : null);
@@ -3396,9 +2457,16 @@ function drawImage(doc, imageName, x, y, width) {
     return false;
   }
 }
-function drawImageCentered(doc, imageName, y, imgWidth, pageWidth) {
-  const x = (pageWidth - imgWidth) / 2;
-  return drawImage(doc, imageName, x, y, imgWidth);
+function drawImageConstrained(doc, imageName, y, maxWidth, maxHeight, pageWidth) {
+  const imgPath = path.join(getImagesPath(), imageName);
+  if (!fs.existsSync(imgPath)) return false;
+  try {
+    const x = (pageWidth - maxWidth) / 2;
+    doc.image(imgPath, x, y, { fit: [maxWidth, maxHeight], align: "center", valign: "center" });
+    return true;
+  } catch {
+    return false;
+  }
 }
 function collectPdf(doc) {
   return new Promise((resolve, reject) => {
@@ -3412,7 +2480,7 @@ function calcTicketHeightMm(numItems) {
   return TICKET_MARGIN_TOP + TICKET_LOGO_HEIGHT + TICKET_HEADER_HEIGHT + TICKET_COLUMNS_HEIGHT + numItems * TICKET_ITEM_ROW_HEIGHT + TICKET_TOTAL_HEIGHT + TICKET_FOOTER_HEIGHT + TICKET_MARGIN_BOTTOM;
 }
 const TICKET_MARGIN_TOP = 5;
-const TICKET_LOGO_HEIGHT = 14;
+const TICKET_LOGO_HEIGHT = 24;
 const TICKET_HEADER_HEIGHT = 32;
 const TICKET_COLUMNS_HEIGHT = 5;
 const TICKET_ITEM_ROW_HEIGHT = 3.5;
@@ -3464,7 +2532,9 @@ async function genTicket(params) {
   registerFonts(doc);
   const pageWidth = TICKET_WIDTH;
   let y = TICKET_MARGIN_TOP;
-  drawImageCentered(doc, "image2.jpg", y * MM_TO_PT, 30 * MM_TO_PT, pageWidth);
+  const logoWidth = 30 * MM_TO_PT;
+  const logoHeight = 23 * MM_TO_PT;
+  drawImageConstrained(doc, "image2.jpg", y * MM_TO_PT, logoWidth, logoHeight, pageWidth);
   y += TICKET_LOGO_HEIGHT;
   drawImage(doc, "fondoticketori.png", 5 * MM_TO_PT, y * MM_TO_PT, 20 * MM_TO_PT);
   drawCentered(doc, feria, FONTS.bold, 12, y * MM_TO_PT, pageWidth);
@@ -3557,7 +2627,9 @@ async function genTicketCaja(params) {
   registerFonts(doc);
   const pageWidth = TICKET_WIDTH;
   let y = 2;
-  drawImageCentered(doc, "image2.jpg", y * MM_TO_PT, 30 * MM_TO_PT, pageWidth);
+  const logoWidth = 30 * MM_TO_PT;
+  const logoHeight = 11 * MM_TO_PT;
+  drawImageConstrained(doc, "image2.jpg", y * MM_TO_PT, logoWidth, logoHeight, pageWidth);
   y += 12;
   drawImage(doc, "fondoticketcop-nada.png", 5 * MM_TO_PT, (y + 2) * MM_TO_PT, 20 * MM_TO_PT);
   drawCentered(doc, feria, FONTS.bold, 12, y * MM_TO_PT, pageWidth);
@@ -3660,7 +2732,7 @@ async function genTicketMaster(params) {
   registerFonts(doc);
   const pageWidth = TICKET_WIDTH;
   let y = 2;
-  drawImageCentered(doc, "image2.jpg", y * MM_TO_PT, 30 * MM_TO_PT, pageWidth);
+  drawImageConstrained(doc, "image2.jpg", y * MM_TO_PT, 30 * MM_TO_PT, 11 * MM_TO_PT, pageWidth);
   y += 12;
   drawImage(doc, "fondoticketcop.png", 5 * MM_TO_PT, y * MM_TO_PT, 70 * MM_TO_PT);
   drawCentered(doc, feria, FONTS.bold, 12, y * MM_TO_PT, pageWidth);
@@ -3904,7 +2976,7 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
       for (let i = 0; i < qty; i++) {
         const stamps = [];
         if (tariff.qtyKey.startsWith("tarifa4T")) {
-          const tariffLabels = ["Tarifa A", "Tarifa A2", "Tarifa B", "Tarifa C"];
+          const tariffLabels = ["Tarifa AJ", "Tarifa A2J", "Tarifa BJ", "Tarifa CJ"];
           for (const tLabel of tariffLabels) {
             stamps.push({
               tarifa: tLabel,
@@ -3941,8 +3013,6 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
       for (let i = 0; i < qty; i++) {
         const pdfBuffer = await renderStamp({
           tarifa: tariff.label,
-          fecha: stampFecha,
-          evento: stampEvento,
           codigo: buildLabelCode(config, productoCounter),
           backgroundImage: background,
           overlayImage: overlay

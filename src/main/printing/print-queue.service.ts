@@ -222,7 +222,7 @@ export class PrintQueueService {
 
     // Stamp printers (printer1, printer2)
     return {
-      media: STAMP_MEDIA,
+      media: buildTicketMedia,
       orientation: STAMP_ORIENTATION,
       jobName: `${job.pdfType}_${job.id}`
     }

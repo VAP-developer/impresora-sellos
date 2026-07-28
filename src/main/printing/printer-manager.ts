@@ -192,15 +192,15 @@ export interface PrinterAssignments {
 // ─── Stamp/Ticket media constants ─────────────────────────────────────────────
 
 /** Media size for stamp labels: 55mm x 25mm */
-export const STAMP_MEDIA = 'DC55x25'
+export const STAMP_MEDIA = 'DC55x55'
 
 /** Orientation for stamps: portrait (value 3 per IPP spec).
  * The PDF is already generated in landscape (55×25mm), so no driver rotation is needed.
  * Using landscape (6) caused the Brother TD-4100N to rotate content 90° extra. */
-export const STAMP_ORIENTATION = 3
+export const STAMP_ORIENTATION = 6
 
 /** Orientation for tickets: portrait (value 3 per IPP spec) */
-export const TICKET_ORIENTATION = 3
+export const TICKET_ORIENTATION = 0
 
 /**
  * Builds the custom media string for a ticket of variable height.

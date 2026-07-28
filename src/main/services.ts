@@ -48,7 +48,7 @@ export function getPrinterManager(): PrinterManager {
             ...savedAssignments,
             thermalConfig: {
               printer1: DEFAULT_THERMAL_CONFIG,
-              printer2: DEFAULT_THERMAL_CONFIG
+              printer2: DEFAULT_THERMAL_CONFIG,
             }
           }
         : undefined

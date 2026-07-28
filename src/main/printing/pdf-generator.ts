@@ -472,7 +472,7 @@ export async function generateSalePdfs(
 
         if (tariff.qtyKey.startsWith('tarifa4T')) {
           // "Tira 4 Tarifas" — 4 different tariffs: A, A2, B, C
-          const tariffLabels = ['Tarifa A', 'Tarifa A2', 'Tarifa B', 'Tarifa C']
+          const tariffLabels = ['Tarifa AJ', 'Tarifa A2J', 'Tarifa BJ', 'Tarifa CJ']
           for (const tLabel of tariffLabels) {
             stamps.push({
               tarifa: tLabel,

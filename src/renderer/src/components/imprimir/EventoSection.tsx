@@ -285,7 +285,7 @@ export default function EventoSection({
               {/* Model 2 (right / printer 2) */}
               <div className="flex flex-col items-center">
                 <p className="text-black text-xl font-bold text-center">
-                  {selectedEvento.motivod || 'Modelo 2'}
+                  {selectedEvento.motivod || 'Modelo 2JJ'}
                 </p>
                 <div className="relative w-[350px] h-[160px] border border-gray-200 rounded overflow-hidden bg-gray-50">
                   {modelo2Url ? (

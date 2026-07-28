@@ -294,7 +294,7 @@ describe('genTicket', () => {
 
   it('handles special characters in text fields', async () => {
     const params = makeTicketParams(singleItem)
-    params.feria = 'XLIX Fería Ñacional — Sello «2025»'
+    params.feria = 'XLIXJJ- Fería Ñacional — Sello «2025»'
     params.empresa = 'Correos & Telégrafos™'
     const buffer = await genTicket(params)
     expect(buffer).toBeInstanceOf(Buffer)

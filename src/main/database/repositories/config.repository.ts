@@ -95,14 +95,14 @@ export interface AppConfig {
   imagenes?: ImagenesConfig
 }
 
-// Default configuration (replicates legacy Meteor initConfig)
+// Default configuration (replicates legacy Meteor initConfig) 
 const DEFAULT_CONFIG: AppConfig = {
   ticket: {
-    feria: 'XLIX Feria Nacional Sello',
-    lugar: 'Plaza Mayor - Madrid',
+    feria: 'XLIX Feria Nacional SelloJC',
+    lugar: 'Plaza Mayor - MadridJC',
     fecha: 'auto',
     hora: 'auto',
-    titulo: 'Factura Simplificada',
+    titulo: 'Factura SimplificadaJC',
     tituloCopia: 'COPIA Factura Simplificada',
     rollo1: 1500,
     rollo2: 1500,
@@ -151,7 +151,7 @@ const DEFAULT_CONFIG: AppConfig = {
     nperfil5: 'Abono/Envio',
     nperfil6: 'FERIA',
     eventos: [
-      { nevento: 'Feria Madrid', nferia: 'XLIX Feria Nacional Sello', nlugar: 'Plaza Mayor Madrid', motivoi: '', motivod: '', fecha: '21-24 abril 2025', localidad: 'Madrid' },
+      { nevento: 'Feria MadridJJ', nferia: 'XLIX Feria Nacional SelloJJ', nlugar: 'Plaza Mayor MadridJJ', motivoi: '', motivod: '', fecha: '21-24 abril 2025', localidad: 'Madrid' },
       { nevento: '', nferia: '', nlugar: '', motivoi: '', motivod: '', fecha: '', localidad: '' },
       { nevento: '', nferia: '', nlugar: '', motivoi: '', motivod: '', fecha: '', localidad: '' },
       { nevento: '', nferia: '', nlugar: '', motivoi: '', motivod: '', fecha: '', localidad: '' },
