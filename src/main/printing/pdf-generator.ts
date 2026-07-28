@@ -141,6 +141,33 @@ export interface SaleQuantities {
   tarifa4T2: number
 }
 
+/** Dynamic quantities keyed by `tariff_${id}_s${model}` */
+export type DynamicSaleQuantities = Record<string, number>
+
+/** Dynamic tariff definition for PDF generation */
+export interface DynamicTariffDef {
+  /** Tariff ID (from tariff_groups table) */
+  id: number
+  /** Display name for the stamp label */
+  name: string
+  /** Price (for ticket generation) */
+  price: number
+  /** Position ordering */
+  position: number
+}
+
+/** Context for dynamic tariff group PDF generation */
+export interface DynamicTariffContext {
+  /** Tariff group ID */
+  groupId: number
+  /** Group title */
+  title: string
+  /** Currency code */
+  currency: string
+  /** Active tariffs in this group */
+  tariffs: DynamicTariffDef[]
+}
+
 /** Target printer for a generated PDF */
 export type PrinterTarget = 'printer1' | 'printer2' | 'ticket'
 
@@ -386,18 +413,20 @@ const TARIFF_DEFS: TariffDef[] = [
  * the target printer for routing.
  *
  * @param config - Current app configuration (includes codigo, ticket, sello, precios)
- * @param quantities - Quantities per tariff/model selected in the kiosko
+ * @param quantities - Quantities per tariff/model selected in the kiosko (legacy or dynamic)
  * @param profile - Active profile name (e.g. "FERIA", "Filatelia", "Protocolo", "SPDE")
  * @param imagesRepo - Optional ImagesRepository instance (for testability)
  * @param imageLayerOptions - Optional image layer options for fondo/sello composition
+ * @param dynamicTariffCtx - Optional dynamic tariff context (when using tariff groups)
  * @returns SaleGenerationResult with all PDFs, counts, and image notifications
  */
 export async function generateSalePdfs(
   config: AppConfig,
-  quantities: SaleQuantities,
+  quantities: SaleQuantities | DynamicSaleQuantities,
   profile: string,
   imagesRepo?: ImagesRepository,
-  imageLayerOptions?: ImageLayerOptions
+  imageLayerOptions?: ImageLayerOptions,
+  dynamicTariffCtx?: DynamicTariffContext
 ): Promise<SaleGenerationResult> {
   const repo = imagesRepo ?? new ImagesRepository()
   const pdfs: GeneratedPdf[] = []
@@ -449,99 +478,197 @@ export async function generateSalePdfs(
 
   // ─── Generate stamp PDFs ───────────────────────────────────────────────────
 
-  for (const tariff of TARIFF_DEFS) {
-    const qty = quantities[tariff.qtyKey]
-    if (qty <= 0) continue
+  if (dynamicTariffCtx) {
+    // ─── Dynamic tariff stamp generation ─────────────────────────────────────
+    // Generate stamps based on the active tariff group's tariffs
+    const dynQty = quantities as DynamicSaleQuantities
 
-    const background = usesBlankBackground
-      ? null
-      : tariff.model === 1
-        ? bg1
-        : bg2
-
-    const overlay = usesBlankBackground
-      ? null
-      : tariff.model === 1
-        ? overlay1
-        : overlay2
-
-    if (tariff.isTira) {
-      // Tiras: each unit generates a 4-page PDF (4 stamps in one print job)
-      for (let i = 0; i < qty; i++) {
+    for (const tariff of dynamicTariffCtx.tariffs) {
+      // Model 1 (printer1)
+      const key1 = `tariff_${tariff.id}_s1`
+      const qty1 = dynQty[key1] ?? 0
+      if (qty1 > 0) {
+        const background = usesBlankBackground ? null : bg1
+        const overlay = usesBlankBackground ? null : overlay1
         const stamps: StampRenderParams[] = []
+        for (let i = 0; i < qty1; i++) {
+          stamps.push({
+            tarifa: tariff.name,
+            fecha: stampFecha,
+            evento: stampEvento,
+            codigo: buildLabelCode(config, productoCounter),
+            backgroundImage: background,
+            overlayImage: overlay
+          })
+          productoCounter++
+        }
+        const pdfBuffer = await renderStampMultiPage(stamps)
+        pdfs.push({
+          buffer: pdfBuffer,
+          target: 'printer1',
+          pdfType: 'stamp_simple',
+          description: `${tariff.name} modelo1 x${qty1}`
+        })
+      }
 
-        if (tariff.qtyKey.startsWith('tarifa4T')) {
-          // "Tira 4 Tarifas" — 4 different tariffs: A, A2, B, C
-          const tariffLabels = ['Tarifa AJ', 'Tarifa A2J', 'Tarifa BJ', 'Tarifa CJ']
-          for (const tLabel of tariffLabels) {
-            stamps.push({
-              tarifa: tLabel,
-              fecha: stampFecha,
-              evento: stampEvento,
-              codigo: buildLabelCode(config, productoCounter),
-              backgroundImage: background,
-              overlayImage: overlay
-            })
-            productoCounter++
+      // Model 2 (printer2)
+      const key2 = `tariff_${tariff.id}_s2`
+      const qty2 = dynQty[key2] ?? 0
+      if (qty2 > 0) {
+        const background = usesBlankBackground ? null : bg2
+        const overlay = usesBlankBackground ? null : overlay2
+        const stamps: StampRenderParams[] = []
+        for (let i = 0; i < qty2; i++) {
+          stamps.push({
+            tarifa: tariff.name,
+            fecha: stampFecha,
+            evento: stampEvento,
+            codigo: buildLabelCode(config, productoCounter),
+            backgroundImage: background,
+            overlayImage: overlay
+          })
+          productoCounter++
+        }
+        const pdfBuffer = await renderStampMultiPage(stamps)
+        pdfs.push({
+          buffer: pdfBuffer,
+          target: 'printer2',
+          pdfType: 'stamp_simple',
+          description: `${tariff.name} modelo2 x${qty2}`
+        })
+      }
+    }
+  } else {
+    // ─── Legacy static tariff stamp generation ───────────────────────────────
+    const legacyQty = quantities as SaleQuantities
+
+    for (const tariff of TARIFF_DEFS) {
+      const qty = legacyQty[tariff.qtyKey]
+      if (qty <= 0) continue
+
+      const background = usesBlankBackground
+        ? null
+        : tariff.model === 1
+          ? bg1
+          : bg2
+
+      const overlay = usesBlankBackground
+        ? null
+        : tariff.model === 1
+          ? overlay1
+          : overlay2
+
+      if (tariff.isTira) {
+        // Tiras: each unit generates a 4-page PDF (4 stamps in one print job)
+        for (let i = 0; i < qty; i++) {
+          const stamps: StampRenderParams[] = []
+
+          if (tariff.qtyKey.startsWith('tarifa4T')) {
+            // "Tira 4 Tarifas" — 4 different tariffs: A, A2, B, C
+            const tariffLabels = ['Tarifa AJ', 'Tarifa A2J', 'Tarifa BJ', 'Tarifa CJ']
+            for (const tLabel of tariffLabels) {
+              stamps.push({
+                tarifa: tLabel,
+                fecha: stampFecha,
+                evento: stampEvento,
+                codigo: buildLabelCode(config, productoCounter),
+                backgroundImage: background,
+                overlayImage: overlay
+              })
+              productoCounter++
+            }
+          } else {
+            // "Tira Tarifa A" — 4 stamps all same tariff
+            for (let j = 0; j < 4; j++) {
+              stamps.push({
+                tarifa: tariff.label,
+                fecha: stampFecha,
+                evento: stampEvento,
+                codigo: buildLabelCode(config, productoCounter),
+                backgroundImage: background,
+                overlayImage: overlay
+              })
+              productoCounter++
+            }
           }
-        } else {
-          // "Tira Tarifa A" — 4 stamps all same tariff
-          for (let j = 0; j < 4; j++) {
-            stamps.push({
-              tarifa: tariff.label,
-              fecha: stampFecha,
-              evento: stampEvento,
-              codigo: buildLabelCode(config, productoCounter),
-              backgroundImage: background,
-              overlayImage: overlay
-            })
-            productoCounter++
-          }
+
+          const pdfBuffer = await renderStampMultiPage(stamps)
+          pdfs.push({
+            buffer: pdfBuffer,
+            target: tariff.target,
+            pdfType: 'stamp_tira',
+            description: `Tira ${tariff.label} modelo${tariff.model} #${i + 1}`
+          })
+        }
+      } else {
+        // Simple stamps: group all stamps of same tariff/model into one multi-page PDF
+        // so the printer prints them as a continuous strip without cutting between them.
+        const stamps: StampRenderParams[] = []
+        for (let i = 0; i < qty; i++) {
+          stamps.push({
+            tarifa: tariff.label,
+            fecha: stampFecha,
+            evento: stampEvento,
+            codigo: buildLabelCode(config, productoCounter),
+            backgroundImage: background,
+            overlayImage: overlay
+          })
+          productoCounter++
         }
 
         const pdfBuffer = await renderStampMultiPage(stamps)
         pdfs.push({
           buffer: pdfBuffer,
           target: tariff.target,
-          pdfType: 'stamp_tira',
-          description: `Tira ${tariff.label} modelo${tariff.model} #${i + 1}`
+          pdfType: 'stamp_simple',
+          description: `${tariff.label} modelo${tariff.model} x${qty}`
         })
       }
-    } else {
-      // Simple stamps: group all stamps of same tariff/model into one multi-page PDF
-      // so the printer prints them as a continuous strip without cutting between them.
-      const stamps: StampRenderParams[] = []
-      for (let i = 0; i < qty; i++) {
-        stamps.push({
-          tarifa: tariff.label,
-          fecha: stampFecha,
-          evento: stampEvento,
-          codigo: buildLabelCode(config, productoCounter),
-          backgroundImage: background,
-          overlayImage: overlay
-        })
-        productoCounter++
-      }
-
-      const pdfBuffer = await renderStampMultiPage(stamps)
-      pdfs.push({
-        buffer: pdfBuffer,
-        target: tariff.target,
-        pdfType: 'stamp_simple',
-        description: `${tariff.label} modelo${tariff.model} x${qty}`
-      })
     }
   }
 
   // ─── Generate special strips (tiras especiales) ────────────────────────────
 
-  const counterRef = { value: productoCounter }
-  await generateEspecialStrips(config, quantities, counterRef, pdfs)
-  productoCounter = counterRef.value
+  // Special strips only apply to legacy tariffs (they use tiras which dynamic tariffs don't have)
+  if (!dynamicTariffCtx) {
+    const counterRef = { value: productoCounter }
+    await generateEspecialStrips(config, quantities as SaleQuantities, counterRef, pdfs)
+    productoCounter = counterRef.value
+  }
 
   // ─── Generate ticket PDFs ──────────────────────────────────────────────────
 
-  const { items, productos } = buildTicketData(quantities, config.precios)
+  let items: TicketItem[]
+  let productos: TicketProduct[]
+
+  if (dynamicTariffCtx) {
+    // Dynamic ticket data from tariff group
+    const dynQty = quantities as DynamicSaleQuantities
+    items = []
+    productos = []
+
+    for (const tariff of dynamicTariffCtx.tariffs) {
+      // Model 1
+      const key1 = `tariff_${tariff.id}_s1`
+      const qty1 = dynQty[key1] ?? 0
+      const prodId1 = `D${tariff.id}S1`
+      items.push({ idProducto: prodId1, cantidad: qty1 })
+      productos.push({ idProducto: prodId1, modo: 'S', precio: tariff.price, nombre_ticket: tariff.name })
+
+      // Model 2
+      const key2 = `tariff_${tariff.id}_s2`
+      const qty2 = dynQty[key2] ?? 0
+      const prodId2 = `D${tariff.id}S2`
+      items.push({ idProducto: prodId2, cantidad: qty2 })
+      productos.push({ idProducto: prodId2, modo: 'S', precio: tariff.price, nombre_ticket: tariff.name })
+    }
+  } else {
+    // Legacy ticket data
+    const result = buildTicketData(quantities as SaleQuantities, config.precios)
+    items = result.items
+    productos = result.productos
+  }
+
   const hasAnyItems = items.some((item) => item.cantidad > 0)
 
   if (hasAnyItems) {

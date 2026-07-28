@@ -35,6 +35,25 @@ export interface KioskoQuantities {
   tarifa4T2: number
 }
 
+/** Dynamic quantities keyed by `tariff_${id}_s${model}` */
+export type DynamicQuantities = Record<string, number>
+
+/** Tariff definition from a tariff group */
+export interface DynamicTariff {
+  id: number
+  name: string
+  price: number
+  position: number
+}
+
+/** Active tariff group context for dynamic sales */
+export interface ActiveTariffGroupContext {
+  id: number
+  title: string
+  currency: string
+  tariffs: DynamicTariff[]
+}
+
 /** Result of a successful sale execution */
 export interface SaleResult {
   success: true
@@ -131,6 +150,49 @@ export function calcTicketsUsed(q: KioskoQuantities): number {
   return totalTiras + 2
 }
 
+// ─── Dynamic Roll Consumption Calculations ───────────────────────────────────
+
+/**
+ * Build the dynamic quantity key for a given tariff ID and model.
+ */
+function buildDynamicKey(tariffId: number, model: 1 | 2): string {
+  return `tariff_${tariffId}_s${model}`
+}
+
+/**
+ * Calculate stamps consumed from roll 1 using dynamic quantities.
+ * All dynamic tariffs are simple stamps (1 stamp = 1 unit from roll).
+ */
+export function calcDynamicSellos1(quantities: DynamicQuantities, tariffs: DynamicTariff[]): number {
+  let total = 0
+  for (const tariff of tariffs) {
+    const key = buildDynamicKey(tariff.id, 1)
+    total += quantities[key] ?? 0
+  }
+  return total
+}
+
+/**
+ * Calculate stamps consumed from roll 2 using dynamic quantities.
+ */
+export function calcDynamicSellos2(quantities: DynamicQuantities, tariffs: DynamicTariff[]): number {
+  let total = 0
+  for (const tariff of tariffs) {
+    const key = buildDynamicKey(tariff.id, 2)
+    total += quantities[key] ?? 0
+  }
+  return total
+}
+
+/**
+ * Calculate tickets consumed for dynamic tariffs.
+ * Dynamic tariffs are always simple stamps (no tiras), so only the 2 base tickets.
+ */
+export function calcDynamicTicketsUsed(_quantities: DynamicQuantities, _tariffs: DynamicTariff[]): number {
+  // Dynamic tariffs don't support tiras, so it's always just the base 2 tickets
+  return 2
+}
+
 // ─── Order Generation ─────────────────────────────────────────────────────────
 
 /**
@@ -145,7 +207,7 @@ export function generateOrderLines(
 ): OrderLine[] {
   const orders: OrderLine[] = []
   const now = new Date().toISOString()
-  const { precios, ticket, codigo, sello } = config
+  const { precios, codigo, sello } = config
 
   const evento = sello.eventos[sello.elevento] ?? sello.eventos[0]
   const eventName = evento?.nevento ?? sello.elnevento ?? ''
@@ -220,6 +282,83 @@ export function generateOrderLines(
   return orders
 }
 
+/**
+ * Generates OrderLine records from dynamic tariff quantities.
+ * Creates one OrderLine per tariff/model combination with quantity > 0.
+ */
+export function generateDynamicOrderLines(
+  config: AppConfig,
+  quantities: DynamicQuantities,
+  tariffGroup: ActiveTariffGroupContext,
+  profile: string,
+  sesionId: number
+): OrderLine[] {
+  const orders: OrderLine[] = []
+  const now = new Date().toISOString()
+  const { codigo, sello } = config
+
+  const evento = sello.eventos[sello.elevento] ?? sello.eventos[0]
+  const eventName = evento?.nevento ?? sello.elnevento ?? ''
+  const feria = evento?.nferia ?? sello.feria ?? ''
+  const lugar = evento?.nlugar ?? sello.lugar ?? ''
+  const fecha = evento?.fecha ?? ''
+
+  const sellos1 = calcDynamicSellos1(quantities, tariffGroup.tariffs)
+  const sellos2 = calcDynamicSellos2(quantities, tariffGroup.tariffs)
+
+  const base = {
+    event: eventName,
+    venue: lugar,
+    machine: codigo.maquina,
+    transactionDate: now,
+    currency: tariffGroup.currency,
+    paymentStatus: profile,
+    sesionId,
+    etiquetasRollo1: sellos1,
+    etiquetasRollo2: sellos2,
+    etiquetaMes: String(codigo.mes),
+    tituloEvento: eventName,
+    feria,
+    lugar,
+    fecha,
+    mes: codigo.mes,
+    annio: codigo.annio,
+    documento: ''
+  }
+
+  for (const tariff of tariffGroup.tariffs) {
+    // Model 1
+    const qty1 = quantities[buildDynamicKey(tariff.id, 1)] ?? 0
+    if (qty1 > 0) {
+      orders.push({
+        ...base,
+        vendType: tariff.name,
+        productName: 'Sello Modelo 1',
+        quantity: qty1,
+        quantitySet: 1,
+        totalStamps: qty1,
+        value: qty1 * tariff.price
+      })
+    }
+
+    // Model 2
+    const qty2 = quantities[buildDynamicKey(tariff.id, 2)] ?? 0
+    if (qty2 > 0) {
+      orders.push({
+        ...base,
+        vendType: tariff.name,
+        productName: 'Sello Modelo 2',
+        quantity: qty2,
+        quantitySet: 1,
+        totalStamps: qty2,
+        value: qty2 * tariff.price
+      })
+    }
+  }
+
+  return orders
+}
+
 // ─── Atomic Sale Execution ────────────────────────────────────────────────────
 
 /**
@@ -235,21 +374,38 @@ export function generateOrderLines(
  * by better-sqlite3's transaction() wrapper.
  *
  * @param config - Current application config
- * @param quantities - Kiosko quantities to sell
+ * @param quantities - Kiosko quantities to sell (legacy or dynamic)
  * @param profile - Active profile name (e.g., "FERIA", "Filatelia")
  * @param db - Optional database instance (for testing)
+ * @param tariffGroupCtx - Optional active tariff group context for dynamic tariffs
  */
 export function executeSale(
   config: AppConfig,
-  quantities: KioskoQuantities,
+  quantities: KioskoQuantities | DynamicQuantities,
   profile: string,
-  db?: Database.Database
+  db?: Database.Database,
+  tariffGroupCtx?: ActiveTariffGroupContext
 ): SaleOutcome {
   const database = db ?? getDatabase()
 
-  const sellos1 = calcSellos1(quantities)
-  const sellos2 = calcSellos2(quantities)
-  const ticketsUsed = calcTicketsUsed(quantities)
+  // Determine if this is a dynamic tariff sale
+  const isDynamic = !!tariffGroupCtx
+
+  let sellos1: number
+  let sellos2: number
+  let ticketsUsed: number
+
+  if (isDynamic) {
+    const dynQty = quantities as DynamicQuantities
+    sellos1 = calcDynamicSellos1(dynQty, tariffGroupCtx!.tariffs)
+    sellos2 = calcDynamicSellos2(dynQty, tariffGroupCtx!.tariffs)
+    ticketsUsed = calcDynamicTicketsUsed(dynQty, tariffGroupCtx!.tariffs)
+  } else {
+    const legacyQty = quantities as KioskoQuantities
+    sellos1 = calcSellos1(legacyQty)
+    sellos2 = calcSellos2(legacyQty)
+    ticketsUsed = calcTicketsUsed(legacyQty)
+  }
 
   // Pre-transaction validation
   if (sellos1 === 0 && sellos2 === 0) {
@@ -300,7 +456,12 @@ export function executeSale(
       .run(JSON.stringify(currentConfig))
 
     // Step 5: Generate order lines
-    const orders = generateOrderLines(config, quantities, profile, newSesionId)
+    let orders: OrderLine[]
+    if (isDynamic) {
+      orders = generateDynamicOrderLines(config, quantities as DynamicQuantities, tariffGroupCtx!, profile, newSesionId)
+    } else {
+      orders = generateOrderLines(config, quantities as KioskoQuantities, profile, newSesionId)
+    }
 
     // Step 6: Insert order lines
     const insertStmt = database.prepare(`

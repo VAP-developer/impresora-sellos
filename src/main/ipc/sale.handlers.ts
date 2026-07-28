@@ -15,14 +15,17 @@
 import { handleIpc, notifyConfigChanged } from './handlers'
 import { ConfigRepository } from '../database/repositories/config.repository'
 import { ImagesRepository } from '../database/repositories/images.repository'
+import { TariffGroupsRepository } from '../database/repositories/tariff-groups.repository'
 import { executeSale, cancelSale } from '../sales/sale.service'
 import { generateSalePdfs } from '../printing/pdf-generator'
 import { buildImageName } from '../images/sync-images'
 import { getPrintQueueService } from '../services'
-import type { GeneratedPdf, SaleGenerationResult, ImageLayerOptions } from '../printing/pdf-generator'
+import type { GeneratedPdf, SaleGenerationResult, ImageLayerOptions, DynamicTariffContext } from '../printing/pdf-generator'
 import type { AppConfig } from '../database/repositories/config.repository'
 import type {
   KioskoQuantities,
+  DynamicQuantities,
+  ActiveTariffGroupContext,
   SaleOutcome,
   CancelSaleInput,
   CancelSaleOutcome
@@ -72,12 +75,57 @@ export function registerSaleHandlers(): void {
     'sale:execute',
     async (config: unknown, quantities: unknown, profile: unknown, imageFlags: unknown): Promise<SaleOutcome> => {
       const typedConfig = config as AppConfig
-      const typedQuantities = quantities as KioskoQuantities
+      const typedQuantities = quantities as KioskoQuantities | DynamicQuantities
       const typedProfile = profile as string
       const typedImageFlags = imageFlags as { printFondo: boolean; printSello: boolean } | undefined
 
+      // Detect if this is a dynamic tariff sale by checking for dynamic keys (tariff_*_s*)
+      const quantityKeys = Object.keys(typedQuantities)
+      const isDynamic = quantityKeys.some((key) => /^tariff_\d+_s[12]$/.test(key))
+
+      // Load tariff group context if dynamic
+      let tariffGroupCtx: ActiveTariffGroupContext | undefined
+      let dynamicTariffCtx: DynamicTariffContext | undefined
+
+      if (isDynamic) {
+        // Determine tariff group from the active event
+        const eventoIndex = typedConfig.sello.elevento
+        const evento = typedConfig.sello.eventos?.[eventoIndex]
+        const tariffGroupId = evento?.tariff_group_id
+
+        if (tariffGroupId) {
+          const tariffGroupsRepo = new TariffGroupsRepository()
+          const group = tariffGroupsRepo.getById(tariffGroupId)
+
+          if (group) {
+            tariffGroupCtx = {
+              id: group.id,
+              title: group.title,
+              currency: group.currency,
+              tariffs: group.tariffs.map((t) => ({
+                id: t.id!,
+                name: t.name,
+                price: t.price,
+                position: t.position
+              }))
+            }
+            dynamicTariffCtx = {
+              groupId: group.id,
+              title: group.title,
+              currency: group.currency,
+              tariffs: group.tariffs.map((t) => ({
+                id: t.id!,
+                name: t.name,
+                price: t.price,
+                position: t.position
+              }))
+            }
+          }
+        }
+      }
+
       // Step 1: Execute atomic sale transaction (synchronous SQLite)
-      const result = executeSale(typedConfig, typedQuantities, typedProfile)
+      const result = executeSale(typedConfig, typedQuantities, typedProfile, undefined, tariffGroupCtx)
 
       // If transaction failed, return error immediately (no PDFs generated per Req 11.3)
       if (!result.success) {
@@ -131,7 +179,8 @@ export function registerSaleHandlers(): void {
           typedQuantities,
           typedProfile,
           undefined,
-          imageLayerOptions
+          imageLayerOptions,
+          dynamicTariffCtx
         )
 
         // Store PDFs in cache for backward compatibility

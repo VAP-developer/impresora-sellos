@@ -52,6 +52,7 @@ export interface EventoData {
   fecha: string // Fecha para la etiqueta
   localidad: string // Localidad para la etiqueta
   codigo?: string // Código del evento
+  tariff_group_id?: number | null // ID del grupo de tarifas asociado
 }
 
 export interface SelloConfig {
