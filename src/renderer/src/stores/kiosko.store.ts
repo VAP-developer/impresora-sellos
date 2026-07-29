@@ -73,6 +73,9 @@ export interface KioskoState {
   /** The active tariff group determining which tariffs are available */
   activeTariffGroup: TariffGroup | null
 
+  /** Whether the user toggled to secondary/complementary pricing */
+  useSecondaryPrice: boolean
+
   /** Consumption data from the last completed sale (for error reversal) */
   lastSale: LastSaleConsumption
 
@@ -143,6 +146,11 @@ export interface KioskoState {
   setActiveTariffGroup: (group: TariffGroup | null) => void
 
   /**
+   * Toggle between local and secondary pricing.
+   */
+  setUseSecondaryPrice: (value: boolean) => void
+
+  /**
    * Validate whether the current basket can be sold.
    * Returns null if valid, or an error message string if invalid.
    */
@@ -189,6 +197,7 @@ function toLegacyQuantities(quantities: DynamicQuantities): KioskoQuantities {
 export const useKioskoStore = create<KioskoState>((set, get) => ({
   quantities: { ...LEGACY_EMPTY_QUANTITIES },
   activeTariffGroup: null,
+  useSecondaryPrice: false,
   lastSale: { sellos1: 0, sellos2: 0, tickets: 0 },
 
   // --- Derived getters ---
@@ -365,6 +374,10 @@ export const useKioskoStore = create<KioskoState>((set, get) => ({
         quantities: { ...LEGACY_EMPTY_QUANTITIES }
       })
     }
+  },
+
+  setUseSecondaryPrice: (value) => {
+    set({ useSecondaryPrice: value })
   },
 
   validateSale: (config) => {

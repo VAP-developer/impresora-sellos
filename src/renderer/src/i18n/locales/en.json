@@ -1,14 +1,14 @@
 {
   "nav": {
     "home": "Home",
-    "print": "Print",
+    "print": "Events",
     "machine": "Machine",
     "kiosko": "Kiosk",
     "settings": "Settings"
   },
   "views": {
     "home": "Home",
-    "print": "Configuration",
+    "print": "Events",
     "machine": "Machine",
     "kiosko": "Kiosk"
   },
@@ -36,7 +36,15 @@
     "deleteGroup": "Delete group",
     "confirmDelete": "Delete this tariff group?",
     "noGroups": "No tariff groups configured",
-    "position": "Position"
+    "position": "Position",
+    "localCurrency": "Local Currency",
+    "complementaryCurrency": "Complementary Currency",
+    "description": "Description",
+    "localPrice": "Local Price",
+    "secondaryPrice": "Secondary Price",
+    "strips": "Strips",
+    "selectTariffs": "Select tariffs",
+    "stripTariffWarning": "Strip must have at least 2 tariffs selected"
   },
   "validation": {
     "nameRequired": "Name is required",
@@ -50,7 +58,12 @@
     "stripCountMax": "Strip cannot include more tariffs than available",
     "yearDuplicate": "A group already exists for that year",
     "yearRequired": "Year is required",
-    "titleRequired": "Title is required"
+    "titleRequired": "Title is required",
+    "localPricePositive": "Local price must be a positive number",
+    "secondaryPricePositive": "Secondary price must be a positive number",
+    "stripMinTariffs": "A strip must reference at least 2 tariffs",
+    "localCurrencyRequired": "Local currency is required",
+    "complementaryCurrencyRequired": "Complementary currency is required"
   },
   "errors": {
     "loadFailed": "Failed to load settings",

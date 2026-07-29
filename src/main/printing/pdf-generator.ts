@@ -49,6 +49,8 @@ export interface ImageLayerOptions {
   fondoImage: string | null
   /** Stamp image as Data URI or null */
   selloImage: string | null
+  /** When true, use secondary_price for ticket amounts instead of local_price */
+  useSecondaryPrice?: boolean
 }
 
 /**
@@ -152,8 +154,12 @@ export interface DynamicTariffDef {
   id: number
   /** Display name for the stamp label */
   name: string
-  /** Price (for ticket generation) */
+  /** Description text for the stamp label */
+  description: string
+  /** Price (local, for ticket generation) */
   price: number
+  /** Secondary/complementary price */
+  secondaryPrice?: number
   /** Position ordering */
   position: number
 }
@@ -506,6 +512,7 @@ export async function generateSalePdfs(
         for (let i = 0; i < qty1; i++) {
           stamps.push({
             tarifa: tariff.name,
+            tarifaDescripcion: tariff.description,
             fecha: stampFecha,
             evento: stampEvento,
             codigo: buildLabelCode(config, productoCounter),
@@ -537,6 +544,7 @@ export async function generateSalePdfs(
         for (let i = 0; i < qty2; i++) {
           stamps.push({
             tarifa: tariff.name,
+            tarifaDescripcion: tariff.description,
             fecha: stampFecha,
             evento: stampEvento,
             codigo: buildLabelCode(config, productoCounter),
@@ -701,6 +709,26 @@ export async function generateSalePdfs(
     const modelo1Ticket = model1Name || 'Modelo 1'
     const modelo2Ticket = model2Name || 'Modelo 2'
 
+    // Determine ticket header: use event name/lugar when dynamic tariff is active
+    const ticketFeria = dynamicTariffCtx
+      ? (dynamicTariffCtx.title || config.ticket.feria)
+      : config.ticket.feria
+    const ticketLugar = dynamicTariffCtx
+      ? (config.sello.eventos?.[0]?.localidad || config.ticket.lugar)
+      : config.ticket.lugar
+
+    // Apply secondary pricing if flag is set (swap prices in productos)
+    if (imageLayerOptions?.useSecondaryPrice && dynamicTariffCtx) {
+      for (const producto of productos) {
+        // Find the matching tariff to get its secondary_price
+        const tariffId = parseInt(producto.idProducto.replace(/^D/, '').replace(/S[12]$/, ''), 10)
+        const matchingTariff = dynamicTariffCtx.tariffs.find((t) => t.id === tariffId)
+        if (matchingTariff && matchingTariff.secondaryPrice != null) {
+          producto.precio = matchingTariff.secondaryPrice
+        }
+      }
+    }
+
     // Calculate actual ticket heights based on number of active items
     const nitems = countActiveItems(items)
     const ticketHeightMm = calcTicketHeightMm(nitems)
@@ -717,8 +745,8 @@ export async function generateSalePdfs(
       idCliente: config.codigo.cliente,
       nombreMaquina: config.codigo.maquina,
       productos,
-      feria: config.ticket.feria,
-      lugar: config.ticket.lugar,
+      feria: ticketFeria,
+      lugar: ticketLugar,
       empresa: config.ticket.empresa,
       cif: config.ticket.cif,
       cp: config.ticket.cp,
@@ -741,7 +769,7 @@ export async function generateSalePdfs(
         idCliente: config.codigo.cliente,
         nombreMaquina: config.codigo.maquina,
         productos,
-        feria: config.ticket.feria,
+        feria: ticketFeria,
         modoTicket: config.ticket.tituloCopia || 'COPIA Factura Simplificada',
         modelo1Ticket,
         modelo2Ticket
@@ -766,8 +794,8 @@ export async function generateSalePdfs(
         idCliente: config.codigo.cliente,
         nombreMaquina: config.codigo.maquina,
         productos,
-        feria: config.ticket.feria,
-        lugar: config.ticket.lugar,
+        feria: ticketFeria,
+        lugar: ticketLugar,
         empresa: config.ticket.empresa,
         cif: config.ticket.cif,
         cp: config.ticket.cp,
@@ -810,8 +838,8 @@ export async function generateSalePdfs(
               idCliente: config.codigo.cliente,
               nombreMaquina: config.codigo.maquina,
               productos,
-              feria: config.ticket.feria,
-              lugar: config.ticket.lugar,
+              feria: ticketFeria,
+              lugar: ticketLugar,
               empresa: config.ticket.empresa,
               cif: config.ticket.cif,
               cp: config.ticket.cp,

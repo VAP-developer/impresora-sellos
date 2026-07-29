@@ -33,6 +33,8 @@ export interface GenStampParams {
   modelName: string
   /** Tarifa display text, e.g. "Tarifa A", "Tarifa B" */
   tarifa: string
+  /** Tarifa description text (second line below tarifa name) */
+  tarifaDescripcion?: string
   /** Date text for the stamp, e.g. "21-24 abril 2025" */
   fecha: string
   /** Event/locality text, e.g. "Madrid" */
@@ -45,6 +47,8 @@ export interface GenStampParams {
 export interface GenStampMdccParams {
   /** Tarifa display text */
   tarifa: string
+  /** Tarifa description text (second line below tarifa name) */
+  tarifaDescripcion?: string
   /** Date text for the stamp */
   fecha: string
   /** Event/locality text */
@@ -101,6 +105,7 @@ export async function genStampI(
 
   const renderParams: StampRenderParams = {
     tarifa: params.tarifa,
+    tarifaDescripcion: params.tarifaDescripcion,
     fecha: params.fecha,
     evento: params.evento,
     codigo: params.codigo,
@@ -130,6 +135,7 @@ export async function genStampD(
 
   const renderParams: StampRenderParams = {
     tarifa: params.tarifa,
+    tarifaDescripcion: params.tarifaDescripcion,
     fecha: params.fecha,
     evento: params.evento,
     codigo: params.codigo,
@@ -153,6 +159,7 @@ export async function genStampD(
 export async function genStamp(params: GenStampMdccParams): Promise<Buffer> {
   const renderParams: StampRenderParams = {
     tarifa: params.tarifa,
+    tarifaDescripcion: params.tarifaDescripcion,
     fecha: params.fecha,
     evento: params.evento,
     codigo: params.codigo,

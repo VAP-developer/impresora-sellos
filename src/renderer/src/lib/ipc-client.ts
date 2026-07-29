@@ -181,7 +181,7 @@ export async function print(
   config: AppConfig,
   quantities: KioskoQuantities,
   profile: string,
-  imageFlags?: { printFondo: boolean; printSello: boolean }
+  imageFlags?: { printFondo: boolean; printSello: boolean; useSecondaryPrice?: boolean }
 ): Promise<SaleOutcome> {
   // Triggers the full sale flow: atomic transaction + PDF generation + print queue enqueue.
   return getAPI().sale.execute(config, quantities, profile, imageFlags)
@@ -324,19 +324,37 @@ export async function deleteEvento(id: number): Promise<boolean> {
 
 // === Tariff Groups ===
 
+export type TariffType = 'individual' | 'strip'
+
 export interface Tariff {
   id?: number
   name: string
-  price: number
+  description: string
+  local_price: number
+  secondary_price: number
   position: number
+  type: TariffType
+}
+
+export interface Strip {
+  id?: number
+  name: string
+  description: string
+  local_price: number
+  secondary_price: number
+  position: number
+  type: 'strip'
+  tariff_ids: number[]
 }
 
 export interface TariffGroup {
   id: number
   year: number
   title: string
-  currency: string
+  local_currency: string
+  complementary_currency: string
   tariffs: Tariff[]
+  strips: Strip[]
   created_at: string
   updated_at: string
 }
@@ -344,21 +362,36 @@ export interface TariffGroup {
 export interface TariffGroupInput {
   year: number
   title: string
-  currency: string
+  local_currency: string
+  complementary_currency: string
   tariffs: TariffInput[]
+  strips: StripInput[]
 }
 
 export interface TariffInput {
   name: string
-  price: number
+  description: string
+  local_price: number
+  secondary_price: number
   position: number
+}
+
+export interface StripInput {
+  name: string
+  description: string
+  local_price: number
+  secondary_price: number
+  position: number
+  tariff_ids: number[]
 }
 
 export interface TariffGroupUpdateInput {
   year?: number
   title?: string
-  currency?: string
+  local_currency?: string
+  complementary_currency?: string
   tariffs: TariffInput[]
+  strips: StripInput[]
 }
 
 export async function getTariffGroupYears(): Promise<number[]> {

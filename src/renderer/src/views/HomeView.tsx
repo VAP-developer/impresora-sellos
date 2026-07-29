@@ -2,12 +2,6 @@ import { useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { downloadCSV } from '../lib/ipc-client'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger
-} from '../components/ui/tooltip'
 
 /**
  * HomeView — Main menu screen replicating the legacy HomeView.vue layout.
@@ -51,125 +45,73 @@ export default function HomeView(): JSX.Element {
   }, [])
 
   return (
-    <TooltipProvider delayDuration={300}>
-      <div className="flex flex-col items-center justify-center min-h-full px-4 py-8 gap-8">
-        {/* Section headers */}
-        <div className="flex w-full max-w-3xl justify-between items-center">
-          <h2 className="text-xl font-normal text-[#212F5D] text-center flex-1">{t('views.print').toUpperCase()}</h2>
-          <div className="flex-1" />
-          <h2 className="text-xl font-normal text-[#212F5D] text-center flex-1">{t('views.machine').toUpperCase()}</h2>
-        </div>
-
-        {/* Navigation buttons row */}
-        <div className="flex w-full max-w-3xl justify-center items-center gap-4">
-          {/* Imprimir (Configuración) button */}
-          <button
-            className="flex-[2] flex justify-center items-center cursor-pointer bg-transparent border-none p-4 rounded-lg hover:bg-gray-100 transition-colors"
-            aria-label="Configuración de impresión"
-            onClick={() => navigate('/imprimir')}
-          >
-            <ConfigIcon />
-          </button>
-
-          {/* App version/changelog tooltip (replicating legacy) */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="text-gray-500 cursor-help text-sm select-none">app</span>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="w-72 whitespace-pre-line">
-              {'----------------------------------\n'}
-              {'MEJORAS\n'}
-              {'----------------------------------\n'}
-              {'Electron + React + SQLite\n'}
-              {'TICKET por cada TIRA\n'}
-              {'N. TICKETS: NO resta con Perfiles= ESPORÁDICOS y ABONO\n'}
-              {'LÍMITE IMPORTE: Perfil FERIA\n'}
-              {'NUEVO LÍMITE IMPORTE: Resto de PERFILES\n'}
-              {'LONGITUD TICKETS: El CORTE se ajusta según conceptos\n'}
-              {'BASES DE DATOS: Perfiles - Eventos\n'}
-              {'BLOQUEO DE EVENTO: Hasta quitar rollos\n'}
-              {'ANULACIÓN VENTA: casos de error de impresión\n'}
-              {'KIOSCO ACCESOS DIRECTOS: Cesta - Filatelia - Protocolo\n'}
-              {'SIMULACIONES: Texto y Códigos actuales en ETIQUETAS\n'}
-              {'MENSAJES de AYUDA\n'}
-              {'-------------------------------------------\n'}
-              {'v2.0 (Electron/React/SQLite)\n'}
-              {'------------------------------------------'}
-            </TooltipContent>
-          </Tooltip>
-
-          {/* Export CSV button (replicating legacy XLS export) */}
-          <button
-            className="flex-1 flex flex-col justify-center items-center cursor-pointer bg-transparent border-none p-4 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            aria-label="Exportar informe CSV"
-            onClick={handleExportCSV}
-            disabled={exporting}
-          >
-            <ExportIcon />
-            <span className="text-xs text-gray-500 mt-1 font-bold">
-              {exporting ? 'EXPORTANDO...' : 'EXPORTAR CSV'}
-            </span>
-          </button>
-
-          {/* Info tooltip for export instructions (replicating legacy) */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="text-gray-500 cursor-help text-sm select-none">i</span>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="w-64 whitespace-pre-line">
-              {'----------------------------------\n'}
-              {'INFORME: EXPORTAR CSV\n'}
-              {'----------------------------------\n'}
-              {'1 - Pulsar botón EXPORTAR CSV\n'}
-              {'2 - Se descarga fichero reporte-ATM.csv\n'}
-              {'3 - Abrir con Excel o Numbers\n'}
-              {'----------------------------------\n'}
-              {'Los acentos y formatos de columnas se mantienen\n'}
-              {'----------------------------------'}
-            </TooltipContent>
-          </Tooltip>
-
-          {/* Maquina button */}
-          <button
-            className="flex-[2] flex justify-center items-center cursor-pointer bg-transparent border-none p-4 rounded-lg hover:bg-gray-100 transition-colors"
-            aria-label="Configuración de máquina"
-            onClick={() => navigate('/maquina')}
-          >
-            <MaquinaIcon />
-          </button>
-        </div>
-
-        {/* Export error message */}
-        {exportError && (
-          <p className="text-red-500 text-sm" role="alert">
-            {exportError}
-          </p>
-        )}
-
-        {/* Description labels */}
-        <div className="flex w-full max-w-3xl justify-between items-start">
-          <p className="text-gray-500 text-sm font-bold text-center flex-1">
-            PERFIL
-            <br />
-            EVENTO
-            <br />
-            TARIFAS
-          </p>
-          <p className="text-gray-500 text-sm font-bold text-center flex-1">
-            INFORME
-            <br />
-            VENTAS
-          </p>
-          <p className="text-gray-500 text-sm font-bold text-center flex-1">
-            CÓDIGO ETIQUETA
-            <br />
-            TICKET
-            <br />
-            ROLLOS
-          </p>
-        </div>
+    <div className="flex flex-col items-center justify-center min-h-full px-4 py-8 gap-8">
+      {/* Section headers */}
+      <div className="flex w-full max-w-3xl justify-between items-center">
+        <h2 className="text-xl font-normal text-[#212F5D] text-center flex-1">{t('views.print').toUpperCase()}</h2>
+        <div className="flex-1" />
+        <h2 className="text-xl font-normal text-[#212F5D] text-center flex-1">{t('views.machine').toUpperCase()}</h2>
       </div>
-    </TooltipProvider>
+
+      {/* Navigation buttons row */}
+      <div className="flex w-full max-w-3xl justify-center items-center gap-4">
+        {/* Imprimir (Configuración) button */}
+        <button
+          className="flex-[2] flex justify-center items-center cursor-pointer bg-transparent border-none p-4 rounded-lg hover:bg-gray-100 transition-colors"
+          aria-label="Configuración de impresión"
+          onClick={() => navigate('/imprimir')}
+        >
+          <ConfigIcon />
+        </button>
+
+        {/* Export CSV button */}
+        <button
+          className="flex-1 flex flex-col justify-center items-center cursor-pointer bg-transparent border-none p-4 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          aria-label="Exportar informe CSV"
+          onClick={handleExportCSV}
+          disabled={exporting}
+        >
+          <ExportIcon />
+          <span className="text-xs text-gray-500 mt-1 font-bold">
+            {exporting ? 'EXPORTANDO...' : 'EXPORTAR CSV'}
+          </span>
+        </button>
+
+        {/* Maquina button */}
+        <button
+          className="flex-[2] flex justify-center items-center cursor-pointer bg-transparent border-none p-4 rounded-lg hover:bg-gray-100 transition-colors"
+          aria-label="Configuración de máquina"
+          onClick={() => navigate('/maquina')}
+        >
+          <MaquinaIcon />
+        </button>
+      </div>
+
+      {/* Export error message */}
+      {exportError && (
+        <p className="text-red-500 text-sm" role="alert">
+          {exportError}
+        </p>
+      )}
+
+      {/* Description labels */}
+      <div className="flex w-full max-w-3xl justify-between items-start">
+        <p className="text-gray-500 text-sm font-bold text-center flex-1">
+          PERFIL
+          <br />
+          EVENTO
+          <br />
+          TARIFAS
+        </p>
+        <p className="text-gray-500 text-sm font-bold text-center flex-1">
+          CÓDIGO ETIQUETA
+          <br />
+          TICKET
+          <br />
+          ROLLOS
+        </p>
+      </div>
+    </div>
   )
 }
 

@@ -3,64 +3,111 @@
  *
  * Manages tariff groups within the Settings view.
  * Lists existing groups organized by year, with full CRUD support.
- * Supports differentiated tariff types (individual and strip) with
- * client-side validation and translated error messages.
+ * Supports dual-currency pricing (local + complementary), tariff descriptions,
+ * and strip entities that reference specific tariffs via multi-select.
  *
- * Requirements: 1.4, 2.4, 3.2, 3.4, 3.5, 3.6, 4.1-4.9
+ * Requirements: 1.1, 1.2, 1.3, 2.1-2.8, 3.1-3.9, 4.1-4.4, 7.1-7.6
  */
 
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useTariffGroupsStore } from '@renderer/stores/tariff-groups.store'
 import { CurrencySelector } from './CurrencySelector'
+import { TariffMultiSelect } from './TariffMultiSelect'
 import { cn } from '../../lib/utils'
-import type { TariffGroup, TariffGroupInput, TariffGroupUpdateInput } from '@renderer/lib/ipc-client'
+import type {
+  TariffGroup,
+  TariffGroupInput,
+  TariffGroupUpdateInput
+} from '@renderer/lib/ipc-client'
 
-// ─── Local Types (extend base types with differentiated tariff support) ────────
-
-type TariffType = 'individual' | 'strip'
+// ─── Local Types ──────────────────────────────────────────────────────────────
 
 interface TariffFormRow {
   name: string
-  price: string
-  type: TariffType
-  strip_count: string
+  description: string
+  local_price: string
+  secondary_price: string
+}
+
+interface StripFormRow {
+  name: string
+  description: string
+  local_price: string
+  secondary_price: string
+  selected_tariff_indices: number[]
 }
 
 interface FormState {
   year: string
   title: string
-  currency: string
+  local_currency: string
+  complementary_currency: string
   tariffs: TariffFormRow[]
+  strips: StripFormRow[]
+}
+
+interface TariffRowErrors {
+  name?: string
+  local_price?: string
+  secondary_price?: string
+}
+
+interface StripRowErrors {
+  name?: string
+  local_price?: string
+  secondary_price?: string
+  tariff_selection?: string
 }
 
 interface FormErrors {
   year?: string
   title?: string
-  tariffs?: Record<number, { name?: string; price?: string; strip_count?: string }>
+  local_currency?: string
+  complementary_currency?: string
+  tariffs?: Record<number, TariffRowErrors>
+  strips?: Record<number, StripRowErrors>
   general?: string
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function emptyIndividualRow(): TariffFormRow {
-  return { name: '', price: '', type: 'individual', strip_count: '' }
+function emptyTariffRow(): TariffFormRow {
+  return { name: '', description: '', local_price: '', secondary_price: '' }
 }
 
-function emptyStripRow(): TariffFormRow {
-  return { name: '', price: '', type: 'strip', strip_count: '2' }
+function emptyStripRow(): StripFormRow {
+  return { name: '', description: '', local_price: '', secondary_price: '', selected_tariff_indices: [] }
 }
 
 function groupToFormState(group: TariffGroup): FormState {
+  // Map tariff IDs to indices for strip selections
+  const tariffIdToIndex = new Map<number, number>()
+  group.tariffs.forEach((t, i) => {
+    if (t.id != null) {
+      tariffIdToIndex.set(t.id, i)
+    }
+  })
+
   return {
     year: String(group.year),
     title: group.title,
-    currency: group.currency,
+    local_currency: group.local_currency,
+    complementary_currency: group.complementary_currency,
     tariffs: group.tariffs.map((t) => ({
       name: t.name,
-      price: String(t.price),
-      type: ((t as { type?: string }).type as TariffType) || 'individual',
-      strip_count: String((t as { strip_count?: number }).strip_count || '')
+      description: t.description,
+      local_price: String(t.local_price),
+      secondary_price: String(t.secondary_price)
+    })),
+    strips: group.strips.map((s) => ({
+      name: s.name,
+      description: s.description,
+      local_price: String(s.local_price),
+      secondary_price: String(s.secondary_price),
+      selected_tariff_indices: s.tariff_ids
+        .map((id) => tariffIdToIndex.get(id))
+        .filter((idx): idx is number => idx !== undefined)
     }))
   }
 }
@@ -69,8 +116,10 @@ function initialFormState(): FormState {
   return {
     year: String(new Date().getFullYear()),
     title: '',
-    currency: 'EUR',
-    tariffs: [emptyIndividualRow(), emptyIndividualRow()]
+    local_currency: 'EUR',
+    complementary_currency: 'EUR',
+    tariffs: [emptyTariffRow(), emptyTariffRow()],
+    strips: []
   }
 }
 
@@ -99,7 +148,8 @@ export function TariffGroupSection(): JSX.Element {
   const validate = useCallback(
     (formData: FormState): FormErrors => {
       const errs: FormErrors = {}
-      const tariffErrors: Record<number, { name?: string; price?: string; strip_count?: string }> = {}
+      const tariffErrors: Record<number, TariffRowErrors> = {}
+      const stripErrors: Record<number, StripRowErrors> = {}
 
       // Year
       const yearNum = Number(formData.year)
@@ -112,39 +162,39 @@ export function TariffGroupSection(): JSX.Element {
         errs.title = t('validation.titleRequired')
       }
 
-      // Count individuals
-      const individuals = formData.tariffs.filter((tr) => tr.type === 'individual')
-      if (individuals.length < 2) {
+      // Currencies
+      if (!formData.local_currency.trim()) {
+        errs.local_currency = t('validation.localCurrencyRequired')
+      }
+      if (!formData.complementary_currency.trim()) {
+        errs.complementary_currency = t('validation.complementaryCurrencyRequired')
+      }
+
+      // Individual tariff cardinality [2, 20]
+      if (formData.tariffs.length < 2) {
         errs.general = t('validation.minTariffs')
-      } else if (individuals.length > 20) {
+      } else if (formData.tariffs.length > 20) {
         errs.general = t('validation.maxTariffs')
       }
 
       // Validate each tariff row
       formData.tariffs.forEach((row, i) => {
-        const rowErr: { name?: string; price?: string; strip_count?: string } = {}
+        const rowErr: TariffRowErrors = {}
 
-        // Name: 1-16 characters
         if (!row.name.trim()) {
           rowErr.name = t('validation.nameRequired')
         } else if (row.name.trim().length > 16) {
           rowErr.name = t('validation.nameTooLong')
         }
 
-        // Price: > 0
-        const price = Number(row.price)
-        if (!row.price.trim() || isNaN(price) || !isFinite(price) || price <= 0) {
-          rowErr.price = t('validation.pricePositive')
+        const localPrice = Number(row.local_price)
+        if (!row.local_price.trim() || isNaN(localPrice) || !isFinite(localPrice) || localPrice <= 0) {
+          rowErr.local_price = t('validation.localPricePositive')
         }
 
-        // Strip count validation for strip type
-        if (row.type === 'strip') {
-          const sc = Number(row.strip_count)
-          if (isNaN(sc) || !Number.isInteger(sc) || sc < 2) {
-            rowErr.strip_count = t('validation.stripCountMin')
-          } else if (sc > individuals.length) {
-            rowErr.strip_count = t('validation.stripCountMax')
-          }
+        const secondaryPrice = Number(row.secondary_price)
+        if (!row.secondary_price.trim() || isNaN(secondaryPrice) || !isFinite(secondaryPrice) || secondaryPrice <= 0) {
+          rowErr.secondary_price = t('validation.secondaryPricePositive')
         }
 
         if (Object.keys(rowErr).length > 0) {
@@ -152,8 +202,40 @@ export function TariffGroupSection(): JSX.Element {
         }
       })
 
+      // Validate each strip row
+      formData.strips.forEach((row, i) => {
+        const rowErr: StripRowErrors = {}
+
+        if (!row.name.trim()) {
+          rowErr.name = t('validation.nameRequired')
+        } else if (row.name.trim().length > 16) {
+          rowErr.name = t('validation.nameTooLong')
+        }
+
+        const localPrice = Number(row.local_price)
+        if (!row.local_price.trim() || isNaN(localPrice) || !isFinite(localPrice) || localPrice <= 0) {
+          rowErr.local_price = t('validation.localPricePositive')
+        }
+
+        const secondaryPrice = Number(row.secondary_price)
+        if (!row.secondary_price.trim() || isNaN(secondaryPrice) || !isFinite(secondaryPrice) || secondaryPrice <= 0) {
+          rowErr.secondary_price = t('validation.secondaryPricePositive')
+        }
+
+        if (row.selected_tariff_indices.length < 2) {
+          rowErr.tariff_selection = t('validation.stripMinTariffs')
+        }
+
+        if (Object.keys(rowErr).length > 0) {
+          stripErrors[i] = rowErr
+        }
+      })
+
       if (Object.keys(tariffErrors).length > 0) {
         errs.tariffs = tariffErrors
+      }
+      if (Object.keys(stripErrors).length > 0) {
+        errs.strips = stripErrors
       }
 
       return errs
@@ -183,10 +265,7 @@ export function TariffGroupSection(): JSX.Element {
   }
 
   async function handleDelete(id: number): Promise<void> {
-    const result = await deleteGroup(id)
-    if (!result.success) {
-      // error is shown via store.error
-    }
+    await deleteGroup(id)
     setConfirmDeleteId(null)
   }
 
@@ -203,26 +282,39 @@ export function TariffGroupSection(): JSX.Element {
     try {
       const tariffs = form.tariffs.map((row, i) => ({
         name: row.name.trim(),
-        price: Number(row.price),
+        description: row.description.trim(),
+        local_price: Number(row.local_price),
+        secondary_price: Number(row.secondary_price),
+        position: i + 1
+      }))
+
+      const strips = form.strips.map((row, i) => ({
+        name: row.name.trim(),
+        description: row.description.trim(),
+        local_price: Number(row.local_price),
+        secondary_price: Number(row.secondary_price),
         position: i + 1,
-        type: row.type,
-        strip_count: row.type === 'strip' ? Number(row.strip_count) : undefined
+        tariff_ids: row.selected_tariff_indices.map((idx) => idx + 1) // position-based (1-indexed)
       }))
 
       if (mode === 'create') {
         const input: TariffGroupInput = {
           year: Number(form.year),
           title: form.title.trim(),
-          currency: form.currency,
-          tariffs: tariffs as TariffGroupInput['tariffs']
+          local_currency: form.local_currency,
+          complementary_currency: form.complementary_currency,
+          tariffs,
+          strips
         }
         await createGroup(input)
       } else if (mode === 'edit' && editingGroup) {
         const input: TariffGroupUpdateInput = {
           year: Number(form.year),
           title: form.title.trim(),
-          currency: form.currency,
-          tariffs: tariffs as TariffGroupUpdateInput['tariffs']
+          local_currency: form.local_currency,
+          complementary_currency: form.complementary_currency,
+          tariffs,
+          strips
         }
         await updateGroup(editingGroup.id, input)
       }
@@ -231,7 +323,6 @@ export function TariffGroupSection(): JSX.Element {
       setEditingGroup(null)
     } catch (err) {
       const message = err instanceof Error ? err.message : t('errors.saveFailed')
-      // Check for duplicate year error
       if (message.includes('año') || message.includes('year') || message.includes('DUPLICATE_YEAR')) {
         setErrors({ year: t('validation.yearDuplicate') })
       } else {
@@ -252,19 +343,59 @@ export function TariffGroupSection(): JSX.Element {
     })
   }
 
-  function addTariffRow(type: TariffType): void {
+  function addTariffRow(): void {
     setForm((prev) => ({
       ...prev,
-      tariffs: [...prev.tariffs, type === 'individual' ? emptyIndividualRow() : emptyStripRow()]
+      tariffs: [...prev.tariffs, emptyTariffRow()]
     }))
   }
 
   function removeTariffRow(index: number): void {
+    setForm((prev) => {
+      const tariffs = prev.tariffs.filter((_, i) => i !== index)
+      // Update strip selections: remove the deleted index and shift higher indices down
+      const strips = prev.strips.map((strip) => ({
+        ...strip,
+        selected_tariff_indices: strip.selected_tariff_indices
+          .filter((i) => i !== index)
+          .map((i) => (i > index ? i - 1 : i))
+      }))
+      return { ...prev, tariffs, strips }
+    })
+  }
+
+  function updateStripRow(index: number, field: keyof Omit<StripFormRow, 'selected_tariff_indices'>, value: string): void {
+    setForm((prev) => {
+      const strips = [...prev.strips]
+      strips[index] = { ...strips[index], [field]: value }
+      return { ...prev, strips }
+    })
+  }
+
+  function updateStripTariffSelection(index: number, indices: number[]): void {
+    setForm((prev) => {
+      const strips = [...prev.strips]
+      strips[index] = { ...strips[index], selected_tariff_indices: indices }
+      return { ...prev, strips }
+    })
+  }
+
+  function addStripRow(): void {
     setForm((prev) => ({
       ...prev,
-      tariffs: prev.tariffs.filter((_, i) => i !== index)
+      strips: [...prev.strips, emptyStripRow()]
     }))
   }
+
+  function removeStripRow(index: number): void {
+    setForm((prev) => ({
+      ...prev,
+      strips: prev.strips.filter((_, i) => i !== index)
+    }))
+  }
+
+  // Check if save should be disabled (any strip with < 2 tariffs selected)
+  const hasInvalidStrips = form.strips.some((s) => s.selected_tariff_indices.length < 2)
 
   // ─── Organize groups by year ──────────────────────────────────────────────
 
@@ -313,12 +444,8 @@ export function TariffGroupSection(): JSX.Element {
 
         {sortedYears.map((year) => {
           const group = groupsByYear[year]
-          const individualsCount = group.tariffs.filter(
-            (tr) => ((tr as { type?: string }).type || 'individual') === 'individual'
-          ).length
-          const stripsCount = group.tariffs.filter(
-            (tr) => (tr as { type?: string }).type === 'strip'
-          ).length
+          const tariffsCount = group.tariffs.length
+          const stripsCount = group.strips.length
 
           return (
             <div
@@ -334,7 +461,7 @@ export function TariffGroupSection(): JSX.Element {
                     {group.title}
                   </span>
                   <span className="ml-2 text-xs text-gray-400">
-                    ({group.currency})
+                    ({group.local_currency} / {group.complementary_currency})
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -377,7 +504,7 @@ export function TariffGroupSection(): JSX.Element {
                 </div>
               </div>
               <div className="text-xs text-gray-500">
-                {individualsCount} {t('settings.individual').toLowerCase()}
+                {tariffsCount} {t('settings.individual').toLowerCase()}
                 {stripsCount > 0 && (
                   <span>
                     {' · '}
@@ -394,9 +521,6 @@ export function TariffGroupSection(): JSX.Element {
 
   // ─── Render: Create / Edit Form ───────────────────────────────────────────
 
-  const individuals = form.tariffs.filter((tr) => tr.type === 'individual')
-  const individualsCount = individuals.length
-
   return (
     <div className="space-y-4">
       <h3 className="text-base font-medium text-gray-800">
@@ -409,8 +533,8 @@ export function TariffGroupSection(): JSX.Element {
         </p>
       )}
 
-      {/* Year + Title + Currency */}
-      <div className="grid grid-cols-3 gap-3">
+      {/* Year + Title */}
+      <div className="grid grid-cols-2 gap-3">
         <div>
           <label htmlFor="tg-year" className="block text-xs font-medium text-gray-600 mb-1">
             {t('settings.year')}
@@ -460,22 +584,50 @@ export function TariffGroupSection(): JSX.Element {
             </p>
           )}
         </div>
+      </div>
+
+      {/* Dual Currency Selectors */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">
+            {t('settings.localCurrency')}
+          </label>
+          <CurrencySelector
+            value={form.local_currency}
+            onChange={(val) => setForm((prev) => ({ ...prev, local_currency: val }))}
+          />
+          {errors.local_currency && (
+            <p className="mt-1 text-xs text-red-600" role="alert">
+              {errors.local_currency}
+            </p>
+          )}
+        </div>
 
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">
-            {t('settings.currency')}
+            {t('settings.complementaryCurrency')}
           </label>
           <CurrencySelector
-            value={form.currency}
-            onChange={(val) => setForm((prev) => ({ ...prev, currency: val }))}
+            value={form.complementary_currency}
+            onChange={(val) => setForm((prev) => ({ ...prev, complementary_currency: val }))}
           />
+          {errors.complementary_currency && (
+            <p className="mt-1 text-xs text-red-600" role="alert">
+              {errors.complementary_currency}
+            </p>
+          )}
         </div>
       </div>
 
-      {/* Tariffs Table */}
+      {/* ─── TariffListPanel: Individual Tariffs ─────────────────────────────── */}
       <div className="space-y-2">
-        <div className="text-xs font-medium text-gray-600 uppercase tracking-wider">
-          {t('settings.tariffGroups')} ({form.tariffs.length})
+        <div className="flex items-center justify-between">
+          <div className="text-xs font-medium text-gray-600 uppercase tracking-wider">
+            {t('settings.individual')} ({form.tariffs.length})
+          </div>
+          <div className="text-xs text-gray-400">
+            {form.local_currency} / {form.complementary_currency}
+          </div>
         </div>
 
         {form.tariffs.map((row, i) => {
@@ -483,20 +635,8 @@ export function TariffGroupSection(): JSX.Element {
           return (
             <div
               key={i}
-              className="flex items-start gap-2 p-2 border border-gray-100 rounded bg-gray-50"
+              className="flex items-start gap-2 p-2 border border-blue-100 rounded bg-blue-50/30"
             >
-              {/* Type badge */}
-              <span
-                className={cn(
-                  'mt-1.5 text-xs px-1.5 py-0.5 rounded font-medium whitespace-nowrap',
-                  row.type === 'individual'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'bg-purple-100 text-purple-700'
-                )}
-              >
-                {row.type === 'individual' ? t('settings.individual') : t('settings.strip')}
-              </span>
-
               {/* Name */}
               <div className="flex-1 min-w-0">
                 <input
@@ -509,9 +649,7 @@ export function TariffGroupSection(): JSX.Element {
                   className={cn(
                     'h-8 w-full px-2 rounded border text-sm',
                     'focus:outline-none focus:ring-1 focus:ring-blue-400',
-                    rowErrors?.name
-                      ? 'border-red-400'
-                      : 'border-gray-300'
+                    rowErrors?.name ? 'border-red-400' : 'border-gray-300'
                   )}
                 />
                 {rowErrors?.name && (
@@ -519,61 +657,73 @@ export function TariffGroupSection(): JSX.Element {
                 )}
               </div>
 
-              {/* Price */}
-              <div className="w-24">
+              {/* Description */}
+              <div className="flex-1 min-w-0">
                 <input
-                  type="number"
-                  placeholder={t('settings.price')}
-                  value={row.price}
-                  onChange={(e) => updateTariffRow(i, 'price', e.target.value)}
-                  step="0.01"
-                  min="0.01"
-                  aria-invalid={!!rowErrors?.price}
+                  type="text"
+                  placeholder={t('settings.description')}
+                  value={row.description}
+                  onChange={(e) => updateTariffRow(i, 'description', e.target.value)}
                   className={cn(
                     'h-8 w-full px-2 rounded border text-sm',
                     'focus:outline-none focus:ring-1 focus:ring-blue-400',
-                    rowErrors?.price
-                      ? 'border-red-400'
-                      : 'border-gray-300'
+                    'border-gray-300'
                   )}
                 />
-                {rowErrors?.price && (
-                  <p className="text-xs text-red-600 mt-0.5">{rowErrors.price}</p>
+              </div>
+
+              {/* Local Price */}
+              <div className="w-24">
+                <input
+                  type="number"
+                  placeholder={t('settings.localPrice')}
+                  value={row.local_price}
+                  onChange={(e) => updateTariffRow(i, 'local_price', e.target.value)}
+                  step="0.01"
+                  min="0.01"
+                  aria-invalid={!!rowErrors?.local_price}
+                  className={cn(
+                    'h-8 w-full px-2 rounded border text-sm',
+                    'focus:outline-none focus:ring-1 focus:ring-blue-400',
+                    rowErrors?.local_price ? 'border-red-400' : 'border-gray-300'
+                  )}
+                />
+                {rowErrors?.local_price && (
+                  <p className="text-xs text-red-600 mt-0.5">{rowErrors.local_price}</p>
                 )}
               </div>
 
-              {/* Strip count (only for strip type) */}
-              {row.type === 'strip' && (
-                <div className="w-20">
-                  <input
-                    type="number"
-                    placeholder={t('settings.stripCount')}
-                    value={row.strip_count}
-                    onChange={(e) => updateTariffRow(i, 'strip_count', e.target.value)}
-                    min={2}
-                    max={individualsCount}
-                    aria-invalid={!!rowErrors?.strip_count}
-                    aria-label={t('settings.stripCount')}
-                    className={cn(
-                      'h-8 w-full px-2 rounded border text-sm',
-                      'focus:outline-none focus:ring-1 focus:ring-blue-400',
-                      rowErrors?.strip_count
-                        ? 'border-red-400'
-                        : 'border-gray-300'
-                    )}
-                  />
-                  {rowErrors?.strip_count && (
-                    <p className="text-xs text-red-600 mt-0.5">{rowErrors.strip_count}</p>
+              {/* Secondary Price */}
+              <div className="w-24">
+                <input
+                  type="number"
+                  placeholder={t('settings.secondaryPrice')}
+                  value={row.secondary_price}
+                  onChange={(e) => updateTariffRow(i, 'secondary_price', e.target.value)}
+                  step="0.01"
+                  min="0.01"
+                  aria-invalid={!!rowErrors?.secondary_price}
+                  className={cn(
+                    'h-8 w-full px-2 rounded border text-sm',
+                    'focus:outline-none focus:ring-1 focus:ring-blue-400',
+                    rowErrors?.secondary_price ? 'border-red-400' : 'border-gray-300'
                   )}
-                </div>
-              )}
+                />
+                {rowErrors?.secondary_price && (
+                  <p className="text-xs text-red-600 mt-0.5">{rowErrors.secondary_price}</p>
+                )}
+              </div>
 
               {/* Remove button */}
               <button
                 type="button"
                 onClick={() => removeTariffRow(i)}
+                disabled={form.tariffs.length <= 2}
                 aria-label={t('settings.removeTariff')}
-                className="mt-1 text-gray-400 hover:text-red-500 text-sm"
+                className={cn(
+                  'mt-1 text-gray-400 hover:text-red-500 text-sm',
+                  'disabled:opacity-30 disabled:cursor-not-allowed'
+                )}
               >
                 ✕
               </button>
@@ -581,12 +731,12 @@ export function TariffGroupSection(): JSX.Element {
           )
         })}
 
-        {/* Add buttons */}
-        <div className="flex gap-2 pt-1">
+        {/* Add tariff button */}
+        <div className="pt-1">
           <button
             type="button"
-            onClick={() => addTariffRow('individual')}
-            disabled={individualsCount >= 20}
+            onClick={addTariffRow}
+            disabled={form.tariffs.length >= 20}
             className={cn(
               'text-xs px-2 py-1 rounded border border-dashed',
               'border-gray-300 text-gray-600 hover:border-blue-400 hover:text-blue-600',
@@ -595,9 +745,131 @@ export function TariffGroupSection(): JSX.Element {
           >
             + {t('settings.addTariff')}
           </button>
+        </div>
+      </div>
+
+      {/* ─── StripListPanel: Strips ──────────────────────────────────────────── */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="text-xs font-medium text-gray-600 uppercase tracking-wider">
+            {t('settings.strips')} ({form.strips.length})
+          </div>
+          <div className="text-xs text-gray-400">
+            {form.local_currency} / {form.complementary_currency}
+          </div>
+        </div>
+
+        {form.strips.map((row, i) => {
+          const rowErrors = errors.strips?.[i]
+          return (
+            <div
+              key={i}
+              className="p-2 border border-purple-100 rounded bg-purple-50/30 space-y-2"
+            >
+              <div className="flex items-start gap-2">
+                {/* Name */}
+                <div className="flex-1 min-w-0">
+                  <input
+                    type="text"
+                    placeholder={t('settings.name')}
+                    value={row.name}
+                    onChange={(e) => updateStripRow(i, 'name', e.target.value)}
+                    maxLength={16}
+                    aria-invalid={!!rowErrors?.name}
+                    className={cn(
+                      'h-8 w-full px-2 rounded border text-sm',
+                      'focus:outline-none focus:ring-1 focus:ring-blue-400',
+                      rowErrors?.name ? 'border-red-400' : 'border-gray-300'
+                    )}
+                  />
+                  {rowErrors?.name && (
+                    <p className="text-xs text-red-600 mt-0.5">{rowErrors.name}</p>
+                  )}
+                </div>
+
+                {/* Description */}
+                <div className="flex-1 min-w-0">
+                  <input
+                    type="text"
+                    placeholder={t('settings.description')}
+                    value={row.description}
+                    onChange={(e) => updateStripRow(i, 'description', e.target.value)}
+                    className={cn(
+                      'h-8 w-full px-2 rounded border text-sm',
+                      'focus:outline-none focus:ring-1 focus:ring-blue-400',
+                      'border-gray-300'
+                    )}
+                  />
+                </div>
+
+                {/* Local Price */}
+                <div className="w-24">
+                  <input
+                    type="number"
+                    placeholder={t('settings.localPrice')}
+                    value={row.local_price}
+                    onChange={(e) => updateStripRow(i, 'local_price', e.target.value)}
+                    step="0.01"
+                    min="0.01"
+                    aria-invalid={!!rowErrors?.local_price}
+                    className={cn(
+                      'h-8 w-full px-2 rounded border text-sm',
+                      'focus:outline-none focus:ring-1 focus:ring-blue-400',
+                      rowErrors?.local_price ? 'border-red-400' : 'border-gray-300'
+                    )}
+                  />
+                  {rowErrors?.local_price && (
+                    <p className="text-xs text-red-600 mt-0.5">{rowErrors.local_price}</p>
+                  )}
+                </div>
+
+                {/* Secondary Price */}
+                <div className="w-24">
+                  <input
+                    type="number"
+                    placeholder={t('settings.secondaryPrice')}
+                    value={row.secondary_price}
+                    onChange={(e) => updateStripRow(i, 'secondary_price', e.target.value)}
+                    step="0.01"
+                    min="0.01"
+                    aria-invalid={!!rowErrors?.secondary_price}
+                    className={cn(
+                      'h-8 w-full px-2 rounded border text-sm',
+                      'focus:outline-none focus:ring-1 focus:ring-blue-400',
+                      rowErrors?.secondary_price ? 'border-red-400' : 'border-gray-300'
+                    )}
+                  />
+                  {rowErrors?.secondary_price && (
+                    <p className="text-xs text-red-600 mt-0.5">{rowErrors.secondary_price}</p>
+                  )}
+                </div>
+
+                {/* Remove button */}
+                <button
+                  type="button"
+                  onClick={() => removeStripRow(i)}
+                  aria-label={t('settings.removeTariff')}
+                  className="mt-1 text-gray-400 hover:text-red-500 text-sm"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Tariff multi-select */}
+              <TariffMultiSelect
+                tariffs={form.tariffs}
+                selectedIndices={row.selected_tariff_indices}
+                onChange={(indices) => updateStripTariffSelection(i, indices)}
+              />
+            </div>
+          )
+        })}
+
+        {/* Add strip button */}
+        <div className="pt-1">
           <button
             type="button"
-            onClick={() => addTariffRow('strip')}
+            onClick={addStripRow}
             className={cn(
               'text-xs px-2 py-1 rounded border border-dashed',
               'border-gray-300 text-gray-600 hover:border-purple-400 hover:text-purple-600'
@@ -613,7 +885,7 @@ export function TariffGroupSection(): JSX.Element {
         <button
           type="button"
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || hasInvalidStrips}
           className={cn(
             'h-9 px-4 rounded text-sm font-medium',
             'bg-blue-600 text-white hover:bg-blue-700',

@@ -1,14 +1,14 @@
 {
   "nav": {
     "home": "Inicio",
-    "print": "Imprimir",
+    "print": "Eventos",
     "machine": "Máquina",
     "kiosko": "Kiosko",
     "settings": "Configuración"
   },
   "views": {
     "home": "Inicio",
-    "print": "Configuración",
+    "print": "Eventos",
     "machine": "Máquina",
     "kiosko": "Kiosko"
   },
@@ -36,7 +36,15 @@
     "deleteGroup": "Eliminar grupo",
     "confirmDelete": "¿Eliminar este grupo de tarifas?",
     "noGroups": "No hay grupos de tarifas configurados",
-    "position": "Posición"
+    "position": "Posición",
+    "localCurrency": "Moneda Local",
+    "complementaryCurrency": "Moneda Complementaria",
+    "description": "Descripción",
+    "localPrice": "Precio local",
+    "secondaryPrice": "Precio complementario",
+    "strips": "Tiras",
+    "selectTariffs": "Seleccionar tarifas",
+    "stripTariffWarning": "La tira debe tener al menos 2 tarifas seleccionadas"
   },
   "validation": {
     "nameRequired": "El nombre es obligatorio",
@@ -50,7 +58,12 @@
     "stripCountMax": "La tira no puede abarcar más tarifas de las existentes",
     "yearDuplicate": "Ya existe un grupo para ese año",
     "yearRequired": "El año es obligatorio",
-    "titleRequired": "El título es obligatorio"
+    "titleRequired": "El título es obligatorio",
+    "localPricePositive": "El precio local debe ser un número positivo",
+    "secondaryPricePositive": "El precio complementario debe ser un número positivo",
+    "stripMinTariffs": "Una tira debe referenciar al menos 2 tarifas",
+    "localCurrencyRequired": "La moneda local es obligatoria",
+    "complementaryCurrencyRequired": "La moneda complementaria es obligatoria"
   },
   "errors": {
     "loadFailed": "Error al cargar la configuración",

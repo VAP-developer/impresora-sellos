@@ -30,10 +30,7 @@ export interface CartControlsProps {
   onPrintNormal?: () => void
   /** Handler invoked after a successful "Imprimir Filatelia" (profile-specific sale). */
   onPrintFilatelia?: () => void
-  /** Handler invoked after a successful "Imprimir Protocolo" (profile-specific sale). */
-  onPrintProtocolo?: () => void
-  /** Handler invoked after a successful "Imprimir SPDE" (profile-specific sale). */
-  onPrintSPDE?: () => void
+
   /** Handler for "Error Impresión" (cancel/revert last sale). */
   onPrintError?: () => void
   /** Handler for "Reset" (clear all quantities to 0). */
@@ -45,8 +42,6 @@ export interface CartControlsProps {
 export default function CartControls({
   onPrintNormal,
   onPrintFilatelia,
-  onPrintProtocolo,
-  onPrintSPDE,
   onPrintError,
   onReset
 }: CartControlsProps): JSX.Element {
@@ -66,6 +61,7 @@ export default function CartControls({
   // Image layer flags from images store
   const printFondo = useImagesStore((state) => state.printFondo)
   const printSello = useImagesStore((state) => state.printSello)
+  const useSecondaryPrice = useKioskoStore((state) => state.useSecondaryPrice)
 
   const [printing, setPrinting] = useState(false)
 
@@ -101,14 +97,7 @@ export default function CartControls({
     return ''
   }, [sello])
 
-  // Print config indicators
-  const imprimeMasterTicket = ticket?.ImprimeMasterTicket ?? 'N'
-  const imprimeCopiaTicket = ticket?.ImprimeCopiaTicket ?? 'N'
-  const tEmod1 = ticket?.TEmod1 ?? 'N'
-  const tEmod2 = ticket?.TEmod2 ?? 'N'
-  const t1especial = ticket?.T1especial ?? 0
-  const t2especial = ticket?.T2especial ?? 0
-  const t3especial = ticket?.T3especial ?? 0
+
 
   /**
    * Core sale handler used by all print buttons (normal and profile-specific).
@@ -151,7 +140,7 @@ export default function CartControls({
         //   - 'protocolo' -> "Protocolo de: {titulo_base}"
         //   - 'spde' -> "SPDE de: {titulo_base}"
         //   - 'normal' -> unchanged titulo_base
-        const saleResult = await ipc.print(config, quantities as unknown as ipc.KioskoQuantities, profile, { printFondo, printSello })
+        const saleResult = await ipc.print(config, quantities as unknown as ipc.KioskoQuantities, profile, { printFondo, printSello, useSecondaryPrice })
 
         // Check if the sale failed
         if (saleResult && !saleResult.success) {
@@ -171,7 +160,7 @@ export default function CartControls({
         setPrinting(false)
       }
     },
-    [config, quantities, printing, validateSale, recordLastSale, reset, printFondo, printSello]
+    [config, quantities, printing, validateSale, recordLastSale, reset, printFondo, printSello, useSecondaryPrice]
   )
 
   /**
@@ -195,27 +184,7 @@ export default function CartControls({
     await handlePrint('filatelia', onPrintFilatelia)
   }, [handlePrint, onPrintFilatelia])
 
-  /**
-   * Handle "Imprimir Protocolo" button click.
-   * Triggers a sale with profile 'protocolo', which modifies the ticket title
-   * to "Protocolo de: {titulo_base}".
-   *
-   * Validates: Requirements 7.4, 13.4
-   */
-  const handlePrintProtocolo = useCallback(async () => {
-    await handlePrint('protocolo', onPrintProtocolo)
-  }, [handlePrint, onPrintProtocolo])
 
-  /**
-   * Handle "Imprimir SPDE" button click.
-   * Triggers a sale with profile 'spde', which modifies the ticket title
-   * to "SPDE de: {titulo_base}".
-   *
-   * Validates: Requirements 7.5, 13.4
-   */
-  const handlePrintSPDE = useCallback(async () => {
-    await handlePrint('spde', onPrintSPDE)
-  }, [handlePrint, onPrintSPDE])
 
   /**
    * Handle "Error Impresión" button click — anular (cancel) last sale.
@@ -323,7 +292,7 @@ export default function CartControls({
         </button>
       </div>
 
-      {/* Center column: Budget, Total, Mode, Indicators */}
+      {/* Center column: Budget, Total, Mode */}
       <div className="flex flex-col items-center gap-1 mx-6">
         {/* Remaining budget */}
         <p className="text-center text-gray-500 text-sm font-bold" aria-label="Presupuesto restante">
@@ -345,18 +314,6 @@ export default function CartControls({
             {profileName}
           </p>
         )}
-
-        {/* Master set indicator */}
-        <p className="text-center text-blue-600 text-xs font-bold">
-          {imprimeMasterTicket}: MASTER SET
-        </p>
-
-        {/* Copy ticket + special tira indicators */}
-        <p className="text-center text-red-700 text-[10px] font-bold leading-tight">
-          {imprimeCopiaTicket}: COPIA TICKET
-          <br />
-          {tEmod1}/{tEmod2} (€: {t1especial}-{t2especial}-{t3especial})
-        </p>
       </div>
 
       {/* Right column: Print Normal + Reset + Profile buttons */}
@@ -415,34 +372,6 @@ export default function CartControls({
             <line x1="18" y1="6" x2="6" y2="18" />
             <line x1="6" y1="6" x2="18" y2="18" />
           </svg>
-        </button>
-
-        {/* Protocolo button */}
-        <button
-          type="button"
-          className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded
-                     text-xs font-bold cursor-pointer transition-colors
-                     focus:outline-none focus:ring-2 focus:ring-green-400
-                     disabled:opacity-50 disabled:cursor-not-allowed"
-          aria-label="Imprimir Protocolo"
-          disabled={printing}
-          onClick={handlePrintProtocolo}
-        >
-          Protocolo
-        </button>
-
-        {/* SPDE button */}
-        <button
-          type="button"
-          className="px-3 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded
-                     text-xs font-bold cursor-pointer transition-colors
-                     focus:outline-none focus:ring-2 focus:ring-orange-400
-                     disabled:opacity-50 disabled:cursor-not-allowed"
-          aria-label="Imprimir SPDE"
-          disabled={printing}
-          onClick={handlePrintSPDE}
-        >
-          SPDE
         </button>
       </div>
     </div>

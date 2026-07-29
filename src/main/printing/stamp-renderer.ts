@@ -9,12 +9,14 @@
  * - Origin is TOP-LEFT in pdfkit (unlike reportlab which uses BOTTOM-LEFT)
  * - All legacy coordinates are converted from bottom-left to top-left
  *
- * Layout (legacy genStampI/genStampD):
+ * Layout (genStampI/genStampD):
  *   - Background image: full 55×25mm
- *   - Tarifa text: FranklinGothic 12pt at (2mm, 19.5mm from bottom)
- *   - Evento text: FranklinGothic 9pt right-aligned at (53mm, 19mm from bottom)
- *   - Fecha text: FranklinGothic 9pt right-aligned at (53mm, 15mm from bottom)
- *   - Código text: FranklinGothic 6pt at (2mm, 15mm from bottom)
+ *   - Nombre Tarifa: FranklinGothic 13pt at (2mm, 50mm from bottom)
+ *   - Descripción Tarifa: FranklinGothic 9pt at (2mm, 46mm from bottom)
+ *   - Fecha evento (mes+año): FranklinGothic 9pt at (2mm, 40mm from bottom)
+ *   - Localidad evento: FranklinGothic 9pt at (2mm, 37mm from bottom)
+ *   - Código L1: FranklinGothic 8pt at (2mm, 31mm from bottom)
+ *   - Código L2: FranklinGothic 7pt at (2mm, 28mm from bottom)
  */
 
 import PDFDocument from 'pdfkit'
@@ -171,6 +173,8 @@ export function formatCodigoLines(codigo: string): { line1: string; line2: strin
 export interface StampRenderParams {
   /** Tarifa display text, e.g. "Tarifa A", "Tarifa B" */
   tarifa: string
+  /** Tarifa description text (second line below tarifa name) */
+  tarifaDescripcion?: string
   /** Date text for the stamp, e.g. "21-24 abril 2025" */
   fecha: string
   /** Event/locality text, e.g. "Madrid" */
@@ -353,10 +357,12 @@ function collectPdf(doc: PDFKit.PDFDocument): Promise<Buffer> {
  * Layout (in logical landscape coordinates after rotation):
  *   1. Background image (full 55×25mm)
  *   2. Overlay image (right half 27.5–55mm × 25mm)
- *   3. Tarifa text: FranklinGothic 12pt at (2mm, 19.5mm from bottom)
- *   4. Evento text: FranklinGothic 9pt right-aligned at (26mm, 19mm from bottom)
- *   5. Fecha text: FranklinGothic 9pt right-aligned at (26mm, 15mm from bottom)
- *   6. Código text: FranklinGothic 6pt at (2mm, 15mm from bottom)
+ *   3. Nombre Tarifa: FranklinGothic 13pt at (2mm, 50mm from bottom)
+ *   4. Descripción Tarifa: FranklinGothic 9pt at (2mm, 46mm from bottom)
+ *   5. Fecha evento (mes+año): FranklinGothic 9pt at (2mm, 40mm from bottom)
+ *   6. Localidad evento: FranklinGothic 9pt at (2mm, 37mm from bottom)
+ *   7. Código L1: FranklinGothic 8pt at (2mm, 31mm from bottom)
+ *   8. Código L2: FranklinGothic 7pt at (2mm, 28mm from bottom)
  */
 export async function renderStamp(params: StampRenderParams): Promise<Buffer> {
   const doc = new PDFDocument({
@@ -375,19 +381,23 @@ export async function renderStamp(params: StampRenderParams): Promise<Buffer> {
   drawOverlay(doc, params.overlayImage)
 
   // Layout vertical (yBottom_mm = distancia desde abajo):
-  //   Tarifa:      49mm desde abajo (arriba del todo)
-  //   Fecha:       43mm (~6mm debajo de tarifa)
-  //   Localidad:   40mm (justo debajo de fecha, pegado)
-  //   Código L1:   36mm (~4mm debajo de localidad)
-  //   Código L2:   33mm (justo debajo de L1, pegado)
-  drawTextLeft(doc, params.tarifa, FONTS.regular, 12, 2, 49)
-  drawTextLeft(doc, formatFechaMonthYear(params.fecha), FONTS.regular, 8, 2, 43)
-  drawTextLeft(doc, params.evento, FONTS.regular, 8, 2, 40)
+  //   Nombre Tarifa:       50mm desde abajo (arriba del todo)
+  //   Descripción tarifa:  46mm (justo debajo de nombre)
+  //   --- 6mm hueco ---
+  //   Fecha evento:        40mm
+  //   Localidad evento:    37mm (justo debajo de fecha)
+  //   --- 6mm hueco ---
+  //   Código L1:           31mm
+  //   Código L2:           28mm (justo debajo de L1)
+  drawTextLeft(doc, params.tarifa, FONTS.regular, 13, 2, 50)
+  drawTextLeft(doc, params.tarifaDescripcion ?? '', FONTS.regular, 9, 2, 46)
+  drawTextLeft(doc, formatFechaMonthYear(params.fecha), FONTS.regular, 9, 2, 40)
+  drawTextLeft(doc, params.evento, FONTS.regular, 9, 2, 37)
 
   // Código en 2 líneas: línea 1 = "P26-4ES", línea 2 = "0001-001"
   const { line1, line2 } = formatCodigoLines(params.codigo)
-  drawTextLeft(doc, line1, FONTS.regular, 7, 2, 36)
-  drawTextLeft(doc, line2, FONTS.regular, 6, 2, 33)
+  drawTextLeft(doc, line1, FONTS.regular, 8, 2, 31)
+  drawTextLeft(doc, line2, FONTS.regular, 7, 2, 28)
 
   // Como el "lienzo" ahora está rotado, para que el texto quede centrado
   // y vertical hay que pensar las coordenadas como si el alto y ancho
@@ -546,14 +556,15 @@ export async function renderStampMultiPage(stamps: StampRenderParams[]): Promise
     drawOverlay(doc, stamp.overlayImage)
 
     // Layout vertical:
-    //   Tarifa → Fecha (mes+año) → Localidad → Código L1 → Código L2
-    drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12, 2, 49)
-    drawTextLeft(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 8, 2, 43)
-    drawTextLeft(doc, stamp.evento, FONTS.regular, 8, 2, 40)
+    //   Nombre Tarifa → Descripción → Fecha (mes+año) → Localidad → Código L1 → Código L2
+    drawTextLeft(doc, stamp.tarifa, FONTS.regular, 13, 2, 50)
+    drawTextLeft(doc, stamp.tarifaDescripcion ?? '', FONTS.regular, 9, 2, 46)
+    drawTextLeft(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 2, 40)
+    drawTextLeft(doc, stamp.evento, FONTS.regular, 9, 2, 37)
 
     const { line1, line2 } = formatCodigoLines(stamp.codigo)
-    drawTextLeft(doc, line1, FONTS.regular, 7, 2, 36)
-    drawTextLeft(doc, line2, FONTS.regular, 6, 2, 33)
+    drawTextLeft(doc, line1, FONTS.regular, 8, 2, 31)
+    drawTextLeft(doc, line2, FONTS.regular, 7, 2, 28)
   })
 
   doc.end()

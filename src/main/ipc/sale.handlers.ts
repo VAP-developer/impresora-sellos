@@ -78,7 +78,7 @@ export function registerSaleHandlers(): void {
       const typedConfig = config as AppConfig
       const typedQuantities = quantities as KioskoQuantities | DynamicQuantities
       const typedProfile = profile as string
-      const typedImageFlags = imageFlags as { printFondo: boolean; printSello: boolean } | undefined
+      const typedImageFlags = imageFlags as { printFondo: boolean; printSello: boolean; useSecondaryPrice?: boolean } | undefined
 
       // Detect if this is a dynamic tariff sale by checking for dynamic keys (tariff_*_s*)
       const quantityKeys = Object.keys(typedQuantities)
@@ -106,22 +106,24 @@ export function registerSaleHandlers(): void {
               tariffGroupCtx = {
                 id: group.id,
                 title: group.title,
-                currency: group.currency,
+                currency: group.local_currency,
                 tariffs: group.tariffs.map((t) => ({
                   id: t.id!,
                   name: t.name,
-                  price: t.price,
+                  price: t.local_price,
                   position: t.position
                 }))
               }
               dynamicTariffCtx = {
                 groupId: group.id,
                 title: group.title,
-                currency: group.currency,
+                currency: group.local_currency,
                 tariffs: group.tariffs.map((t) => ({
                   id: t.id!,
                   name: t.name,
-                  price: t.price,
+                  description: t.description,
+                  price: t.local_price,
+                  secondaryPrice: t.secondary_price,
                   position: t.position
                 }))
               }
@@ -184,7 +186,8 @@ export function registerSaleHandlers(): void {
           printFondo: typedImageFlags.printFondo,
           printSello: typedImageFlags.printSello,
           fondoImage,
-          selloImage
+          selloImage,
+          useSecondaryPrice: typedImageFlags.useSecondaryPrice ?? false
         }
       }
 

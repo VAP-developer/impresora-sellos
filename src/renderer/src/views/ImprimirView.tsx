@@ -3,17 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useConfigStore } from '@renderer/stores/config.store'
 import type { PreciosConfig, SelloConfig } from '@renderer/types/config'
-import type { EventoRow, TariffGroup } from '@renderer/lib/ipc-client'
+import type { EventoRow } from '@renderer/lib/ipc-client'
 import { getEventoById } from '@renderer/lib/ipc-client'
-import PerfilSection from '@renderer/components/imprimir/PerfilSection'
 import EventoSection from '@renderer/components/imprimir/EventoSection'
 import EventoEditor from '@renderer/components/imprimir/EventoEditor'
-import PerfilesSection from '@renderer/components/imprimir/PerfilesSection'
-import TarifaSection from '@renderer/components/imprimir/TarifaSection'
-import PrinterSection from '@renderer/components/imprimir/PrinterSection'
-import TariffGroupSection from '@renderer/components/imprimir/TariffGroupSection'
-import TariffGroupEditor from '@renderer/components/imprimir/TariffGroupEditor'
-import { useTariffGroupsStore } from '@renderer/stores/tariff-groups.store'
 
 export default function ImprimirView(): JSX.Element {
   const config = useConfigStore((s) => s.config)
@@ -23,10 +16,8 @@ export default function ImprimirView(): JSX.Element {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
-  // Local state for profile selection
-  const [selectedPerfil, setSelectedPerfil] = useState<number>(
-    config?.sello.elperfil ?? 6
-  )
+  // Profile selection comes from config store (managed in Settings)
+  const selectedPerfil = config?.sello.elperfil ?? 6
 
   // Selected event from the DB (new system)
   const [selectedEvento, setSelectedEvento] = useState<EventoRow | null>(null)
@@ -34,30 +25,17 @@ export default function ImprimirView(): JSX.Element {
   // Key to force EventoSection to re-fetch after edits
   const [eventosRefreshKey, setEventosRefreshKey] = useState(0)
 
-  // Tariff group editor state
-  const [showTariffGroupEditor, setShowTariffGroupEditor] = useState(false)
-  const [editingTariffGroup, setEditingTariffGroup] = useState<TariffGroup | null>(null)
-  const { loadByYear: loadTariffGroupsByYear, loadYears: loadTariffGroupYears, selectedYear: tariffGroupSelectedYear } = useTariffGroupsStore()
-
-  // Local editable profile names (only nperfil4 is actually editable)
-  const [localProfileNames, setLocalProfileNames] = useState<Record<number, string>>(() => ({
+  // Profile names come from config store (managed in Settings)
+  const localProfileNames: Record<number, string> = {
     1: config?.sello.nperfil1 ?? 'Filatelia',
     2: config?.sello.nperfil2 ?? 'Esporádicos',
     3: config?.sello.nperfil3 ?? 'SPDE',
     4: config?.sello.nperfil4 ?? '',
     5: config?.sello.nperfil5 ?? 'Abono/Envío',
     6: config?.sello.nperfil6 ?? 'FERIA'
-  }))
+  }
 
-  // Local editable prices
-  const [localPrecios, setLocalPrecios] = useState<PreciosConfig>(() => ({
-    tarifaA: config?.precios.tarifaA ?? 0,
-    tarifaA2: config?.precios.tarifaA2 ?? 0,
-    tarifaB: config?.precios.tarifaB ?? 0,
-    tarifaC: config?.precios.tarifaC ?? 0,
-    tarifaTA: config?.precios.tarifaTA ?? 0,
-    tarifaT4: config?.precios.tarifaT4 ?? 0
-  }))
+
 
   // On mount, try to load the previously active event from config
   useEffect(() => {
@@ -71,37 +49,11 @@ export default function ImprimirView(): JSX.Element {
     }
   }, [])
 
-  // Sync local profile names from config when it loads/changes externally
-  useEffect(() => {
-    if (config?.sello) {
-      setLocalProfileNames({
-        1: config.sello.nperfil1 ?? 'Filatelia',
-        2: config.sello.nperfil2 ?? 'Esporádicos',
-        3: config.sello.nperfil3 ?? 'SPDE',
-        4: config.sello.nperfil4 ?? '',
-        5: config.sello.nperfil5 ?? 'Abono/Envío',
-        6: config.sello.nperfil6 ?? 'FERIA'
-      })
-    }
-  }, [config?.sello.nperfil1, config?.sello.nperfil2, config?.sello.nperfil3, config?.sello.nperfil4, config?.sello.nperfil5, config?.sello.nperfil6])
 
-  // Sync local precios from config when it loads/changes externally
-  useEffect(() => {
-    if (config?.precios) {
-      setLocalPrecios({
-        tarifaA: config.precios.tarifaA ?? 0,
-        tarifaA2: config.precios.tarifaA2 ?? 0,
-        tarifaB: config.precios.tarifaB ?? 0,
-        tarifaC: config.precios.tarifaC ?? 0,
-        tarifaTA: config.precios.tarifaTA ?? 0,
-        tarifaT4: config.precios.tarifaT4 ?? 0
-      })
-    }
-  }, [config?.precios.tarifaA, config?.precios.tarifaA2, config?.precios.tarifaB, config?.precios.tarifaC, config?.precios.tarifaTA, config?.precios.tarifaT4])
 
-  const handlePerfilChange = useCallback((perfil: number) => {
-    setSelectedPerfil(perfil)
-  }, [])
+
+
+
 
   const handleEventoChange = useCallback((evento: EventoRow | null) => {
     setSelectedEvento(evento)
@@ -111,45 +63,11 @@ export default function ImprimirView(): JSX.Element {
     setEventosRefreshKey((k) => k + 1)
   }, [])
 
-  // Tariff group callbacks
-  const handleCreateTariffGroup = useCallback(() => {
-    setEditingTariffGroup(null)
-    setShowTariffGroupEditor(true)
-  }, [])
 
-  const handleEditTariffGroup = useCallback((group: TariffGroup) => {
-    setEditingTariffGroup(group)
-    setShowTariffGroupEditor(true)
-  }, [])
 
-  const handleTariffGroupSave = useCallback(() => {
-    setShowTariffGroupEditor(false)
-    setEditingTariffGroup(null)
-    // Refresh the tariff groups list
-    if (tariffGroupSelectedYear !== null) {
-      loadTariffGroupsByYear(tariffGroupSelectedYear)
-    }
-    loadTariffGroupYears()
-  }, [tariffGroupSelectedYear, loadTariffGroupsByYear, loadTariffGroupYears])
 
-  const handleTariffGroupCancel = useCallback(() => {
-    setShowTariffGroupEditor(false)
-    setEditingTariffGroup(null)
-  }, [])
 
-  const handleProfileNameChange = useCallback(
-    (profileIndex: number, value: string) => {
-      setLocalProfileNames((prev) => ({ ...prev, [profileIndex]: value }))
-    },
-    []
-  )
 
-  const handlePreciosChange = useCallback(
-    (field: keyof PreciosConfig, value: number) => {
-      setLocalPrecios((prev) => ({ ...prev, [field]: value }))
-    },
-    []
-  )
 
   /**
    * Guardar + Activar: Persists the local state (profile, event, profile names,
@@ -216,14 +134,14 @@ export default function ImprimirView(): JSX.Element {
         eventos
       }
 
-      // Build precios payload
+      // Use precios from config (managed in Settings)
       const preciosUpdate: PreciosConfig = {
-        tarifaA: localPrecios.tarifaA,
-        tarifaA2: localPrecios.tarifaA2,
-        tarifaB: localPrecios.tarifaB,
-        tarifaC: localPrecios.tarifaC,
-        tarifaTA: localPrecios.tarifaTA,
-        tarifaT4: localPrecios.tarifaT4
+        tarifaA: config.precios.tarifaA,
+        tarifaA2: config.precios.tarifaA2,
+        tarifaB: config.precios.tarifaB,
+        tarifaC: config.precios.tarifaC,
+        tarifaTA: config.precios.tarifaTA,
+        tarifaT4: config.precios.tarifaT4
       }
 
       await updateImprimir({ sello: selloUpdate, precios: preciosUpdate })
@@ -237,7 +155,7 @@ export default function ImprimirView(): JSX.Element {
     } finally {
       setSaving(false)
     }
-  }, [config, selectedPerfil, selectedEvento, localProfileNames, localPrecios, updateImprimir, navigate])
+  }, [config, selectedPerfil, selectedEvento, localProfileNames, updateImprimir, navigate])
 
   if (!config) {
     return (
@@ -263,16 +181,9 @@ export default function ImprimirView(): JSX.Element {
           <p className="text-red-600 text-sm">{saveError}</p>
         )}
         <p className="text-gray-500 text-2xl font-bold text-center">
-          PERFIL - EVENTOS - TARIFAS
+          EVENTOS
         </p>
       </div>
-
-      {/* Profile section */}
-      <PerfilSection
-        sello={config.sello}
-        selectedPerfil={selectedPerfil}
-        onPerfilChange={handlePerfilChange}
-      />
 
       {/* Event section - select active event by year */}
       <EventoSection
@@ -286,44 +197,6 @@ export default function ImprimirView(): JSX.Element {
       <EventoEditor
         onEventosChanged={handleEventosChanged}
       />
-
-      {/* Tariff groups section - list and manage tariff groups */}
-      <TariffGroupSection
-        onCreateGroup={handleCreateTariffGroup}
-        onEditGroup={handleEditTariffGroup}
-      />
-
-      {/* Tariff group editor - create/edit form */}
-      {showTariffGroupEditor && (
-        <TariffGroupEditor
-          group={editingTariffGroup}
-          onSave={handleTariffGroupSave}
-          onCancel={handleTariffGroupCancel}
-        />
-      )}
-
-      {/* Profiles name editor (collapsible) */}
-      <PerfilesSection
-        sello={{
-          ...config.sello,
-          nperfil1: localProfileNames[1],
-          nperfil2: localProfileNames[2],
-          nperfil3: localProfileNames[3],
-          nperfil4: localProfileNames[4],
-          nperfil5: localProfileNames[5],
-          nperfil6: localProfileNames[6]
-        }}
-        onProfileNameChange={handleProfileNameChange}
-      />
-
-      {/* Tariff prices editor (collapsible) */}
-      <TarifaSection
-        precios={localPrecios}
-        onPreciosChange={handlePreciosChange}
-      />
-
-      {/* Printer management section */}
-      <PrinterSection />
 
       {/* Footer buttons */}
       <div className="flex justify-center gap-4 p-4">

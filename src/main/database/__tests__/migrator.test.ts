@@ -217,13 +217,14 @@ describe('database/migrator', () => {
         '003_image_sync.sql',
         '004_eventos_table.sql',
         '005_tariff_groups.sql',
-        '006_tariff_types_and_settings.sql'
+        '006_tariff_types_and_settings.sql',
+        '007_tariff_groups_restructure.sql'
       ])
 
       // Verify expected tables exist
       const tables = db
         .prepare(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('config', 'orders', 'images', 'print_queue', 'sync_log', 'printer_assignments', 'image_sync', 'eventos', 'tariff_groups', 'tariffs')"
+          "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('config', 'orders', 'images', 'print_queue', 'sync_log', 'printer_assignments', 'image_sync', 'eventos', 'tariff_groups', 'tariffs', 'strip_tariffs')"
         )
         .all() as Array<{ name: string }>
       const tableNames = tables.map((t) => t.name).sort()
@@ -235,6 +236,7 @@ describe('database/migrator', () => {
         'orders',
         'print_queue',
         'printer_assignments',
+        'strip_tariffs',
         'sync_log',
         'tariff_groups',
         'tariffs'

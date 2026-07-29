@@ -253,19 +253,37 @@ export interface EventoInput {
 
 // === Tariff Group Types ===
 
+export type TariffType = 'individual' | 'strip'
+
 export interface Tariff {
   id?: number
   name: string
-  price: number
+  description: string
+  local_price: number
+  secondary_price: number
   position: number
+  type: TariffType
+}
+
+export interface Strip {
+  id?: number
+  name: string
+  description: string
+  local_price: number
+  secondary_price: number
+  position: number
+  type: 'strip'
+  tariff_ids: number[]
 }
 
 export interface TariffGroup {
   id: number
   year: number
   title: string
-  currency: string
+  local_currency: string
+  complementary_currency: string
   tariffs: Tariff[]
+  strips: Strip[]
   created_at: string
   updated_at: string
 }
@@ -273,31 +291,48 @@ export interface TariffGroup {
 export interface TariffGroupInput {
   year: number
   title: string
-  currency: string
+  local_currency: string
+  complementary_currency: string
   tariffs: TariffInput[]
+  strips: StripInput[]
 }
 
 export interface TariffInput {
   name: string
-  price: number
+  description: string
+  local_price: number
+  secondary_price: number
   position: number
+}
+
+export interface StripInput {
+  name: string
+  description: string
+  local_price: number
+  secondary_price: number
+  position: number
+  tariff_ids: number[]
 }
 
 export interface TariffGroupUpdateInput {
   year?: number
   title?: string
-  currency?: string
+  local_currency?: string
+  complementary_currency?: string
   tariffs: TariffInput[]
+  strips: StripInput[]
 }
 
 // === ElectronAPI Interface ===
 
 // === Sale Image Flags ===
 
-/** Flags passed from frontend to control image layer composition during PDF generation */
+/** Flags passed from frontend to control image layer composition and pricing during PDF generation */
 export interface SaleImageFlags {
   printFondo: boolean
   printSello: boolean
+  /** When true, ticket amounts use secondary_price instead of local_price */
+  useSecondaryPrice?: boolean
 }
 
 // === ElectronAPI Interface ===

@@ -1,10 +1,12 @@
 /**
  * TariffTableSplit.tsx
  *
- * Tariff table with a shared center tariff column:
- * - Left: Sello A (Modelo 1 / printer 1) — Límite, Cantidad, Subtotal
- * - Center: Tarifa name + price (shared, displayed once)
- * - Right: Sello B (Modelo 2 / printer 2) — Límite, Cantidad, Subtotal
+ * Unified tariff panel — one solid block with mirrored columns:
+ *   Subtotal | Límite | Cantidad | [ Modalidad · Precio ] | Cantidad | Límite | Subtotal
+ *
+ * Left = Sello A (Modelo 1), Right = Sello B (Modelo 2).
+ * Tiras (strips) are shown first, then individual tariffs.
+ * A toggle on the price lets the user switch between local and secondary price.
  */
 
 import { useMemo, useCallback } from 'react'
@@ -12,16 +14,20 @@ import { useConfigStore } from '@renderer/stores/config.store'
 import { useKioskoStore } from '@renderer/stores/kiosko.store'
 import type { KioskoQuantities, KioskoLimits } from '@renderer/lib/tariff-calc'
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 interface TariffRowDef {
   label: string
-  price: number
+  localPrice: number
+  secondaryPrice: number
   qtyFieldS1: keyof KioskoQuantities
   qtyFieldS2: keyof KioskoQuantities
   limitFieldS1: keyof KioskoLimits
   limitFieldS2: keyof KioskoLimits
-  highlighted?: boolean
-  bgClass?: string
+  isStrip: boolean
 }
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function TariffTableSplit(): JSX.Element {
   const config = useConfigStore((state) => state.config)
@@ -30,6 +36,10 @@ export default function TariffTableSplit(): JSX.Element {
   const getLimits = useKioskoStore((state) => state.getLimits)
 
   const quantities = rawQuantities as unknown as KioskoQuantities
+
+  // Toggle: read from store (syncs with CartControls for printing)
+  const showSecondary = useKioskoStore((state) => state.useSecondaryPrice)
+  const setUseSecondaryPrice = useKioskoStore((state) => state.setUseSecondaryPrice)
 
   const precios = config?.precios
   const tarifaA = precios?.tarifaA ?? 0
@@ -50,61 +60,69 @@ export default function TariffTableSplit(): JSX.Element {
     return getLimits(config.precios, config.ticket, config.sello)
   }, [config, quantities, getLimits])
 
+  // Row definitions — strips first, then individual
   const rows: TariffRowDef[] = useMemo(() => [
+    // ─── Tiras (strips) ───
     {
       label: 'Tira A×4',
-      price: tarifaTA,
+      localPrice: tarifaTA,
+      secondaryPrice: tarifaTA, // strips don't have secondary in static mode
       qtyFieldS1: 'tarifaAT1',
       qtyFieldS2: 'tarifaAT2',
       limitFieldS1: 'limiteAT1',
       limitFieldS2: 'limiteAT2',
-      bgClass: 'bg-gray-50'
+      isStrip: true
     },
     {
       label: 'Tira 4 Tar.',
-      price: tarifaT4,
+      localPrice: tarifaT4,
+      secondaryPrice: tarifaT4,
       qtyFieldS1: 'tarifa4T1',
       qtyFieldS2: 'tarifa4T2',
       limitFieldS1: 'limite4T1',
       limitFieldS2: 'limite4T2',
-      highlighted: true,
-      bgClass: 'bg-[rgb(24,62,117)]'
+      isStrip: true
     },
+    // ─── Individual tariffs ───
     {
       label: 'Tarifa A',
-      price: tarifaA,
+      localPrice: tarifaA,
+      secondaryPrice: tarifaA,
       qtyFieldS1: 'tarifaAS1',
       qtyFieldS2: 'tarifaAS2',
       limitFieldS1: 'limiteAS1',
       limitFieldS2: 'limiteAS2',
-      bgClass: 'bg-[rgb(255,192,0)]'
+      isStrip: false
     },
     {
       label: 'Tarifa A2',
-      price: tarifaA2,
+      localPrice: tarifaA2,
+      secondaryPrice: tarifaA2,
       qtyFieldS1: 'tarifaA2S1',
       qtyFieldS2: 'tarifaA2S2',
       limitFieldS1: 'limiteA2S1',
       limitFieldS2: 'limiteA2S2',
-      bgClass: 'bg-gray-50'
+      isStrip: false
     },
     {
       label: 'Tarifa B',
-      price: tarifaB,
+      localPrice: tarifaB,
+      secondaryPrice: tarifaB,
       qtyFieldS1: 'tarifaBS1',
       qtyFieldS2: 'tarifaBS2',
       limitFieldS1: 'limiteBS1',
       limitFieldS2: 'limiteBS2',
-      bgClass: 'bg-gray-50'
+      isStrip: false
     },
     {
       label: 'Tarifa C',
-      price: tarifaC,
+      localPrice: tarifaC,
+      secondaryPrice: tarifaC,
       qtyFieldS1: 'tarifaCS1',
       qtyFieldS2: 'tarifaCS2',
       limitFieldS1: 'limiteCS1',
       limitFieldS2: 'limiteCS2',
-      bgClass: 'bg-gray-50'
+      isStrip: false
     }
   ], [tarifaTA, tarifaT4, tarifaA, tarifaA2, tarifaB, tarifaC])
 
@@ -116,133 +134,127 @@ export default function TariffTableSplit(): JSX.Element {
     [setQuantity]
   )
 
+  const togglePrice = useCallback(() => {
+    setUseSecondaryPrice(!showSecondary)
+  }, [showSecondary, setUseSecondaryPrice])
+
   return (
-    <div className="flex gap-0" role="table" aria-label="Tabla de tarifas dividida por sello">
-      {/* ─── SELLO A (Modelo 1) ─── */}
-      <div className="flex-1 border border-blue-200 rounded-l-lg overflow-hidden">
-        <div className="bg-[rgb(24,62,117)] text-white text-center py-1 text-sm font-bold">
-          SELLO A — Modelo 1
+    <div
+      className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden"
+      role="table"
+      aria-label="Tabla de tarifas"
+    >
+      {/* ─── Header row ─── */}
+      <div className="grid grid-cols-[1fr_1fr_1.2fr_2fr_1.2fr_1fr_1fr] bg-gray-100 border-b border-gray-300">
+        <div className="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wide">
+          Subtotal
         </div>
-        {/* Header */}
-        <div className="flex items-center text-center text-[10px] font-semibold text-gray-500 py-1 border-b border-gray-200 px-1">
-          <div className="w-[30%]">Límite</div>
-          <div className="w-[40%]">Cantidad</div>
-          <div className="w-[30%]">Subtotal</div>
+        <div className="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wide">
+          Límite
         </div>
-        {/* Rows */}
-        {rows.map((row) => {
-          const qty = quantities[row.qtyFieldS1]
-          const limit = limits[row.limitFieldS1]
-          const subtotal = row.price * qty
-          const isHL = row.highlighted
-          const textClass = isHL ? 'text-white' : ''
-          const inputClass = isHL
-            ? 'bg-[rgb(24,62,117)] text-white border-gray-500'
-            : 'border-gray-300 text-black'
-          const textSize = isHL ? 'text-xl' : 'text-base'
-
-          return (
-            <div
-              key={row.qtyFieldS1}
-              className={`flex items-center text-center py-1.5 px-1 ${row.bgClass} ${textClass}`}
-              role="row"
-              aria-label={`${row.label} Sello A`}
-            >
-              <div className="w-[30%] text-sm font-medium">{limit}</div>
-              <div className="w-[40%]">
-                <input
-                  type="number"
-                  min="0"
-                  value={qty}
-                  onChange={handleChange(row.qtyFieldS1)}
-                  className={`w-14 text-center border rounded py-0.5 ${textSize} ${inputClass}`}
-                  aria-label={`Cantidad ${row.label} Sello A`}
-                />
-              </div>
-              <div className="w-[30%] text-xs font-medium">
-                {subtotal > 0 ? `${subtotal.toFixed(2)}€` : '—'}
-              </div>
-            </div>
-          )
-        })}
+        <div className="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wide">
+          Cantidad
+        </div>
+        <div className="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wide">
+          Modalidad
+        </div>
+        <div className="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wide">
+          Cantidad
+        </div>
+        <div className="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wide">
+          Límite
+        </div>
+        <div className="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wide">
+          Subtotal
+        </div>
       </div>
 
-      {/* ─── TARIFA (Centro, compartida) ─── */}
-      <div className="w-[140px] min-w-[140px] border-y border-gray-200 overflow-hidden">
-        <div className="bg-gray-600 text-white text-center py-1 text-sm font-bold">
-          TARIFA
-        </div>
-        {/* Header spacer */}
-        <div className="flex items-center text-center text-[10px] font-semibold text-gray-500 py-1 border-b border-gray-200 px-1">
-          <div className="w-full">Precio</div>
-        </div>
-        {/* Tariff labels */}
-        {rows.map((row) => {
-          const isHL = row.highlighted
-          const textClass = isHL ? 'text-white' : ''
-          return (
-            <div
-              key={`center-${row.label}`}
-              className={`flex items-center justify-center text-center py-1.5 px-1 ${row.bgClass} ${textClass}`}
-            >
-              <div className="text-sm">
-                <span className={`font-semibold ${isHL ? 'text-base' : ''}`}>{row.label}</span>
-                <br />
-                <span className="text-xs opacity-80">{row.price.toFixed(2)}€</span>
-              </div>
-            </div>
-          )
-        })}
-      </div>
+      {/* ─── Data rows ─── */}
+      {rows.map((row, idx) => {
+        const qtyS1 = quantities[row.qtyFieldS1]
+        const qtyS2 = quantities[row.qtyFieldS2]
+        const limitS1 = limits[row.limitFieldS1]
+        const limitS2 = limits[row.limitFieldS2]
+        const activePrice = showSecondary ? row.secondaryPrice : row.localPrice
+        const subtotalS1 = activePrice * qtyS1
+        const subtotalS2 = activePrice * qtyS2
 
-      {/* ─── SELLO B (Modelo 2) ─── */}
-      <div className="flex-1 border border-green-200 rounded-r-lg overflow-hidden">
-        <div className="bg-green-700 text-white text-center py-1 text-sm font-bold">
-          SELLO B — Modelo 2
-        </div>
-        {/* Header */}
-        <div className="flex items-center text-center text-[10px] font-semibold text-gray-500 py-1 border-b border-gray-200 px-1">
-          <div className="w-[30%]">Límite</div>
-          <div className="w-[40%]">Cantidad</div>
-          <div className="w-[30%]">Subtotal</div>
-        </div>
-        {/* Rows */}
-        {rows.map((row) => {
-          const qty = quantities[row.qtyFieldS2]
-          const limit = limits[row.limitFieldS2]
-          const subtotal = row.price * qty
-          const isHL = row.highlighted
-          const textClass = isHL ? 'text-white' : ''
-          const inputClass = isHL
-            ? 'bg-[rgb(24,62,117)] text-white border-gray-500'
-            : 'border-gray-300 text-black'
-          const textSize = isHL ? 'text-xl' : 'text-base'
+        const stripBg = row.isStrip ? 'bg-blue-50' : ''
+        const rowBorder = idx < rows.length - 1 ? 'border-b border-gray-100' : ''
 
-          return (
-            <div
-              key={row.qtyFieldS2}
-              className={`flex items-center text-center py-1.5 px-1 ${row.bgClass} ${textClass}`}
-              role="row"
-              aria-label={`${row.label} Sello B`}
-            >
-              <div className="w-[30%] text-sm font-medium">{limit}</div>
-              <div className="w-[40%]">
-                <input
-                  type="number"
-                  min="0"
-                  value={qty}
-                  onChange={handleChange(row.qtyFieldS2)}
-                  className={`w-14 text-center border rounded py-0.5 ${textSize} ${inputClass}`}
-                  aria-label={`Cantidad ${row.label} Sello B`}
-                />
-              </div>
-              <div className="w-[30%] text-xs font-medium">
-                {subtotal > 0 ? `${subtotal.toFixed(2)}€` : '—'}
-              </div>
+        return (
+          <div
+            key={row.qtyFieldS1}
+            className={`grid grid-cols-[1fr_1fr_1.2fr_2fr_1.2fr_1fr_1fr] items-center ${stripBg} ${rowBorder}`}
+            role="row"
+            aria-label={row.label}
+          >
+            {/* Subtotal Sello A */}
+            <div className="px-3 py-3 text-center text-sm font-medium text-gray-700">
+              {subtotalS1 > 0 ? `${subtotalS1.toFixed(2)}€` : '—'}
             </div>
-          )
-        })}
-      </div>
+
+            {/* Límite Sello A */}
+            <div className="px-3 py-3 text-center text-sm font-medium text-gray-600">
+              {limitS1}
+            </div>
+
+            {/* Cantidad Sello A */}
+            <div className="px-3 py-3 flex justify-center">
+              <input
+                type="number"
+                min="0"
+                value={qtyS1}
+                onChange={handleChange(row.qtyFieldS1)}
+                className="w-16 h-10 text-center text-lg font-semibold border-2 border-gray-300 rounded-lg
+                           focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-colors"
+                aria-label={`Cantidad ${row.label} Sello A`}
+              />
+            </div>
+
+            {/* Modalidad + Precio (center) */}
+            <div className="px-3 py-3 flex flex-col items-center justify-center">
+              <span className="text-base font-bold text-gray-800">{row.label}</span>
+              <button
+                type="button"
+                onClick={togglePrice}
+                className="mt-0.5 text-sm font-semibold text-blue-700 hover:text-blue-900
+                           hover:bg-blue-100 rounded px-2 py-0.5 transition-colors cursor-pointer"
+                aria-label={`Alternar precio: ${showSecondary ? 'secundario' : 'local'}`}
+                title={showSecondary ? 'Precio secundario (clic para volver a local)' : 'Precio local (clic para ver secundario)'}
+              >
+                {activePrice.toFixed(2)}€
+                <span className="ml-1 text-[10px] text-gray-500">
+                  {showSecondary ? '(sec)' : '(loc)'}
+                </span>
+              </button>
+            </div>
+
+            {/* Cantidad Sello B */}
+            <div className="px-3 py-3 flex justify-center">
+              <input
+                type="number"
+                min="0"
+                value={qtyS2}
+                onChange={handleChange(row.qtyFieldS2)}
+                className="w-16 h-10 text-center text-lg font-semibold border-2 border-gray-300 rounded-lg
+                           focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition-colors"
+                aria-label={`Cantidad ${row.label} Sello B`}
+              />
+            </div>
+
+            {/* Límite Sello B */}
+            <div className="px-3 py-3 text-center text-sm font-medium text-gray-600">
+              {limitS2}
+            </div>
+
+            {/* Subtotal Sello B */}
+            <div className="px-3 py-3 text-center text-sm font-medium text-gray-700">
+              {subtotalS2 > 0 ? `${subtotalS2.toFixed(2)}€` : '—'}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
