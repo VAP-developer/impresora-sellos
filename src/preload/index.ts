@@ -324,6 +324,10 @@ export interface ElectronAPI {
     initConfig(): Promise<void>
     getImagenes(): Promise<ImagenesConfig>
     updateImagenes(data: ImagenesConfig): Promise<void>
+    getCutNumber(): Promise<number>
+    setCutNumber(value: number): Promise<void>
+    getLanguage(): Promise<string>
+    setLanguage(value: string): Promise<void>
     onChange(callback: (config: AppConfig) => void): () => void
   }
   orders: {
@@ -412,6 +416,10 @@ const api: ElectronAPI = {
     initConfig: () => ipcRenderer.invoke('config:initConfig'),
     getImagenes: () => ipcRenderer.invoke('config:getImagenes'),
     updateImagenes: (data) => ipcRenderer.invoke('config:updateImagenes', data),
+    getCutNumber: () => ipcRenderer.invoke('config:getCutNumber'),
+    setCutNumber: (value) => ipcRenderer.invoke('config:setCutNumber', value),
+    getLanguage: () => ipcRenderer.invoke('config:getLanguage'),
+    setLanguage: (value) => ipcRenderer.invoke('config:setLanguage', value),
     onChange: (callback) => {
       const handler = (_event: Electron.IpcRendererEvent, config: AppConfig): void => {
         callback(config)

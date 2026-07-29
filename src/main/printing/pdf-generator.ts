@@ -25,6 +25,8 @@ import type { TicketItem, TicketProduct } from './ticket-renderer'
 import { ImagesRepository } from '../database/repositories/images.repository'
 import { ImageSyncRepository } from '../database/repositories/image-sync.repository'
 import { buildImageName } from '../images/sync-images'
+import { groupLabels } from './label-grouping'
+import { ConfigRepository } from '../database/repositories/config.repository'
 
 // ─── Image Layer Types ────────────────────────────────────────────────────────
 
@@ -432,6 +434,16 @@ export async function generateSalePdfs(
   const pdfs: GeneratedPdf[] = []
   const notifications: ImageLayerNotification[] = []
 
+  // Read cut number from config for label grouping
+  let cutNumber: number
+  try {
+    const configRepo = new ConfigRepository()
+    cutNumber = configRepo.getCutNumber()
+  } catch {
+    // DB not available (e.g. in unit tests) — use default
+    cutNumber = 4
+  }
+
   // Product counter starts at 1 for each new sale (resets per client/order)
   let productoCounter = 1
 
@@ -502,13 +514,17 @@ export async function generateSalePdfs(
           })
           productoCounter++
         }
-        const pdfBuffer = await renderStampMultiPage(stamps)
-        pdfs.push({
-          buffer: pdfBuffer,
-          target: 'printer1',
-          pdfType: 'stamp_simple',
-          description: `${tariff.name} modelo1 x${qty1}`
-        })
+        // Group stamps by cutNumber — each group becomes a separate PDF with cut marks between groups
+        const groups = groupLabels(stamps, cutNumber)
+        for (const group of groups) {
+          const pdfBuffer = await renderStampMultiPage(group)
+          pdfs.push({
+            buffer: pdfBuffer,
+            target: 'printer1',
+            pdfType: 'stamp_simple',
+            description: `${tariff.name} modelo1 x${group.length}`
+          })
+        }
       }
 
       // Model 2 (printer2)
@@ -529,13 +545,17 @@ export async function generateSalePdfs(
           })
           productoCounter++
         }
-        const pdfBuffer = await renderStampMultiPage(stamps)
-        pdfs.push({
-          buffer: pdfBuffer,
-          target: 'printer2',
-          pdfType: 'stamp_simple',
-          description: `${tariff.name} modelo2 x${qty2}`
-        })
+        // Group stamps by cutNumber — each group becomes a separate PDF with cut marks between groups
+        const groups = groupLabels(stamps, cutNumber)
+        for (const group of groups) {
+          const pdfBuffer = await renderStampMultiPage(group)
+          pdfs.push({
+            buffer: pdfBuffer,
+            target: 'printer2',
+            pdfType: 'stamp_simple',
+            description: `${tariff.name} modelo2 x${group.length}`
+          })
+        }
       }
     }
   } else {
@@ -601,8 +621,8 @@ export async function generateSalePdfs(
           })
         }
       } else {
-        // Simple stamps: group all stamps of same tariff/model into one multi-page PDF
-        // so the printer prints them as a continuous strip without cutting between them.
+        // Simple stamps: group all stamps of same tariff/model, then split by cutNumber.
+        // Each group becomes a separate multi-page PDF (with cut marks between groups).
         const stamps: StampRenderParams[] = []
         for (let i = 0; i < qty; i++) {
           stamps.push({
@@ -616,13 +636,17 @@ export async function generateSalePdfs(
           productoCounter++
         }
 
-        const pdfBuffer = await renderStampMultiPage(stamps)
-        pdfs.push({
-          buffer: pdfBuffer,
-          target: tariff.target,
-          pdfType: 'stamp_simple',
-          description: `${tariff.label} modelo${tariff.model} x${qty}`
-        })
+        // Group stamps by cutNumber — each group becomes a separate PDF
+        const groups = groupLabels(stamps, cutNumber)
+        for (const group of groups) {
+          const pdfBuffer = await renderStampMultiPage(group)
+          pdfs.push({
+            buffer: pdfBuffer,
+            target: tariff.target,
+            pdfType: 'stamp_simple',
+            description: `${tariff.label} modelo${tariff.model} x${group.length}`
+          })
+        }
       }
     }
   }

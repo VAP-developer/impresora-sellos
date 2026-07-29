@@ -1,5 +1,5 @@
 import { handleIpc, notifyConfigChanged } from './handlers'
-import { ConfigRepository } from '../database/repositories/config.repository'
+import { ConfigRepository, type AppLanguage } from '../database/repositories/config.repository'
 
 /**
  * Registers IPC handlers for configuration management.
@@ -15,6 +15,10 @@ import { ConfigRepository } from '../database/repositories/config.repository'
  * - config:initConfig
  * - config:getImagenes
  * - config:updateImagenes
+ * - config:getCutNumber
+ * - config:setCutNumber
+ * - config:getLanguage
+ * - config:setLanguage
  */
 export function registerConfigHandlers(): void {
   const repo = new ConfigRepository()
@@ -64,5 +68,21 @@ export function registerConfigHandlers(): void {
 
   handleIpc('config:updateImagenes', (data: unknown) => {
     repo.updateImagenes(data as Parameters<ConfigRepository['updateImagenes']>[0])
+  })
+
+  handleIpc('config:getCutNumber', () => {
+    return repo.getCutNumber()
+  })
+
+  handleIpc('config:setCutNumber', (value: unknown) => {
+    repo.setCutNumber(value as number)
+  })
+
+  handleIpc('config:getLanguage', () => {
+    return repo.getLanguage()
+  })
+
+  handleIpc('config:setLanguage', (value: unknown) => {
+    repo.setLanguage(value as AppLanguage)
   })
 }

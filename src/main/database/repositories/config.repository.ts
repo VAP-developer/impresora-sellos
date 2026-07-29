@@ -1,6 +1,23 @@
 import Database from 'better-sqlite3'
 import { getDatabase } from '../connection'
 
+// === Settings Types ===
+
+/** Supported application languages */
+export type AppLanguage = 'es' | 'en'
+
+/** Global settings managed through the SettingsView */
+export interface GlobalSettings {
+  cutNumber: number     // 2-16, default 4
+  language: AppLanguage // 'es' | 'en', default 'es'
+}
+
+/** Error constants for config validation */
+export const CONFIG_ERRORS = {
+  CUT_NUMBER_OUT_OF_RANGE: 'El número de corte debe estar entre 2 y 16',
+  INVALID_LANGUAGE: 'El idioma debe ser "es" o "en"',
+} as const
+
 // === Config Types (replican la estructura MongoDB del legacy) ===
 
 export interface TicketConfig {
@@ -94,6 +111,7 @@ export interface AppConfig {
   sello: SelloConfig
   precios: PreciosConfig
   imagenes?: ImagenesConfig
+  settings?: GlobalSettings
 }
 
 // Default configuration (replicates legacy Meteor initConfig) 
@@ -355,6 +373,58 @@ export class ConfigRepository {
   resetConfig(): void {
     this.db.prepare('DELETE FROM config').run()
     this.set(structuredClone(DEFAULT_CONFIG))
+  }
+
+  // === Settings Methods ===
+
+  /**
+   * Get the cut number from config settings, returns default 4 if unset.
+   */
+  getCutNumber(): number {
+    const config = this.get()
+    return config?.settings?.cutNumber ?? 4
+  }
+
+  /**
+   * Set the cut number (validated 2-16 range).
+   */
+  setCutNumber(value: number): void {
+    if (value < 2 || value > 16 || !Number.isInteger(value)) {
+      throw new Error(CONFIG_ERRORS.CUT_NUMBER_OUT_OF_RANGE)
+    }
+
+    const config = this.get()
+    if (!config) {
+      throw new Error('Config not initialized. Call initConfig() first.')
+    }
+
+    config.settings = { ...config.settings, cutNumber: value, language: config.settings?.language ?? 'es' }
+    this.set(config)
+  }
+
+  /**
+   * Get the active language, returns default 'es' if unset.
+   */
+  getLanguage(): AppLanguage {
+    const config = this.get()
+    return config?.settings?.language ?? 'es'
+  }
+
+  /**
+   * Set the active language (validated 'es' | 'en').
+   */
+  setLanguage(value: AppLanguage): void {
+    if (value !== 'es' && value !== 'en') {
+      throw new Error(CONFIG_ERRORS.INVALID_LANGUAGE)
+    }
+
+    const config = this.get()
+    if (!config) {
+      throw new Error('Config not initialized. Call initConfig() first.')
+    }
+
+    config.settings = { ...config.settings, cutNumber: config.settings?.cutNumber ?? 4, language: value }
+    this.set(config)
   }
 }
 

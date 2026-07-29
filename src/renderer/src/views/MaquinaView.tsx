@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useConfigStore } from '@renderer/stores/config.store'
 import * as ipc from '@renderer/lib/ipc-client'
 import { downloadCSV } from '@renderer/lib/ipc-client'
@@ -28,6 +29,7 @@ import ImageConfig from '@renderer/components/images/ImageConfig'
 
 export default function MaquinaView(): JSX.Element {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const { config, loading, error: storeError, loadConfig, updateMaquina } = useConfigStore()
 
   // Local form state for pending changes (not yet persisted)
@@ -175,7 +177,7 @@ export default function MaquinaView(): JSX.Element {
     <div className="p-4 bg-gray-100 min-h-screen">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2">
-        <h1 className="text-black text-[25px] font-bold text-center m-0">Máquina</h1>
+        <h1 className="text-black text-[25px] font-bold text-center m-0">{t('views.machine')}</h1>
         <button
           type="button"
           className="bg-gray-400 text-white px-4 py-2 rounded font-semibold hover:bg-gray-500

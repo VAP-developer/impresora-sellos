@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@renderer/lib/utils'
 
 /**
@@ -18,6 +19,7 @@ export default function NavComponent(): JSX.Element {
   const [showPopup, setShowPopup] = useState(false)
   const popupRef = useRef<HTMLDivElement>(null)
   const location = useLocation()
+  const { t } = useTranslation()
 
   const togglePopup = useCallback(() => {
     setShowPopup((prev) => !prev)
@@ -47,10 +49,10 @@ export default function NavComponent(): JSX.Element {
             'flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded transition-colors',
             isActive('/home') ? 'bg-yellow-500/50' : 'hover:bg-yellow-500/30'
           )}
-          aria-label="Inicio"
+          aria-label={t('nav.home')}
         >
           <HomeIcon />
-          <span className="text-sm font-semibold text-gray-800 hidden sm:inline">Inicio</span>
+          <span className="text-sm font-semibold text-gray-800 hidden sm:inline">{t('nav.home')}</span>
         </Link>
 
         <div className="flex-1" />
@@ -62,10 +64,10 @@ export default function NavComponent(): JSX.Element {
             'flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded transition-colors',
             isActive('/imprimir') ? 'bg-yellow-500/50' : 'hover:bg-yellow-500/30'
           )}
-          aria-label="Configuración de impresión"
+          aria-label={t('nav.print')}
         >
           <PrinterIcon />
-          <span className="text-sm font-semibold text-gray-800 hidden sm:inline">Imprimir</span>
+          <span className="text-sm font-semibold text-gray-800 hidden sm:inline">{t('nav.print')}</span>
         </Link>
 
         <div className="flex-1" />
@@ -141,13 +143,29 @@ export default function NavComponent(): JSX.Element {
             'flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded transition-colors',
             isActive('/maquina') ? 'bg-yellow-500/50' : 'hover:bg-yellow-500/30'
           )}
-          aria-label="Configuración de máquina"
+          aria-label={t('nav.machine')}
         >
           <MachineIcon />
-          <span className="text-sm font-semibold text-gray-800 hidden sm:inline">Máquina</span>
+          <span className="text-sm font-semibold text-gray-800 hidden sm:inline">{t('nav.machine')}</span>
         </Link>
 
         <div className="flex-1" />
+
+        {/* Settings link */}
+        <Link
+          to="/settings"
+          className={cn(
+            'flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded transition-colors',
+            isActive('/settings') ? 'bg-yellow-500/50' : 'hover:bg-yellow-500/30'
+          )}
+          aria-label={t('nav.settings')}
+        >
+          <SettingsIcon />
+          <span className="text-sm font-semibold text-gray-800 hidden sm:inline">
+            {t('nav.settings')}
+          </span>
+        </Link>
+
         <div className="flex-1" />
 
         {/* Right: Kiosko link */}
@@ -157,9 +175,9 @@ export default function NavComponent(): JSX.Element {
             'flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded transition-colors',
             isActive('/kiosko') ? 'bg-yellow-500/50' : 'hover:bg-yellow-500/30'
           )}
-          aria-label="Kiosko de venta"
+          aria-label={t('nav.kiosko')}
         >
-          <span className="text-sm font-semibold text-gray-800 hidden sm:inline">Kiosko</span>
+          <span className="text-sm font-semibold text-gray-800 hidden sm:inline">{t('nav.kiosko')}</span>
           <KioskoIcon />
         </Link>
       </nav>
@@ -272,6 +290,25 @@ function KioskoIcon(): JSX.Element {
       <line x1="8" y1="21" x2="16" y2="21" />
       <line x1="12" y1="17" x2="12" y2="21" />
       <path d="M6 8h.01M9 8h.01" />
+    </svg>
+  )
+}
+
+function SettingsIcon(): JSX.Element {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className="w-7 h-7 text-gray-800"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
     </svg>
   )
 }

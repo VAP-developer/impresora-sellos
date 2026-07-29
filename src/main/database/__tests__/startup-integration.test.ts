@@ -155,12 +155,13 @@ describe('App Startup Integration: DB creation + migrations + config seeding', (
 
     // The migration should only be recorded once per migration file
     const history = getMigrationHistory(db)
-    expect(history).toHaveLength(5)
+    expect(history).toHaveLength(6)
     expect(history[0].name).toBe('001_initial.sql')
     expect(history[1].name).toBe('002_printer_assignments.sql')
     expect(history[2].name).toBe('003_image_sync.sql')
     expect(history[3].name).toBe('004_eventos_table.sql')
     expect(history[4].name).toBe('005_tariff_groups.sql')
+    expect(history[5].name).toBe('006_tariff_types_and_settings.sql')
   })
 
   it('should enable WAL journal mode for performance', () => {

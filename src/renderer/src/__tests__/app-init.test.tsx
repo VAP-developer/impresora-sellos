@@ -223,7 +223,7 @@ describe('App initialization – stores load correctly', () => {
     render(<App />)
 
     await waitFor(() => {
-      expect(screen.getByText('Home')).toBeInTheDocument()
+      expect(screen.getByText('CONFIGURACIÓN')).toBeInTheDocument()
     })
   })
 
@@ -312,7 +312,7 @@ describe('App initialization – stores load correctly', () => {
 
     // App should still render even if printer status fails
     await waitFor(() => {
-      expect(screen.getByText('Home')).toBeInTheDocument()
+      expect(screen.getByText('CONFIGURACIÓN')).toBeInTheDocument()
     })
 
     // Config loads fine

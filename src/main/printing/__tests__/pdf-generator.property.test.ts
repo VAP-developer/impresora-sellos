@@ -33,6 +33,15 @@ vi.mock('../../database/repositories/images.repository', () => ({
   }
 }))
 
+// Mock the ConfigRepository to provide a known cutNumber for label grouping
+vi.mock('../../database/repositories/config.repository', () => ({
+  ConfigRepository: class MockConfigRepository {
+    getCutNumber(): number {
+      return 4
+    }
+  }
+}))
+
 import { generateSalePdfs } from '../pdf-generator'
 import type { SaleQuantities, GeneratedPdf } from '../pdf-generator'
 import { setTestFontsPath, setTestImagesPath } from '../stamp-renderer'
@@ -243,7 +252,7 @@ describe('Property 7: Generación correcta de PDFs por venta', () => {
       expect(result.stampCount).toBe(0)
     })
 
-    it('for simple tariffs: generates exactly one PDF per tariff/model with qty > 0', async () => {
+    it('for simple tariffs: generates PDFs grouped by cutNumber per tariff/model with qty > 0', async () => {
       await fc.assert(
         fc.asyncProperty(
           fc.record({
@@ -265,10 +274,12 @@ describe('Property 7: Generación correcta de PDFs por venta', () => {
 
             const simplePdfs = result.pdfs.filter((p) => p.pdfType === 'stamp_simple')
 
-            // Total simple PDFs = number of tariff/model combinations with qty > 0
-            const expectedSimpleCount = SIMPLE_KEYS.filter(
-              (key) => quantities[key] > 0
-            ).length
+            // With cutNumber=4, each tariff/model produces ⌈qty/4⌉ PDFs
+            const cutNumber = 4
+            const expectedSimpleCount = SIMPLE_KEYS.reduce(
+              (sum, key) => sum + (quantities[key] > 0 ? Math.ceil(quantities[key] / cutNumber) : 0),
+              0
+            )
             expect(simplePdfs).toHaveLength(expectedSimpleCount)
           }
         ),

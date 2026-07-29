@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { RouterProvider } from 'react-router-dom'
 import { useConfigStore } from '@renderer/stores/config.store'
 import { usePrinterStore } from '@renderer/stores/printer.store'
+import { useSettingsStore } from '@renderer/stores/settings.store'
 import { router } from './router'
 
 function App(): JSX.Element {
@@ -14,6 +15,7 @@ function App(): JSX.Element {
   useEffect(() => {
     loadConfig()
     fetchStatus()
+    useSettingsStore.getState().loadSettings()
   }, [loadConfig, fetchStatus])
 
   if (loading) {

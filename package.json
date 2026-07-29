@@ -36,10 +36,12 @@
     "better-sqlite3": "^12.11.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "i18next": "^26.3.6",
     "pdf-lib": "^1.17.1",
     "pdf-to-printer": "^5.8.0",
     "pdfkit": "^0.19.1",
     "react-easy-crop": "^6.0.2",
+    "react-i18next": "^17.0.11",
     "react-router-dom": "^7.18.0",
     "tailwind-merge": "^3.6.0",
     "zustand": "^5.0.14"

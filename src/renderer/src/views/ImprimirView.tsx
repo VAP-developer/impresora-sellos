@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useConfigStore } from '@renderer/stores/config.store'
 import type { PreciosConfig, SelloConfig } from '@renderer/types/config'
 import type { EventoRow, TariffGroup } from '@renderer/lib/ipc-client'
@@ -18,6 +19,7 @@ export default function ImprimirView(): JSX.Element {
   const config = useConfigStore((s) => s.config)
   const updateImprimir = useConfigStore((s) => s.updateImprimir)
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
@@ -249,7 +251,7 @@ export default function ImprimirView(): JSX.Element {
     <div className="p-4 min-h-screen">
       {/* Header */}
       <div className="flex flex-col items-center gap-2 mb-4">
-        <p className="text-black text-2xl font-bold text-center">CONFIGURACIÓN</p>
+        <p className="text-black text-2xl font-bold text-center">{t('views.print').toUpperCase()}</p>
         <button
           onClick={handleSave}
           disabled={saving}

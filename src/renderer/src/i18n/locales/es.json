@@ -1,0 +1,61 @@
+{
+  "nav": {
+    "home": "Inicio",
+    "print": "Imprimir",
+    "machine": "Máquina",
+    "kiosko": "Kiosko",
+    "settings": "Configuración"
+  },
+  "views": {
+    "home": "Inicio",
+    "print": "Configuración",
+    "machine": "Máquina",
+    "kiosko": "Kiosko"
+  },
+  "settings": {
+    "title": "Configuración",
+    "tariffGroups": "Grupos de Tarifas",
+    "cutNumber": "Número de Corte",
+    "language": "Idioma",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "year": "Año",
+    "groupTitle": "Título",
+    "currency": "Moneda",
+    "name": "Nombre",
+    "price": "Precio",
+    "type": "Tipo",
+    "individual": "Individual",
+    "strip": "Tira",
+    "stripCount": "Nº etiquetas",
+    "addTariff": "Añadir tarifa",
+    "addStrip": "Añadir tira",
+    "removeTariff": "Eliminar",
+    "createGroup": "Crear grupo",
+    "editGroup": "Editar grupo",
+    "deleteGroup": "Eliminar grupo",
+    "confirmDelete": "¿Eliminar este grupo de tarifas?",
+    "noGroups": "No hay grupos de tarifas configurados",
+    "position": "Posición"
+  },
+  "validation": {
+    "nameRequired": "El nombre es obligatorio",
+    "nameTooLong": "El nombre no puede exceder 16 caracteres",
+    "pricePositive": "El precio debe ser un número positivo",
+    "cutNumberMin": "El valor mínimo es 2",
+    "cutNumberMax": "El valor máximo es 16",
+    "minTariffs": "Se requieren al menos 2 tarifas individuales",
+    "maxTariffs": "El máximo permitido es 20 tarifas individuales",
+    "stripCountMin": "Una tira debe abarcar al menos 2 tarifas individuales",
+    "stripCountMax": "La tira no puede abarcar más tarifas de las existentes",
+    "yearDuplicate": "Ya existe un grupo para ese año",
+    "yearRequired": "El año es obligatorio",
+    "titleRequired": "El título es obligatorio"
+  },
+  "errors": {
+    "loadFailed": "Error al cargar la configuración",
+    "saveFailed": "Error al guardar",
+    "deleteFailed": "Error al eliminar",
+    "groupInUse": "No se puede eliminar: el grupo está asociado a eventos"
+  }
+}

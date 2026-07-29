@@ -1,0 +1,61 @@
+{
+  "nav": {
+    "home": "Home",
+    "print": "Print",
+    "machine": "Machine",
+    "kiosko": "Kiosk",
+    "settings": "Settings"
+  },
+  "views": {
+    "home": "Home",
+    "print": "Configuration",
+    "machine": "Machine",
+    "kiosko": "Kiosk"
+  },
+  "settings": {
+    "title": "Settings",
+    "tariffGroups": "Tariff Groups",
+    "cutNumber": "Cut Number",
+    "language": "Language",
+    "save": "Save",
+    "cancel": "Cancel",
+    "year": "Year",
+    "groupTitle": "Title",
+    "currency": "Currency",
+    "name": "Name",
+    "price": "Price",
+    "type": "Type",
+    "individual": "Individual",
+    "strip": "Strip",
+    "stripCount": "Label count",
+    "addTariff": "Add tariff",
+    "addStrip": "Add strip",
+    "removeTariff": "Remove",
+    "createGroup": "Create group",
+    "editGroup": "Edit group",
+    "deleteGroup": "Delete group",
+    "confirmDelete": "Delete this tariff group?",
+    "noGroups": "No tariff groups configured",
+    "position": "Position"
+  },
+  "validation": {
+    "nameRequired": "Name is required",
+    "nameTooLong": "Name cannot exceed 16 characters",
+    "pricePositive": "Price must be a positive number",
+    "cutNumberMin": "Minimum value is 2",
+    "cutNumberMax": "Maximum value is 16",
+    "minTariffs": "At least 2 individual tariffs are required",
+    "maxTariffs": "Maximum allowed is 20 individual tariffs",
+    "stripCountMin": "A strip must include at least 2 individual tariffs",
+    "stripCountMax": "Strip cannot include more tariffs than available",
+    "yearDuplicate": "A group already exists for that year",
+    "yearRequired": "Year is required",
+    "titleRequired": "Title is required"
+  },
+  "errors": {
+    "loadFailed": "Failed to load settings",
+    "saveFailed": "Failed to save",
+    "deleteFailed": "Failed to delete",
+    "groupInUse": "Cannot delete: group is associated with events"
+  }
+}

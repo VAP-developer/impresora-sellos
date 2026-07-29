@@ -1,6 +1,13 @@
 import { createHashRouter, Navigate } from 'react-router-dom'
 import MainLayout from './components/layout/MainLayout'
-import { HomeView, KioskoView, MaquinaView, ImprimirView, SubirImagenView } from './views'
+import {
+  HomeView,
+  KioskoView,
+  MaquinaView,
+  ImprimirView,
+  SubirImagenView,
+  SettingsView
+} from './views'
 
 export const router = createHashRouter([
   {
@@ -30,6 +37,10 @@ export const router = createHashRouter([
       {
         path: 'subir-imagen',
         element: <SubirImagenView />
+      },
+      {
+        path: 'settings',
+        element: <SettingsView />
       }
     ]
   }

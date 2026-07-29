@@ -3,11 +3,16 @@ import { getDatabase } from '../connection'
 
 // === Tariff Group Types ===
 
+/** Tipo de tarifa: individual o tira */
+export type TariffType = 'individual' | 'strip'
+
 export interface Tariff {
   id?: number
   name: string
   price: number
   position: number
+  type: TariffType
+  strip_count?: number
 }
 
 export interface TariffGroup {
@@ -31,6 +36,8 @@ export interface TariffInput {
   name: string
   price: number
   position: number
+  type: TariffType
+  strip_count?: number
 }
 
 export interface TariffGroupUpdateInput {
@@ -43,9 +50,14 @@ export interface TariffGroupUpdateInput {
 // === Error Constants ===
 
 export const TARIFF_GROUP_ERRORS = {
+  DUPLICATE_YEAR: 'Ya existe un grupo para ese año',
   DUPLICATE_YEAR_TITLE: 'Ya existe un grupo con ese año y título',
   MIN_TARIFFS: 'Se requieren al menos 2 tarifas',
   MAX_TARIFFS: 'El máximo permitido es 10 tarifas',
+  MIN_INDIVIDUAL_TARIFFS: 'Se requieren al menos 2 tarifas individuales',
+  MAX_INDIVIDUAL_TARIFFS: 'El máximo permitido es 20 tarifas individuales',
+  STRIP_COUNT_MIN: 'Una tira debe abarcar al menos 2 tarifas individuales',
+  STRIP_COUNT_EXCEEDS_TOTAL: 'La tira no puede abarcar más tarifas de las existentes',
   EMPTY_TITLE: 'El título es obligatorio',
   EMPTY_CURRENCY: 'El tipo de moneda es obligatorio',
   EMPTY_TARIFF_NAME: 'El nombre de la tarifa es obligatorio',
@@ -72,6 +84,8 @@ interface TariffRow {
   name: string
   price: number
   position: number
+  type: string
+  strip_count: number | null
 }
 
 /**
@@ -86,7 +100,7 @@ export class TariffGroupsRepository {
   }
 
   /**
-   * Validates tariff group input fields.
+   * Validates tariff group input fields with type-aware rules.
    * Throws an error with a descriptive message if validation fails.
    */
   private validate(input: { title?: string; currency?: string; tariffs: TariffInput[] }): void {
@@ -98,14 +112,19 @@ export class TariffGroupsRepository {
       throw new Error(TARIFF_GROUP_ERRORS.EMPTY_CURRENCY)
     }
 
-    if (input.tariffs.length < 2) {
-      throw new Error(TARIFF_GROUP_ERRORS.MIN_TARIFFS)
+    // Count individual tariffs for cardinality validation
+    const individualTariffs = input.tariffs.filter((t) => t.type === 'individual')
+    const individualCount = individualTariffs.length
+
+    if (individualCount < 2) {
+      throw new Error(TARIFF_GROUP_ERRORS.MIN_INDIVIDUAL_TARIFFS)
     }
 
-    if (input.tariffs.length > 10) {
-      throw new Error(TARIFF_GROUP_ERRORS.MAX_TARIFFS)
+    if (individualCount > 20) {
+      throw new Error(TARIFF_GROUP_ERRORS.MAX_INDIVIDUAL_TARIFFS)
     }
 
+    // Validate each tariff (both individual and strip)
     for (const tariff of input.tariffs) {
       if (!tariff.name || !tariff.name.trim()) {
         throw new Error(TARIFF_GROUP_ERRORS.EMPTY_TARIFF_NAME)
@@ -113,8 +132,23 @@ export class TariffGroupsRepository {
       if (tariff.name.length > 16) {
         throw new Error(TARIFF_GROUP_ERRORS.TARIFF_NAME_TOO_LONG)
       }
-      if (tariff.price <= 0 || typeof tariff.price !== 'number' || isNaN(tariff.price)) {
+      if (
+        typeof tariff.price !== 'number' ||
+        isNaN(tariff.price) ||
+        !isFinite(tariff.price) ||
+        tariff.price <= 0
+      ) {
         throw new Error(TARIFF_GROUP_ERRORS.INVALID_PRICE)
+      }
+
+      // Strip-specific validations
+      if (tariff.type === 'strip') {
+        if (tariff.strip_count === undefined || tariff.strip_count === null || tariff.strip_count < 2) {
+          throw new Error(TARIFF_GROUP_ERRORS.STRIP_COUNT_MIN)
+        }
+        if (tariff.strip_count > individualCount) {
+          throw new Error(TARIFF_GROUP_ERRORS.STRIP_COUNT_EXCEEDS_TOTAL)
+        }
       }
     }
   }
@@ -125,17 +159,26 @@ export class TariffGroupsRepository {
   private _attachTariffs(groups: TariffGroupRow[]): TariffGroup[] {
     return groups.map((group) => {
       const tariffs = this.db
-        .prepare('SELECT id, group_id, name, price, position FROM tariffs WHERE group_id = ? ORDER BY position ASC')
+        .prepare(
+          'SELECT id, group_id, name, price, position, type, strip_count FROM tariffs WHERE group_id = ? ORDER BY position ASC'
+        )
         .all(group.id) as TariffRow[]
 
       return {
         ...group,
-        tariffs: tariffs.map((t) => ({
-          id: t.id,
-          name: t.name,
-          price: t.price,
-          position: t.position
-        }))
+        tariffs: tariffs.map((t) => {
+          const tariff: Tariff = {
+            id: t.id,
+            name: t.name,
+            price: t.price,
+            position: t.position,
+            type: t.type as TariffType
+          }
+          if (t.strip_count !== null) {
+            tariff.strip_count = t.strip_count
+          }
+          return tariff
+        })
       }
     })
   }
@@ -196,8 +239,8 @@ export class TariffGroupsRepository {
     `)
 
     const insertTariff = this.db.prepare(`
-      INSERT INTO tariffs (group_id, name, price, position)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO tariffs (group_id, name, price, position, type, strip_count)
+      VALUES (?, ?, ?, ?, ?, ?)
     `)
 
     const createTransaction = this.db.transaction(() => {
@@ -206,7 +249,7 @@ export class TariffGroupsRepository {
         result = insertGroup.run(input.year, input.title, input.currency)
       } catch (err: unknown) {
         if (err instanceof Error && err.message.includes('UNIQUE constraint failed')) {
-          throw new Error(TARIFF_GROUP_ERRORS.DUPLICATE_YEAR_TITLE)
+          throw new Error(TARIFF_GROUP_ERRORS.DUPLICATE_YEAR)
         }
         throw err
       }
@@ -214,7 +257,14 @@ export class TariffGroupsRepository {
       const groupId = Number(result.lastInsertRowid)
 
       for (const tariff of input.tariffs) {
-        insertTariff.run(groupId, tariff.name, tariff.price, tariff.position)
+        insertTariff.run(
+          groupId,
+          tariff.name,
+          tariff.price,
+          tariff.position,
+          tariff.type,
+          tariff.strip_count ?? null
+        )
       }
 
       return groupId
@@ -247,8 +297,8 @@ export class TariffGroupsRepository {
     const deleteTariffs = this.db.prepare('DELETE FROM tariffs WHERE group_id = ?')
 
     const insertTariff = this.db.prepare(`
-      INSERT INTO tariffs (group_id, name, price, position)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO tariffs (group_id, name, price, position, type, strip_count)
+      VALUES (?, ?, ?, ?, ?, ?)
     `)
 
     const updateTransaction = this.db.transaction(() => {
@@ -258,7 +308,7 @@ export class TariffGroupsRepository {
         updateGroup.run(year, title, currency, id)
       } catch (err: unknown) {
         if (err instanceof Error && err.message.includes('UNIQUE constraint failed')) {
-          throw new Error(TARIFF_GROUP_ERRORS.DUPLICATE_YEAR_TITLE)
+          throw new Error(TARIFF_GROUP_ERRORS.DUPLICATE_YEAR)
         }
         throw err
       }
@@ -266,7 +316,14 @@ export class TariffGroupsRepository {
       deleteTariffs.run(id)
 
       for (const tariff of input.tariffs) {
-        insertTariff.run(id, tariff.name, tariff.price, tariff.position)
+        insertTariff.run(
+          id,
+          tariff.name,
+          tariff.price,
+          tariff.position,
+          tariff.type,
+          tariff.strip_count ?? null
+        )
       }
     })
 

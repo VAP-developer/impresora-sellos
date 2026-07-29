@@ -216,7 +216,8 @@ describe('database/migrator', () => {
         '002_printer_assignments.sql',
         '003_image_sync.sql',
         '004_eventos_table.sql',
-        '005_tariff_groups.sql'
+        '005_tariff_groups.sql',
+        '006_tariff_types_and_settings.sql'
       ])
 
       // Verify expected tables exist

@@ -87,6 +87,83 @@ export function getImagesPath(): string {
 }
 
 // ─────────────────────────────────────────────
+// Code Formatting
+// ─────────────────────────────────────────────
+
+/**
+ * Extracts only month and year from a fecha string.
+ *
+ * Input:  "21-24 abril 2025"
+ * Output: "abril 2025"
+ *
+ * Handles formats like "21-24 abril 2025", "5-8 junio 2025", "1 mayo 2026"
+ */
+export function formatFechaMonthYear(fecha: string): string {
+  // Match the month name (Spanish) followed by the year at the end
+  const match = fecha.match(/(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s+\d{4}$/i)
+  if (match) {
+    return match[0]
+  }
+  // Fallback: return as-is if can't parse
+  return fecha
+}
+
+/**
+ * Transforms a stamp code from original format to two-line display format.
+ *
+ * Input:  "P4ES26 CH17-0001-001"
+ * Output: { line1: "P26-4ES", line2: "0001-001" }
+ *
+ * Format breakdown:
+ *   Original: P{mes}{pais}{año} {maquina}-{serie}-{num}
+ *   Line 1:   P{año}-{mes}{pais}
+ *   Line 2:   {serie}-{num}  (stamp code, mocked for now)
+ */
+export function formatCodigoLines(codigo: string): { line1: string; line2: string } {
+  // Expected format: "P4ES26 CH17-0001-001"
+  // Parts[0] = "P4ES26", Parts[1] = "CH17-0001-001"
+  const spaceIdx = codigo.indexOf(' ')
+  if (spaceIdx === -1) {
+    // Fallback: can't parse, return as-is on one line
+    return { line1: codigo, line2: '' }
+  }
+
+  const prefix = codigo.substring(0, spaceIdx) // e.g. "P4ES26"
+  const suffix = codigo.substring(spaceIdx + 1) // e.g. "CH17-0001-001"
+
+  // Parse prefix: P{mes}{pais2}{año2} → "P4ES26"
+  // P = prefix[0]
+  // mes = prefix[1] (single digit/char: 1-9, O, N, D)
+  // pais = prefix[2..3] (2 chars, e.g. "ES")
+  // año = prefix[4..5] (2 chars, e.g. "26")
+  if (prefix.length < 6 || prefix[0] !== 'P') {
+    return { line1: codigo, line2: '' }
+  }
+
+  const mes = prefix[1]
+  const pais = prefix.substring(2, 4)
+  const anio = prefix.substring(4, 6)
+
+  // Line 1: P{año}-{mes}{pais}
+  const line1 = `P${anio}-${mes}${pais}`
+
+  // Line 2: extract serie-num from suffix (last two dash-separated parts)
+  // suffix = "CH17-0001-001" → we want "0001-001"
+  const dashParts = suffix.split('-')
+  let line2: string
+  if (dashParts.length >= 3) {
+    // Take last two parts: "0001" and "001"
+    line2 = `${dashParts[dashParts.length - 2]}-${dashParts[dashParts.length - 1]}`
+  } else if (dashParts.length === 2) {
+    line2 = `${dashParts[0]}-${dashParts[1]}`
+  } else {
+    line2 = suffix
+  }
+
+  return { line1, line2 }
+}
+
+// ─────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────
 
@@ -296,12 +373,21 @@ export async function renderStamp(params: StampRenderParams): Promise<Buffer> {
   registerFonts(doc)
   drawBackground(doc, params.backgroundImage)
   drawOverlay(doc, params.overlayImage)
+
+  // Layout vertical (yBottom_mm = distancia desde abajo):
+  //   Tarifa:      49mm desde abajo (arriba del todo)
+  //   Fecha:       43mm (~6mm debajo de tarifa)
+  //   Localidad:   40mm (justo debajo de fecha, pegado)
+  //   Código L1:   36mm (~4mm debajo de localidad)
+  //   Código L2:   33mm (justo debajo de L1, pegado)
   drawTextLeft(doc, params.tarifa, FONTS.regular, 12, 2, 49)
-  drawTextRight(doc, params.tarifa, FONTS.regular, 12, 53, 49)
-  drawTextLeft(doc, params.codigo, FONTS.regular, 8.2, 2, 40)
-  drawTextLeft(doc, params.codigo, FONTS.regular, 8, 2, 37)
-  drawTextRight(doc, params.codigo, FONTS.regular, 8, 53, 40)
-  drawTextLeft(doc, params.codigo, FONTS.regular, 6, 2, 32)
+  drawTextLeft(doc, formatFechaMonthYear(params.fecha), FONTS.regular, 8, 2, 43)
+  drawTextLeft(doc, params.evento, FONTS.regular, 8, 2, 40)
+
+  // Código en 2 líneas: línea 1 = "P26-4ES", línea 2 = "0001-001"
+  const { line1, line2 } = formatCodigoLines(params.codigo)
+  drawTextLeft(doc, line1, FONTS.regular, 7, 2, 36)
+  drawTextLeft(doc, line2, FONTS.regular, 6, 2, 33)
 
   // Como el "lienzo" ahora está rotado, para que el texto quede centrado
   // y vertical hay que pensar las coordenadas como si el alto y ancho

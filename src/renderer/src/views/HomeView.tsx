@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { downloadCSV } from '../lib/ipc-client'
 import {
   Tooltip,
@@ -20,6 +21,7 @@ import {
  */
 export default function HomeView(): JSX.Element {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
 
@@ -53,9 +55,9 @@ export default function HomeView(): JSX.Element {
       <div className="flex flex-col items-center justify-center min-h-full px-4 py-8 gap-8">
         {/* Section headers */}
         <div className="flex w-full max-w-3xl justify-between items-center">
-          <h2 className="text-xl font-normal text-[#212F5D] text-center flex-1">CONFIGURACIÓN</h2>
+          <h2 className="text-xl font-normal text-[#212F5D] text-center flex-1">{t('views.print').toUpperCase()}</h2>
           <div className="flex-1" />
-          <h2 className="text-xl font-normal text-[#212F5D] text-center flex-1">MÁQUINA</h2>
+          <h2 className="text-xl font-normal text-[#212F5D] text-center flex-1">{t('views.machine').toUpperCase()}</h2>
         </div>
 
         {/* Navigation buttons row */}
