@@ -268,7 +268,7 @@ function buildKey(tariffId: number, model: 1 | 2): string {
  * Property 11: For any set of tariffs and non-negative quantities,
  * total = Σ(quantity × price) for all tariff/model combinations.
  */
-export function calcDynamicTotal(quantities: DynamicQuantities, tariffs: Tariff[]): number {
+export function calcDynamicTotal(quantities: DynamicQuantities, tariffs: Tariff[], useSecondaryPrice = false): number {
   let total = 0
   for (const tariff of tariffs) {
     if (tariff.id == null) continue
@@ -276,7 +276,8 @@ export function calcDynamicTotal(quantities: DynamicQuantities, tariffs: Tariff[
     const key2 = buildKey(tariff.id, 2)
     const qty1 = quantities[key1] ?? 0
     const qty2 = quantities[key2] ?? 0
-    total += (qty1 + qty2) * tariff.price
+    const price = useSecondaryPrice ? (tariff.secondary_price ?? 0) : (tariff.local_price ?? 0)
+    total += (qty1 + qty2) * price
   }
   return total
 }
@@ -315,10 +316,11 @@ export function calcDynamicLimits(
   quantities: DynamicQuantities,
   tariffs: Tariff[],
   ticket: TicketConfig,
-  sello: SelloConfig
+  sello: SelloConfig,
+  useSecondaryPrice = false
 ): DynamicLimits {
   const limite = calcLimite(ticket, sello)
-  const total = calcDynamicTotal(quantities, tariffs)
+  const total = calcDynamicTotal(quantities, tariffs, useSecondaryPrice)
   const budgetRemaining = limite - total
 
   const usedRollo1 = calcDynamicUsedRollo(quantities, tariffs, 1)
@@ -331,7 +333,7 @@ export function calcDynamicLimits(
 
   for (const tariff of tariffs) {
     if (tariff.id == null) continue
-    const price = tariff.price
+    const price = useSecondaryPrice ? (tariff.secondary_price ?? 0) : (tariff.local_price ?? 0)
 
     // Model 1 (rollo 1)
     const key1 = buildKey(tariff.id, 1)

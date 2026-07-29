@@ -213,17 +213,19 @@ export const useKioskoStore = create<KioskoState>((set, get) => ({
   },
 
   getDynamicTotal: () => {
-    const { quantities, activeTariffGroup } = get()
+    const { quantities, activeTariffGroup, useSecondaryPrice } = get()
     if (!activeTariffGroup) return 0
 
+    const allTariffs = [...(activeTariffGroup.tariffs ?? []), ...(activeTariffGroup.strips ?? [])]
     let total = 0
-    for (const tariff of activeTariffGroup.tariffs) {
+    for (const tariff of allTariffs) {
       if (!tariff.id) continue
       const key1 = buildQuantityKey(tariff.id, 1)
       const key2 = buildQuantityKey(tariff.id, 2)
       const qty1 = quantities[key1] ?? 0
       const qty2 = quantities[key2] ?? 0
-      total += (qty1 + qty2) * tariff.price
+      const price = useSecondaryPrice ? (tariff.secondary_price ?? 0) : (tariff.local_price ?? 0)
+      total += (qty1 + qty2) * price
     }
     return total
   },
@@ -247,7 +249,8 @@ export const useKioskoStore = create<KioskoState>((set, get) => ({
     if (state.activeTariffGroup) {
       // Dynamic: sum all quantities for model 1 (each stamp = 1 unit from rollo1)
       let used = 0
-      for (const tariff of state.activeTariffGroup.tariffs) {
+      const allTariffs = [...(state.activeTariffGroup.tariffs ?? []), ...(state.activeTariffGroup.strips ?? [])]
+      for (const tariff of allTariffs) {
         if (!tariff.id) continue
         const key = buildQuantityKey(tariff.id, 1)
         used += state.quantities[key] ?? 0
@@ -262,7 +265,8 @@ export const useKioskoStore = create<KioskoState>((set, get) => ({
     if (state.activeTariffGroup) {
       // Dynamic: sum all quantities for model 2 (each stamp = 1 unit from rollo2)
       let used = 0
-      for (const tariff of state.activeTariffGroup.tariffs) {
+      const allTariffs = [...(state.activeTariffGroup.tariffs ?? []), ...(state.activeTariffGroup.strips ?? [])]
+      for (const tariff of allTariffs) {
         if (!tariff.id) continue
         const key = buildQuantityKey(tariff.id, 2)
         used += state.quantities[key] ?? 0
@@ -402,13 +406,13 @@ export const useKioskoStore = create<KioskoState>((set, get) => ({
       }
 
       // Check roll stock
-      if (usedRollo1 > ticket.rollo1 && usedRollo2 > ticket.rollo2) {
+      if (usedRollo1 > (ticket.rollo1 ?? 0) && usedRollo2 > (ticket.rollo2 ?? 0)) {
         return 'No hay suficientes sellos del primer motivo ni del segundo'
       }
-      if (usedRollo1 > ticket.rollo1) {
+      if (usedRollo1 > (ticket.rollo1 ?? 0)) {
         return 'No hay suficientes sellos del primer motivo'
       }
-      if (usedRollo2 > ticket.rollo2) {
+      if (usedRollo2 > (ticket.rollo2 ?? 0)) {
         return 'No hay suficientes sellos del segundo motivo'
       }
 

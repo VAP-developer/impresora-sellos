@@ -159,7 +159,15 @@ export default function TariffTableSplit(): JSX.Element {
           Modalidad
         </div>
         <div className="px-3 py-2 text-center text-base font-semibold text-gray-600 uppercase tracking-wide">
-          Precio
+          <button
+            type="button"
+            onClick={togglePrice}
+            className="cursor-pointer hover:text-blue-700 transition-colors"
+            aria-label={`Alternar precio: ${showSecondary ? 'secundario' : 'local'}`}
+            title="Clic para alternar entre precio local y secundario"
+          >
+            Precio {showSecondary ? '(sec)' : '(loc)'}
+          </button>
         </div>
         <div className="px-3 py-2 text-center text-base font-semibold text-gray-600 uppercase tracking-wide">
           Cantidad
@@ -220,21 +228,9 @@ export default function TariffTableSplit(): JSX.Element {
               <span className="text-lg font-bold text-gray-800">{row.label}</span>
             </div>
 
-            {/* Precio */}
-            <div className="px-3 py-3 flex justify-center">
-              <button
-                type="button"
-                onClick={togglePrice}
-                className="text-base font-semibold text-blue-700 hover:text-blue-900
-                           hover:bg-blue-100 rounded px-2 py-0.5 transition-colors cursor-pointer"
-                aria-label={`Alternar precio: ${showSecondary ? 'secundario' : 'local'}`}
-                title={showSecondary ? 'Precio secundario (clic para volver a local)' : 'Precio local (clic para ver secundario)'}
-              >
-                {activePrice.toFixed(2)}€
-                <span className="ml-1 text-xs text-gray-500">
-                  {showSecondary ? '(sec)' : '(loc)'}
-                </span>
-              </button>
+            {/* Precio (plain text, toggle is in header) */}
+            <div className="px-3 py-3 text-center text-base font-semibold text-gray-800">
+              {activePrice.toFixed(2)}€
             </div>
 
             {/* Cantidad Sello B */}

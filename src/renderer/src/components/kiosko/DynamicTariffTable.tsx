@@ -58,12 +58,18 @@ export default function DynamicTariffTable(): JSX.Element {
     if (!activeTariffGroup || !config) return {}
     // Combine tariffs and strips for limit calculation
     const allTariffs = [...(activeTariffGroup.tariffs ?? []), ...(activeTariffGroup.strips ?? [])]
-    return calcDynamicLimits(quantities, allTariffs, config.ticket, config.sello)
-  }, [activeTariffGroup, quantities, config])
+    return calcDynamicLimits(quantities, allTariffs, config.ticket, config.sello, showSecondary)
+  }, [activeTariffGroup, quantities, config, showSecondary])
 
   const localCurrency = activeTariffGroup?.local_currency ?? 'EUR'
   const secondaryCurrency = activeTariffGroup?.complementary_currency ?? 'EUR'
   const activeCurrency = showSecondary ? secondaryCurrency : localCurrency
+
+  // Convert currency code to symbol
+  const currencySymbol = useMemo(() => {
+    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', JPY: '¥', CHF: 'Fr' }
+    return symbols[activeCurrency] ?? activeCurrency
+  }, [activeCurrency])
 
   const handleChange = useCallback(
     (tariffId: number, model: 1 | 2) => (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -106,7 +112,15 @@ export default function DynamicTariffTable(): JSX.Element {
           Modalidad
         </div>
         <div className="px-3 py-2 text-center text-base font-semibold text-gray-600 uppercase tracking-wide">
-          Precio
+          <button
+            type="button"
+            onClick={togglePrice}
+            className="cursor-pointer hover:text-blue-700 transition-colors"
+            aria-label={`Alternar precio: ${showSecondary ? 'secundario' : 'local'}`}
+            title="Clic para alternar entre precio local y secundario"
+          >
+            Precio {showSecondary ? '(sec)' : '(loc)'}
+          </button>
         </div>
         <div className="px-3 py-2 text-center text-base font-semibold text-gray-600 uppercase tracking-wide">
           Cantidad
@@ -145,7 +159,7 @@ export default function DynamicTariffTable(): JSX.Element {
           >
             {/* Subtotal Sello A */}
             <div className="px-3 py-3 text-center text-base font-medium text-gray-700">
-              {subtotalS1 > 0 ? `${subtotalS1.toFixed(2)} ${activeCurrency}` : '—'}
+              {subtotalS1 > 0 ? `${subtotalS1.toFixed(2)}${currencySymbol}` : '—'}
             </div>
 
             {/* Límite Sello A */}
@@ -169,26 +183,14 @@ export default function DynamicTariffTable(): JSX.Element {
             {/* Modalidad (name + description) */}
             <div className="px-3 py-3 flex flex-col items-center justify-center">
               <span className="text-lg font-bold text-gray-800">{row.name}</span>
-              {row.description && (
+              {'description' in row && row.description && (
                 <span className="text-sm text-gray-500">{row.description}</span>
               )}
             </div>
 
-            {/* Precio */}
-            <div className="px-3 py-3 flex justify-center">
-              <button
-                type="button"
-                onClick={togglePrice}
-                className="text-base font-semibold text-blue-700 hover:text-blue-900
-                           hover:bg-blue-100 rounded px-2 py-0.5 transition-colors cursor-pointer"
-                aria-label={`Alternar precio: ${showSecondary ? 'secundario' : 'local'}`}
-                title={showSecondary ? 'Precio secundario (clic para volver a local)' : 'Precio local (clic para ver secundario)'}
-              >
-                {activePrice.toFixed(2)} {activeCurrency}
-                <span className="ml-1 text-xs text-gray-500">
-                  {showSecondary ? '(sec)' : '(loc)'}
-                </span>
-              </button>
+            {/* Precio (plain text, toggle is in header) */}
+            <div className="px-3 py-3 text-center text-base font-semibold text-gray-800">
+              {activePrice.toFixed(2)}{currencySymbol}
             </div>
 
             {/* Cantidad Sello B */}
@@ -211,7 +213,7 @@ export default function DynamicTariffTable(): JSX.Element {
 
             {/* Subtotal Sello B */}
             <div className="px-3 py-3 text-center text-base font-medium text-gray-700">
-              {subtotalS2 > 0 ? `${subtotalS2.toFixed(2)} ${activeCurrency}` : '—'}
+              {subtotalS2 > 0 ? `${subtotalS2.toFixed(2)}${currencySymbol}` : '—'}
             </div>
           </div>
         )

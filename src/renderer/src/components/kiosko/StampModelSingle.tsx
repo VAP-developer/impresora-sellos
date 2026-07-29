@@ -71,9 +71,6 @@ export default function StampModelSingle({ model }: StampModelSingleProps): JSX.
   const fecha = activeEvento?.fecha ?? ''
   const localidad = activeEvento?.localidad ?? ''
 
-  // Event description
-  const tarifaDesc = activeEvento?.nevento ?? ''
-
   // Code
   const codeStr = config?.codigo ? formatLabelCode(config.codigo) : null
   const codeLines = codeStr ? formatCodigoLines(codeStr) : null
@@ -136,13 +133,6 @@ export default function StampModelSingle({ model }: StampModelSingleProps): JSX.
         {/* Only show overlay text when the stamp has an image loaded */}
         {imageUrl && (
         <div className="absolute inset-0 flex flex-col justify-end p-2 pl-[11px] pointer-events-none">
-          {/* Tarifa description / event name */}
-          {tarifaDesc && (
-            <p className="text-black text-xs leading-tight">
-              {tarifaDesc}
-            </p>
-          )}
-
           {/* Fecha (month + year) */}
           {fechaDisplay && (
             <p className="text-black text-xs leading-tight">
