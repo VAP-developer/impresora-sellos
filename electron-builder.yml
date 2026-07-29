@@ -76,6 +76,6 @@ nsis:
   include: build/installer.nsh
   runAfterFinish: true
   installerLanguages:
-    - Spanish
+    - SpanishInternational
     - English
   language: 3082

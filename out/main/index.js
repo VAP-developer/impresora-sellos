@@ -4075,9 +4075,29 @@ function createWindow() {
 }
 electron.app.whenReady().then(() => {
   utils.electronApp.setAppUserModelId("com.stamp-sales");
-  initDatabase();
-  const configRepo = new ConfigRepository();
-  configRepo.initConfig();
+  try {
+    initDatabase();
+    const configRepo = new ConfigRepository();
+    configRepo.initConfig();
+  } catch (err) {
+    const errorMsg = `[FATAL] Database initialization failed: ${err instanceof Error ? err.message : String(err)}`;
+    console.error(errorMsg);
+    try {
+      const logPath = path.join(electron.app.isPackaged ? path.dirname(electron.app.getPath("exe")) : electron.app.getAppPath(), "startup-error.log");
+      fs.writeFileSync(logPath, `${(/* @__PURE__ */ new Date()).toISOString()}
+${errorMsg}
+${err instanceof Error ? err.stack : ""}
+`);
+    } catch {
+    }
+    electron.dialog.showErrorBox("Error de inicio", `La base de datos no se pudo inicializar:
+
+${err instanceof Error ? err.message : String(err)}
+
+Revisa el archivo startup-error.log junto al ejecutable.`);
+    electron.app.quit();
+    return;
+  }
   try {
     let basePath;
     if (electron.app.isPackaged) {
@@ -4102,8 +4122,16 @@ electron.app.whenReady().then(() => {
   } catch (err) {
     console.error("[sync-images] Image synchronization failed (non-blocking):", err);
   }
-  registerAllHandlers();
-  initServices();
+  try {
+    registerAllHandlers();
+  } catch (err) {
+    console.error("[FATAL] Failed to register IPC handlers:", err);
+  }
+  try {
+    initServices();
+  } catch (err) {
+    console.error("[FATAL] Failed to initialize services:", err);
+  }
   electron.app.on("browser-window-created", (_, window) => {
     utils.optimizer.watchWindowShortcuts(window);
   });

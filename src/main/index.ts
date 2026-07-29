@@ -1,6 +1,6 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, shell, BrowserWindow, dialog } from 'electron'
 import { dirname, join } from 'path'
-import { existsSync } from 'fs'
+import { existsSync, writeFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { initDatabase, closeDatabase } from './database/connection'
 import { ConfigRepository } from './database/repositories/config.repository'
@@ -40,12 +40,25 @@ function createWindow(): void {
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.stamp-sales')
 
-  // Initialize database and run pending migrations
-  initDatabase()
+  try {
+    // Initialize database and run pending migrations
+    initDatabase()
 
-  // Seed default configuration if not present
-  const configRepo = new ConfigRepository()
-  configRepo.initConfig()
+    // Seed default configuration if not present
+    const configRepo = new ConfigRepository()
+    configRepo.initConfig()
+  } catch (err) {
+    const errorMsg = `[FATAL] Database initialization failed: ${err instanceof Error ? err.message : String(err)}`
+    console.error(errorMsg)
+    // Write error to a log file next to the executable for debugging
+    try {
+      const logPath = join(app.isPackaged ? dirname(app.getPath('exe')) : app.getAppPath(), 'startup-error.log')
+      writeFileSync(logPath, `${new Date().toISOString()}\n${errorMsg}\n${err instanceof Error ? err.stack : ''}\n`)
+    } catch { /* ignore write errors */ }
+    dialog.showErrorBox('Error de inicio', `La base de datos no se pudo inicializar:\n\n${err instanceof Error ? err.message : String(err)}\n\nRevisa el archivo startup-error.log junto al ejecutable.`)
+    app.quit()
+    return
+  }
 
   // Synchronize fair images from bbdd-ferias/ folder into SQLite
   try {
@@ -77,10 +90,18 @@ app.whenReady().then(() => {
   }
 
   // Register all IPC handlers for renderer communication
-  registerAllHandlers()
+  try {
+    registerAllHandlers()
+  } catch (err) {
+    console.error('[FATAL] Failed to register IPC handlers:', err)
+  }
 
   // Initialize services (start print queue background processing)
-  initServices()
+  try {
+    initServices()
+  } catch (err) {
+    console.error('[FATAL] Failed to initialize services:', err)
+  }
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
