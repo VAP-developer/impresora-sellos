@@ -16,6 +16,10 @@ const api = {
     initConfig: () => electron.ipcRenderer.invoke("config:initConfig"),
     getImagenes: () => electron.ipcRenderer.invoke("config:getImagenes"),
     updateImagenes: (data) => electron.ipcRenderer.invoke("config:updateImagenes", data),
+    getCutNumber: () => electron.ipcRenderer.invoke("config:getCutNumber"),
+    setCutNumber: (value) => electron.ipcRenderer.invoke("config:setCutNumber", value),
+    getLanguage: () => electron.ipcRenderer.invoke("config:getLanguage"),
+    setLanguage: (value) => electron.ipcRenderer.invoke("config:setLanguage", value),
     onChange: (callback) => {
       const handler = (_event, config) => {
         callback(config);

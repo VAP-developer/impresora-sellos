@@ -544,10 +544,16 @@ export async function renderStampMultiPage(stamps: StampRenderParams[]): Promise
 
     drawBackground(doc, stamp.backgroundImage)
     drawOverlay(doc, stamp.overlayImage)
+
+    // Layout vertical:
+    //   Tarifa → Fecha (mes+año) → Localidad → Código L1 → Código L2
     drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12, 2, 49)
-    drawTextRight(doc, stamp.evento, FONTS.regular, 9, 53, 49)
-    drawTextRight(doc, stamp.fecha, FONTS.regular, 9, 53, 40)
-    drawTextLeft(doc, stamp.codigo, FONTS.regular, 6, 2, 32)
+    drawTextLeft(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 8, 2, 43)
+    drawTextLeft(doc, stamp.evento, FONTS.regular, 8, 2, 40)
+
+    const { line1, line2 } = formatCodigoLines(stamp.codigo)
+    drawTextLeft(doc, line1, FONTS.regular, 7, 2, 36)
+    drawTextLeft(doc, line2, FONTS.regular, 6, 2, 33)
   })
 
   doc.end()

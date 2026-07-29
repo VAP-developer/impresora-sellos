@@ -115,6 +115,10 @@ function closeDatabase() {
     db = null;
   }
 }
+const CONFIG_ERRORS = {
+  CUT_NUMBER_OUT_OF_RANGE: "El número de corte debe estar entre 2 y 16",
+  INVALID_LANGUAGE: 'El idioma debe ser "es" o "en"'
+};
 const DEFAULT_CONFIG = {
   ticket: {
     feria: "XLIX Feria Nacional SelloJC",
@@ -334,6 +338,49 @@ class ConfigRepository {
     this.db.prepare("DELETE FROM config").run();
     this.set(structuredClone(DEFAULT_CONFIG));
   }
+  // === Settings Methods ===
+  /**
+   * Get the cut number from config settings, returns default 4 if unset.
+   */
+  getCutNumber() {
+    const config = this.get();
+    return config?.settings?.cutNumber ?? 4;
+  }
+  /**
+   * Set the cut number (validated 2-16 range).
+   */
+  setCutNumber(value) {
+    if (value < 2 || value > 16 || !Number.isInteger(value)) {
+      throw new Error(CONFIG_ERRORS.CUT_NUMBER_OUT_OF_RANGE);
+    }
+    const config = this.get();
+    if (!config) {
+      throw new Error("Config not initialized. Call initConfig() first.");
+    }
+    config.settings = { ...config.settings, cutNumber: value, language: config.settings?.language ?? "es" };
+    this.set(config);
+  }
+  /**
+   * Get the active language, returns default 'es' if unset.
+   */
+  getLanguage() {
+    const config = this.get();
+    return config?.settings?.language ?? "es";
+  }
+  /**
+   * Set the active language (validated 'es' | 'en').
+   */
+  setLanguage(value) {
+    if (value !== "es" && value !== "en") {
+      throw new Error(CONFIG_ERRORS.INVALID_LANGUAGE);
+    }
+    const config = this.get();
+    if (!config) {
+      throw new Error("Config not initialized. Call initConfig() first.");
+    }
+    config.settings = { ...config.settings, cutNumber: config.settings?.cutNumber ?? 4, language: value };
+    this.set(config);
+  }
 }
 function registerConfigHandlers() {
   const repo = new ConfigRepository();
@@ -373,6 +420,18 @@ function registerConfigHandlers() {
   });
   handleIpc("config:updateImagenes", (data) => {
     repo.updateImagenes(data);
+  });
+  handleIpc("config:getCutNumber", () => {
+    return repo.getCutNumber();
+  });
+  handleIpc("config:setCutNumber", (value) => {
+    repo.setCutNumber(value);
+  });
+  handleIpc("config:getLanguage", () => {
+    return repo.getLanguage();
+  });
+  handleIpc("config:setLanguage", (value) => {
+    repo.setLanguage(value);
   });
 }
 class OrdersRepository {
@@ -1988,6 +2047,331 @@ function registerPrinterHandlers() {
     }
   );
 }
+const TARIFF_GROUP_ERRORS = {
+  DUPLICATE_YEAR: "Ya existe un grupo para ese año",
+  MIN_INDIVIDUAL_TARIFFS: "Se requieren al menos 2 tarifas individuales",
+  MAX_INDIVIDUAL_TARIFFS: "El máximo permitido es 20 tarifas individuales",
+  STRIP_COUNT_MIN: "Una tira debe abarcar al menos 2 tarifas individuales",
+  STRIP_COUNT_EXCEEDS_TOTAL: "La tira no puede abarcar más tarifas de las existentes",
+  EMPTY_TITLE: "El título es obligatorio",
+  EMPTY_CURRENCY: "El tipo de moneda es obligatorio",
+  EMPTY_TARIFF_NAME: "El nombre de la tarifa es obligatorio",
+  TARIFF_NAME_TOO_LONG: "El nombre no puede exceder 16 caracteres",
+  INVALID_PRICE: "El precio debe ser un número positivo",
+  GROUP_IN_USE: "No se puede eliminar: el grupo está asociado a eventos",
+  NOT_FOUND: "Grupo de tarifas no encontrado"
+};
+class TariffGroupsRepository {
+  db;
+  constructor(db2) {
+    this.db = db2 ?? getDatabase();
+  }
+  /**
+   * Validates tariff group input fields with type-aware rules.
+   * Throws an error with a descriptive message if validation fails.
+   */
+  validate(input) {
+    if (input.title !== void 0 && !input.title.trim()) {
+      throw new Error(TARIFF_GROUP_ERRORS.EMPTY_TITLE);
+    }
+    if (input.currency !== void 0 && !input.currency.trim()) {
+      throw new Error(TARIFF_GROUP_ERRORS.EMPTY_CURRENCY);
+    }
+    const individualTariffs = input.tariffs.filter((t) => t.type === "individual");
+    const individualCount = individualTariffs.length;
+    if (individualCount < 2) {
+      throw new Error(TARIFF_GROUP_ERRORS.MIN_INDIVIDUAL_TARIFFS);
+    }
+    if (individualCount > 20) {
+      throw new Error(TARIFF_GROUP_ERRORS.MAX_INDIVIDUAL_TARIFFS);
+    }
+    for (const tariff of input.tariffs) {
+      if (!tariff.name || !tariff.name.trim()) {
+        throw new Error(TARIFF_GROUP_ERRORS.EMPTY_TARIFF_NAME);
+      }
+      if (tariff.name.length > 16) {
+        throw new Error(TARIFF_GROUP_ERRORS.TARIFF_NAME_TOO_LONG);
+      }
+      if (typeof tariff.price !== "number" || isNaN(tariff.price) || !isFinite(tariff.price) || tariff.price <= 0) {
+        throw new Error(TARIFF_GROUP_ERRORS.INVALID_PRICE);
+      }
+      if (tariff.type === "strip") {
+        if (tariff.strip_count === void 0 || tariff.strip_count === null || tariff.strip_count < 2) {
+          throw new Error(TARIFF_GROUP_ERRORS.STRIP_COUNT_MIN);
+        }
+        if (tariff.strip_count > individualCount) {
+          throw new Error(TARIFF_GROUP_ERRORS.STRIP_COUNT_EXCEEDS_TOTAL);
+        }
+      }
+    }
+  }
+  /**
+   * Attaches tariffs to an array of group rows, returning full TariffGroup objects.
+   */
+  _attachTariffs(groups) {
+    return groups.map((group) => {
+      const tariffs = this.db.prepare(
+        "SELECT id, group_id, name, price, position, type, strip_count FROM tariffs WHERE group_id = ? ORDER BY position ASC"
+      ).all(group.id);
+      return {
+        ...group,
+        tariffs: tariffs.map((t) => {
+          const tariff = {
+            id: t.id,
+            name: t.name,
+            price: t.price,
+            position: t.position,
+            type: t.type
+          };
+          if (t.strip_count !== null) {
+            tariff.strip_count = t.strip_count;
+          }
+          return tariff;
+        })
+      };
+    });
+  }
+  /**
+   * Returns all distinct years that have tariff groups, sorted descending.
+   */
+  getYears() {
+    const rows = this.db.prepare("SELECT DISTINCT year FROM tariff_groups ORDER BY year DESC").all();
+    return rows.map((r) => r.year);
+  }
+  /**
+   * Returns all tariff groups with their tariffs included.
+   */
+  getAll() {
+    const groups = this.db.prepare("SELECT * FROM tariff_groups ORDER BY year DESC, title ASC").all();
+    return this._attachTariffs(groups);
+  }
+  /**
+   * Returns tariff groups for a given year with their tariffs.
+   */
+  getByYear(year) {
+    const groups = this.db.prepare("SELECT * FROM tariff_groups WHERE year = ? ORDER BY title ASC").all(year);
+    return this._attachTariffs(groups);
+  }
+  /**
+   * Returns a single tariff group by ID with its tariffs, or null if not found.
+   */
+  getById(id) {
+    const group = this.db.prepare("SELECT * FROM tariff_groups WHERE id = ?").get(id);
+    if (!group) return null;
+    return this._attachTariffs([group])[0];
+  }
+  /**
+   * Creates a new tariff group with its tariffs atomically in a transaction.
+   * Returns the created group with its tariffs.
+   */
+  create(input) {
+    this.validate({ title: input.title, currency: input.currency, tariffs: input.tariffs });
+    const insertGroup = this.db.prepare(`
+      INSERT INTO tariff_groups (year, title, currency)
+      VALUES (?, ?, ?)
+    `);
+    const insertTariff = this.db.prepare(`
+      INSERT INTO tariffs (group_id, name, price, position, type, strip_count)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    const createTransaction = this.db.transaction(() => {
+      let result;
+      try {
+        result = insertGroup.run(input.year, input.title, input.currency);
+      } catch (err) {
+        if (err instanceof Error && err.message.includes("UNIQUE constraint failed")) {
+          throw new Error(TARIFF_GROUP_ERRORS.DUPLICATE_YEAR);
+        }
+        throw err;
+      }
+      const groupId2 = Number(result.lastInsertRowid);
+      for (const tariff of input.tariffs) {
+        insertTariff.run(
+          groupId2,
+          tariff.name,
+          tariff.price,
+          tariff.position,
+          tariff.type,
+          tariff.strip_count ?? null
+        );
+      }
+      return groupId2;
+    });
+    const groupId = createTransaction();
+    return this.getById(groupId);
+  }
+  /**
+   * Updates an existing tariff group and syncs its tariffs (delete + re-insert) atomically.
+   * Returns the updated group or null if not found.
+   */
+  update(id, input) {
+    const existing = this.getById(id);
+    if (!existing) return null;
+    const title = input.title ?? existing.title;
+    const currency = input.currency ?? existing.currency;
+    this.validate({ title, currency, tariffs: input.tariffs });
+    const updateGroup = this.db.prepare(`
+      UPDATE tariff_groups SET
+        year = ?, title = ?, currency = ?,
+        updated_at = datetime('now')
+      WHERE id = ?
+    `);
+    const deleteTariffs = this.db.prepare("DELETE FROM tariffs WHERE group_id = ?");
+    const insertTariff = this.db.prepare(`
+      INSERT INTO tariffs (group_id, name, price, position, type, strip_count)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    const updateTransaction = this.db.transaction(() => {
+      const year = input.year ?? existing.year;
+      try {
+        updateGroup.run(year, title, currency, id);
+      } catch (err) {
+        if (err instanceof Error && err.message.includes("UNIQUE constraint failed")) {
+          throw new Error(TARIFF_GROUP_ERRORS.DUPLICATE_YEAR);
+        }
+        throw err;
+      }
+      deleteTariffs.run(id);
+      for (const tariff of input.tariffs) {
+        insertTariff.run(
+          id,
+          tariff.name,
+          tariff.price,
+          tariff.position,
+          tariff.type,
+          tariff.strip_count ?? null
+        );
+      }
+    });
+    updateTransaction();
+    return this.getById(id);
+  }
+  /**
+   * Deletes a tariff group by ID.
+   * Verifies no events reference the group before deleting.
+   * Returns { success: true } on success, or { success: false, error } if the group is in use.
+   */
+  delete(id) {
+    const existing = this.getById(id);
+    if (!existing) {
+      return { success: false, error: TARIFF_GROUP_ERRORS.NOT_FOUND };
+    }
+    const events = this.getEventsByGroupId(id);
+    if (events.length > 0) {
+      return { success: false, error: TARIFF_GROUP_ERRORS.GROUP_IN_USE };
+    }
+    this.db.prepare("DELETE FROM tariff_groups WHERE id = ?").run(id);
+    return { success: true };
+  }
+  /**
+   * Returns IDs of events that reference the given tariff group.
+   */
+  getEventsByGroupId(groupId) {
+    const rows = this.db.prepare("SELECT id FROM eventos WHERE tariff_group_id = ?").all(groupId);
+    return rows.map((r) => r.id);
+  }
+}
+class EventosRepository {
+  db;
+  constructor(db2) {
+    this.db = db2 ?? getDatabase();
+  }
+  /**
+   * Returns all distinct years that have events, sorted descending.
+   */
+  getYears() {
+    const rows = this.db.prepare("SELECT DISTINCT year FROM eventos ORDER BY year DESC").all();
+    return rows.map((r) => r.year);
+  }
+  /**
+   * Returns all events for a given year, sorted by name.
+   */
+  getByYear(year) {
+    return this.db.prepare("SELECT * FROM eventos WHERE year = ? ORDER BY nevento ASC").all(year);
+  }
+  /**
+   * Returns a single event by ID.
+   */
+  getById(id) {
+    const row = this.db.prepare("SELECT * FROM eventos WHERE id = ?").get(id);
+    return row ?? null;
+  }
+  /**
+   * Creates a new event. Returns the created event with its ID.
+   */
+  create(input) {
+    const stmt = this.db.prepare(`
+      INSERT INTO eventos (year, codigo, nevento, nferia, nlugar, motivoi, motivod, fecha, localidad, tariff_group_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const result = stmt.run(
+      input.year,
+      input.codigo,
+      input.nevento,
+      input.nferia,
+      input.nlugar,
+      input.motivoi,
+      input.motivod,
+      input.fecha,
+      input.localidad,
+      input.tariff_group_id ?? null
+    );
+    return this.getById(Number(result.lastInsertRowid));
+  }
+  /**
+   * Updates an existing event by ID. Returns the updated event.
+   */
+  update(id, input) {
+    const existing = this.getById(id);
+    if (!existing) return null;
+    const updated = {
+      year: input.year ?? existing.year,
+      codigo: input.codigo ?? existing.codigo,
+      nevento: input.nevento ?? existing.nevento,
+      nferia: input.nferia ?? existing.nferia,
+      nlugar: input.nlugar ?? existing.nlugar,
+      motivoi: input.motivoi ?? existing.motivoi,
+      motivod: input.motivod ?? existing.motivod,
+      fecha: input.fecha ?? existing.fecha,
+      localidad: input.localidad ?? existing.localidad,
+      tariff_group_id: input.tariff_group_id !== void 0 ? input.tariff_group_id : existing.tariff_group_id
+    };
+    this.db.prepare(`
+      UPDATE eventos SET
+        year = ?, codigo = ?, nevento = ?, nferia = ?, nlugar = ?,
+        motivoi = ?, motivod = ?, fecha = ?, localidad = ?,
+        tariff_group_id = ?,
+        updated_at = datetime('now')
+      WHERE id = ?
+    `).run(
+      updated.year,
+      updated.codigo,
+      updated.nevento,
+      updated.nferia,
+      updated.nlugar,
+      updated.motivoi,
+      updated.motivod,
+      updated.fecha,
+      updated.localidad,
+      updated.tariff_group_id ?? null,
+      id
+    );
+    return this.getById(id);
+  }
+  /**
+   * Deletes an event by ID. Returns true if deleted.
+   */
+  delete(id) {
+    const result = this.db.prepare("DELETE FROM eventos WHERE id = ?").run(id);
+    return result.changes > 0;
+  }
+  /**
+   * Returns all events (all years).
+   */
+  getAll() {
+    return this.db.prepare("SELECT * FROM eventos ORDER BY year DESC, nevento ASC").all();
+  }
+}
 function calcSellos1(q) {
   return q.tarifaAS1 + q.tarifaA2S1 + q.tarifaBS1 + q.tarifaCS1 + q.tarifaAT1 * 4 + q.tarifa4T1 * 4;
 }
@@ -1998,10 +2382,32 @@ function calcTicketsUsed(q) {
   const totalTiras = q.tarifaAT1 + q.tarifa4T1 + q.tarifaAT2 + q.tarifa4T2;
   return totalTiras + 2;
 }
+function buildDynamicKey(tariffId, model) {
+  return `tariff_${tariffId}_s${model}`;
+}
+function calcDynamicSellos1(quantities, tariffs) {
+  let total = 0;
+  for (const tariff of tariffs) {
+    const key = buildDynamicKey(tariff.id, 1);
+    total += quantities[key] ?? 0;
+  }
+  return total;
+}
+function calcDynamicSellos2(quantities, tariffs) {
+  let total = 0;
+  for (const tariff of tariffs) {
+    const key = buildDynamicKey(tariff.id, 2);
+    total += quantities[key] ?? 0;
+  }
+  return total;
+}
+function calcDynamicTicketsUsed(_quantities, _tariffs) {
+  return 2;
+}
 function generateOrderLines(config, quantities, profile, sesionId) {
   const orders = [];
   const now = (/* @__PURE__ */ new Date()).toISOString();
-  const { precios, ticket, codigo, sello } = config;
+  const { precios, codigo, sello } = config;
   const evento = sello.eventos[sello.elevento] ?? sello.eventos[0];
   const eventName = evento?.nevento ?? sello.elnevento ?? "";
   const feria = evento?.nferia ?? sello.feria ?? "";
@@ -2054,11 +2460,81 @@ function generateOrderLines(config, quantities, profile, sesionId) {
   addLine("Tira de 4 Tarifas", "Tira Modelo 2", quantities.tarifa4T2, 4, precios.tarifaT4 ?? 0);
   return orders;
 }
-function executeSale(config, quantities, profile, db2) {
+function generateDynamicOrderLines(config, quantities, tariffGroup, profile, sesionId) {
+  const orders = [];
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  const { codigo, sello } = config;
+  const evento = sello.eventos[sello.elevento] ?? sello.eventos[0];
+  const eventName = evento?.nevento ?? sello.elnevento ?? "";
+  const feria = evento?.nferia ?? sello.feria ?? "";
+  const lugar = evento?.nlugar ?? sello.lugar ?? "";
+  const fecha = evento?.fecha ?? "";
+  const sellos1 = calcDynamicSellos1(quantities, tariffGroup.tariffs);
+  const sellos2 = calcDynamicSellos2(quantities, tariffGroup.tariffs);
+  const base = {
+    event: eventName,
+    venue: lugar,
+    machine: codigo.maquina,
+    transactionDate: now,
+    currency: tariffGroup.currency,
+    paymentStatus: profile,
+    sesionId,
+    etiquetasRollo1: sellos1,
+    etiquetasRollo2: sellos2,
+    etiquetaMes: String(codigo.mes),
+    tituloEvento: eventName,
+    feria,
+    lugar,
+    fecha,
+    mes: codigo.mes,
+    annio: codigo.annio,
+    documento: ""
+  };
+  for (const tariff of tariffGroup.tariffs) {
+    const qty1 = quantities[buildDynamicKey(tariff.id, 1)] ?? 0;
+    if (qty1 > 0) {
+      orders.push({
+        ...base,
+        vendType: tariff.name,
+        productName: "Sello Modelo 1",
+        quantity: qty1,
+        quantitySet: 1,
+        totalStamps: qty1,
+        value: qty1 * tariff.price
+      });
+    }
+    const qty2 = quantities[buildDynamicKey(tariff.id, 2)] ?? 0;
+    if (qty2 > 0) {
+      orders.push({
+        ...base,
+        vendType: tariff.name,
+        productName: "Sello Modelo 2",
+        quantity: qty2,
+        quantitySet: 1,
+        totalStamps: qty2,
+        value: qty2 * tariff.price
+      });
+    }
+  }
+  return orders;
+}
+function executeSale(config, quantities, profile, db2, tariffGroupCtx) {
   const database = getDatabase();
-  const sellos1 = calcSellos1(quantities);
-  const sellos2 = calcSellos2(quantities);
-  const ticketsUsed = calcTicketsUsed(quantities);
+  const isDynamic = !!tariffGroupCtx;
+  let sellos1;
+  let sellos2;
+  let ticketsUsed;
+  if (isDynamic) {
+    const dynQty = quantities;
+    sellos1 = calcDynamicSellos1(dynQty, tariffGroupCtx.tariffs);
+    sellos2 = calcDynamicSellos2(dynQty, tariffGroupCtx.tariffs);
+    ticketsUsed = calcDynamicTicketsUsed(dynQty, tariffGroupCtx.tariffs);
+  } else {
+    const legacyQty = quantities;
+    sellos1 = calcSellos1(legacyQty);
+    sellos2 = calcSellos2(legacyQty);
+    ticketsUsed = calcTicketsUsed(legacyQty);
+  }
   if (sellos1 === 0 && sellos2 === 0) {
     return { success: false, error: "La cesta está vacía" };
   }
@@ -2086,7 +2562,12 @@ function executeSale(config, quantities, profile, db2) {
     currentConfig.ticket.rollo2 -= sellos2;
     currentConfig.ticket.tickets -= ticketsUsed;
     database.prepare("INSERT OR REPLACE INTO config (id, data) VALUES (1, ?)").run(JSON.stringify(currentConfig));
-    const orders = generateOrderLines(config, quantities, profile, newSesionId);
+    let orders;
+    if (isDynamic) {
+      orders = generateDynamicOrderLines(config, quantities, tariffGroupCtx, profile, newSesionId);
+    } else {
+      orders = generateOrderLines(config, quantities, profile, newSesionId);
+    }
     const insertStmt = database.prepare(`
       INSERT INTO orders (
         event, venue, machine, vend_type, product_name,
@@ -2240,6 +2721,38 @@ function getImagesPath() {
   }
   return path.join(process.resourcesPath, "images");
 }
+function formatFechaMonthYear(fecha) {
+  const match = fecha.match(/(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s+\d{4}$/i);
+  if (match) {
+    return match[0];
+  }
+  return fecha;
+}
+function formatCodigoLines(codigo) {
+  const spaceIdx = codigo.indexOf(" ");
+  if (spaceIdx === -1) {
+    return { line1: codigo, line2: "" };
+  }
+  const prefix = codigo.substring(0, spaceIdx);
+  const suffix = codigo.substring(spaceIdx + 1);
+  if (prefix.length < 6 || prefix[0] !== "P") {
+    return { line1: codigo, line2: "" };
+  }
+  const mes = prefix[1];
+  const pais = prefix.substring(2, 4);
+  const anio = prefix.substring(4, 6);
+  const line1 = `P${anio}-${mes}${pais}`;
+  const dashParts = suffix.split("-");
+  let line2;
+  if (dashParts.length >= 3) {
+    line2 = `${dashParts[dashParts.length - 2]}-${dashParts[dashParts.length - 1]}`;
+  } else if (dashParts.length === 2) {
+    line2 = `${dashParts[0]}-${dashParts[1]}`;
+  } else {
+    line2 = suffix;
+  }
+  return { line1, line2 };
+}
 function registerFonts$1(doc) {
   const fontsPath = getFontsPath();
   const regularPath = path.join(fontsPath, "franklin_gothic.ttf");
@@ -2258,13 +2771,6 @@ function registerFonts$1(doc) {
 function bottomToTop(bottomY_mm, fontSizePt) {
   const bottomYPt = bottomY_mm * MM_TO_PT$1;
   return STAMP_HEIGHT - bottomYPt - fontSizePt;
-}
-function drawTextRight(doc, text, fontName, fontSize, xRight_mm, yBottom_mm) {
-  doc.font(fontName).fontSize(fontSize);
-  const textWidth = doc.widthOfString(text);
-  const x = xRight_mm * MM_TO_PT$1 - textWidth;
-  const y = bottomToTop(yBottom_mm, fontSize);
-  doc.text(text, x, y, { lineBreak: false });
 }
 function drawTextLeft(doc, text, fontName, fontSize, x_mm, yBottom_mm) {
   doc.font(fontName).fontSize(fontSize);
@@ -2312,27 +2818,6 @@ function collectPdf$1(doc) {
     doc.on("error", reject);
   });
 }
-async function renderStamp(params) {
-  const doc = new PDFDocument({
-    size: [STAMP_WIDTH, STAMP_HEIGHT],
-    // ancho x alto en puntos (55mm  160 x 25mm 71 )
-    margin: 0,
-    //layout: 'portrait',
-    info: { Title: "Etiqueta", Author: "Stamp Sales App" }
-  });
-  const result = collectPdf$1(doc);
-  registerFonts$1(doc);
-  drawBackground(doc, params.backgroundImage);
-  drawOverlay(doc, params.overlayImage);
-  drawTextLeft(doc, params.tarifa, FONTS.regular, 12, 2, 49);
-  drawTextRight(doc, params.tarifa, FONTS.regular, 12, 53, 49);
-  drawTextLeft(doc, params.codigo, FONTS.regular, 8.2, 2, 40);
-  drawTextLeft(doc, params.codigo, FONTS.regular, 8, 2, 37);
-  drawTextRight(doc, params.codigo, FONTS.regular, 8, 53, 40);
-  drawTextLeft(doc, params.codigo, FONTS.regular, 6, 2, 32);
-  doc.end();
-  return result;
-}
 async function renderStampMultiPage(stamps) {
   if (stamps.length === 0) {
     throw new Error("No stamps to render");
@@ -2351,9 +2836,11 @@ async function renderStampMultiPage(stamps) {
     drawBackground(doc, stamp.backgroundImage);
     drawOverlay(doc, stamp.overlayImage);
     drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12, 2, 49);
-    drawTextRight(doc, stamp.evento, FONTS.regular, 9, 53, 49);
-    drawTextRight(doc, stamp.fecha, FONTS.regular, 9, 53, 40);
-    drawTextLeft(doc, stamp.codigo, FONTS.regular, 6, 2, 32);
+    drawTextLeft(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 8, 2, 43);
+    drawTextLeft(doc, stamp.evento, FONTS.regular, 8, 2, 40);
+    const { line1, line2 } = formatCodigoLines(stamp.codigo);
+    drawTextLeft(doc, line1, FONTS.regular, 7, 2, 36);
+    drawTextLeft(doc, line2, FONTS.regular, 6, 2, 33);
   });
   doc.end();
   return result;
@@ -2794,6 +3281,20 @@ async function genTicketMaster(params) {
   doc.end();
   return result;
 }
+const MIN_CUT_NUMBER = 2;
+const MAX_CUT_NUMBER = 16;
+function groupLabels(items, cutNumber) {
+  if (cutNumber < MIN_CUT_NUMBER || cutNumber > MAX_CUT_NUMBER) {
+    throw new Error(
+      `El número de corte debe estar entre ${MIN_CUT_NUMBER} y ${MAX_CUT_NUMBER}`
+    );
+  }
+  const groups = [];
+  for (let i = 0; i < items.length; i += cutNumber) {
+    groups.push(items.slice(i, i + cutNumber));
+  }
+  return groups;
+}
 function resolveImageLayers(options) {
   const notifications = [];
   let backgroundImage = null;
@@ -2935,10 +3436,17 @@ const TARIFF_DEFS = [
   { qtyKey: "tarifaAT2", label: "Tarifa A", isTira: true, model: 2, target: "printer2" },
   { qtyKey: "tarifa4T2", label: "Tira 4 Tarifas", isTira: true, model: 2, target: "printer2" }
 ];
-async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLayerOptions) {
+async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLayerOptions, dynamicTariffCtx) {
   const repo = new ImagesRepository();
   const pdfs = [];
   const notifications = [];
+  let cutNumber;
+  try {
+    const configRepo = new ConfigRepository();
+    cutNumber = configRepo.getCutNumber();
+  } catch {
+    cutNumber = 4;
+  }
   let productoCounter = 1;
   const eventoIndex = config.sello.elevento;
   const evento = config.sello.eventos?.[eventoIndex];
@@ -2967,70 +3475,164 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
     bg2 = getModelBackground(model2Name, repo, syncRepo);
   }
   const usesBlankBackground = config.codigo.modo === "MD" || config.codigo.modo === "FI";
-  for (const tariff of TARIFF_DEFS) {
-    const qty = quantities[tariff.qtyKey];
-    if (qty <= 0) continue;
-    const background = usesBlankBackground ? null : tariff.model === 1 ? bg1 : bg2;
-    const overlay = usesBlankBackground ? null : tariff.model === 1 ? overlay1 : overlay2;
-    if (tariff.isTira) {
-      for (let i = 0; i < qty; i++) {
+  if (dynamicTariffCtx) {
+    const dynQty = quantities;
+    for (const tariff of dynamicTariffCtx.tariffs) {
+      const key1 = `tariff_${tariff.id}_s1`;
+      const qty1 = dynQty[key1] ?? 0;
+      if (qty1 > 0) {
+        const background = usesBlankBackground ? null : bg1;
+        const overlay = usesBlankBackground ? null : overlay1;
         const stamps = [];
-        if (tariff.qtyKey.startsWith("tarifa4T")) {
-          const tariffLabels = ["Tarifa AJ", "Tarifa A2J", "Tarifa BJ", "Tarifa CJ"];
-          for (const tLabel of tariffLabels) {
-            stamps.push({
-              tarifa: tLabel,
-              fecha: stampFecha,
-              evento: stampEvento,
-              codigo: buildLabelCode(config, productoCounter),
-              backgroundImage: background,
-              overlayImage: overlay
-            });
-            productoCounter++;
-          }
-        } else {
-          for (let j = 0; j < 4; j++) {
-            stamps.push({
-              tarifa: tariff.label,
-              fecha: stampFecha,
-              evento: stampEvento,
-              codigo: buildLabelCode(config, productoCounter),
-              backgroundImage: background,
-              overlayImage: overlay
-            });
-            productoCounter++;
-          }
+        for (let i = 0; i < qty1; i++) {
+          stamps.push({
+            tarifa: tariff.name,
+            fecha: stampFecha,
+            evento: stampEvento,
+            codigo: buildLabelCode(config, productoCounter),
+            backgroundImage: background,
+            overlayImage: overlay
+          });
+          productoCounter++;
         }
-        const pdfBuffer = await renderStampMultiPage(stamps);
-        pdfs.push({
-          buffer: pdfBuffer,
-          target: tariff.target,
-          pdfType: "stamp_tira",
-          description: `Tira ${tariff.label} modelo${tariff.model} #${i + 1}`
-        });
+        const groups = groupLabels(stamps, cutNumber);
+        for (const group of groups) {
+          const pdfBuffer = await renderStampMultiPage(group);
+          pdfs.push({
+            buffer: pdfBuffer,
+            target: "printer1",
+            pdfType: "stamp_simple",
+            description: `${tariff.name} modelo1 x${group.length}`
+          });
+        }
       }
-    } else {
-      for (let i = 0; i < qty; i++) {
-        const pdfBuffer = await renderStamp({
-          tarifa: tariff.label,
-          codigo: buildLabelCode(config, productoCounter),
-          backgroundImage: background,
-          overlayImage: overlay
-        });
-        productoCounter++;
-        pdfs.push({
-          buffer: pdfBuffer,
-          target: tariff.target,
-          pdfType: "stamp_simple",
-          description: `${tariff.label} modelo${tariff.model} #${i + 1}`
-        });
+      const key2 = `tariff_${tariff.id}_s2`;
+      const qty2 = dynQty[key2] ?? 0;
+      if (qty2 > 0) {
+        const background = usesBlankBackground ? null : bg2;
+        const overlay = usesBlankBackground ? null : overlay2;
+        const stamps = [];
+        for (let i = 0; i < qty2; i++) {
+          stamps.push({
+            tarifa: tariff.name,
+            fecha: stampFecha,
+            evento: stampEvento,
+            codigo: buildLabelCode(config, productoCounter),
+            backgroundImage: background,
+            overlayImage: overlay
+          });
+          productoCounter++;
+        }
+        const groups = groupLabels(stamps, cutNumber);
+        for (const group of groups) {
+          const pdfBuffer = await renderStampMultiPage(group);
+          pdfs.push({
+            buffer: pdfBuffer,
+            target: "printer2",
+            pdfType: "stamp_simple",
+            description: `${tariff.name} modelo2 x${group.length}`
+          });
+        }
+      }
+    }
+  } else {
+    const legacyQty = quantities;
+    for (const tariff of TARIFF_DEFS) {
+      const qty = legacyQty[tariff.qtyKey];
+      if (qty <= 0) continue;
+      const background = usesBlankBackground ? null : tariff.model === 1 ? bg1 : bg2;
+      const overlay = usesBlankBackground ? null : tariff.model === 1 ? overlay1 : overlay2;
+      if (tariff.isTira) {
+        for (let i = 0; i < qty; i++) {
+          const stamps = [];
+          if (tariff.qtyKey.startsWith("tarifa4T")) {
+            const tariffLabels = ["Tarifa AJ", "Tarifa A2J", "Tarifa BJ", "Tarifa CJ"];
+            for (const tLabel of tariffLabels) {
+              stamps.push({
+                tarifa: tLabel,
+                fecha: stampFecha,
+                evento: stampEvento,
+                codigo: buildLabelCode(config, productoCounter),
+                backgroundImage: background,
+                overlayImage: overlay
+              });
+              productoCounter++;
+            }
+          } else {
+            for (let j = 0; j < 4; j++) {
+              stamps.push({
+                tarifa: tariff.label,
+                fecha: stampFecha,
+                evento: stampEvento,
+                codigo: buildLabelCode(config, productoCounter),
+                backgroundImage: background,
+                overlayImage: overlay
+              });
+              productoCounter++;
+            }
+          }
+          const pdfBuffer = await renderStampMultiPage(stamps);
+          pdfs.push({
+            buffer: pdfBuffer,
+            target: tariff.target,
+            pdfType: "stamp_tira",
+            description: `Tira ${tariff.label} modelo${tariff.model} #${i + 1}`
+          });
+        }
+      } else {
+        const stamps = [];
+        for (let i = 0; i < qty; i++) {
+          stamps.push({
+            tarifa: tariff.label,
+            fecha: stampFecha,
+            evento: stampEvento,
+            codigo: buildLabelCode(config, productoCounter),
+            backgroundImage: background,
+            overlayImage: overlay
+          });
+          productoCounter++;
+        }
+        const groups = groupLabels(stamps, cutNumber);
+        for (const group of groups) {
+          const pdfBuffer = await renderStampMultiPage(group);
+          pdfs.push({
+            buffer: pdfBuffer,
+            target: tariff.target,
+            pdfType: "stamp_simple",
+            description: `${tariff.label} modelo${tariff.model} x${group.length}`
+          });
+        }
       }
     }
   }
-  const counterRef = { value: productoCounter };
-  await generateEspecialStrips(config, quantities, counterRef, pdfs);
-  productoCounter = counterRef.value;
-  const { items, productos } = buildTicketData(quantities, config.precios);
+  if (!dynamicTariffCtx) {
+    const counterRef = { value: productoCounter };
+    await generateEspecialStrips(config, quantities, counterRef, pdfs);
+    productoCounter = counterRef.value;
+  }
+  let items;
+  let productos;
+  if (dynamicTariffCtx) {
+    const dynQty = quantities;
+    items = [];
+    productos = [];
+    for (const tariff of dynamicTariffCtx.tariffs) {
+      const key1 = `tariff_${tariff.id}_s1`;
+      const qty1 = dynQty[key1] ?? 0;
+      const prodId1 = `D${tariff.id}S1`;
+      items.push({ idProducto: prodId1, cantidad: qty1 });
+      productos.push({ idProducto: prodId1, modo: "S", precio: tariff.price, nombre_ticket: tariff.name });
+      const key2 = `tariff_${tariff.id}_s2`;
+      const qty2 = dynQty[key2] ?? 0;
+      const prodId2 = `D${tariff.id}S2`;
+      items.push({ idProducto: prodId2, cantidad: qty2 });
+      productos.push({ idProducto: prodId2, modo: "S", precio: tariff.price, nombre_ticket: tariff.name });
+    }
+  } else {
+    const result = buildTicketData(quantities, config.precios);
+    items = result.items;
+    productos = result.productos;
+  }
   const hasAnyItems = items.some((item) => item.cantidad > 0);
   if (hasAnyItems) {
     const fechaTicket = getTicketDateTime(config);
@@ -3218,7 +3820,53 @@ function registerSaleHandlers() {
       const typedQuantities = quantities;
       const typedProfile = profile;
       const typedImageFlags = imageFlags;
-      const result = executeSale(typedConfig, typedQuantities, typedProfile);
+      const quantityKeys = Object.keys(typedQuantities);
+      const isDynamic = quantityKeys.some((key) => /^tariff_\d+_s[12]$/.test(key));
+      let tariffGroupCtx;
+      let dynamicTariffCtx;
+      if (isDynamic) {
+        const activeEventoId = typedConfig.sello.elevento;
+        if (activeEventoId && activeEventoId > 0) {
+          const eventosRepo = new EventosRepository();
+          const evento = eventosRepo.getById(activeEventoId);
+          const tariffGroupId = evento?.tariff_group_id;
+          if (tariffGroupId) {
+            const tariffGroupsRepo = new TariffGroupsRepository();
+            const group = tariffGroupsRepo.getById(tariffGroupId);
+            if (group) {
+              tariffGroupCtx = {
+                id: group.id,
+                title: group.title,
+                currency: group.currency,
+                tariffs: group.tariffs.map((t) => ({
+                  id: t.id,
+                  name: t.name,
+                  price: t.price,
+                  position: t.position
+                }))
+              };
+              dynamicTariffCtx = {
+                groupId: group.id,
+                title: group.title,
+                currency: group.currency,
+                tariffs: group.tariffs.map((t) => ({
+                  id: t.id,
+                  name: t.name,
+                  price: t.price,
+                  position: t.position
+                }))
+              };
+            }
+          }
+        }
+      }
+      if (isDynamic && !tariffGroupCtx) {
+        return {
+          success: false,
+          error: "No se pudo cargar el grupo de tarifas del evento activo. Revise la configuración del evento."
+        };
+      }
+      const result = executeSale(typedConfig, typedQuantities, typedProfile, void 0, tariffGroupCtx);
       if (!result.success) {
         return result;
       }
@@ -3258,7 +3906,8 @@ function registerSaleHandlers() {
           typedQuantities,
           typedProfile,
           void 0,
-          imageLayerOptions
+          imageLayerOptions,
+          dynamicTariffCtx
         );
         pdfCache.set(result.sesionId, pdfResult.pdfs);
         let printJobIds = [];
@@ -3328,107 +3977,6 @@ function registerAutoLaunchHandlers() {
     return getAutoLaunchEnabled();
   });
 }
-class EventosRepository {
-  db;
-  constructor(db2) {
-    this.db = db2 ?? getDatabase();
-  }
-  /**
-   * Returns all distinct years that have events, sorted descending.
-   */
-  getYears() {
-    const rows = this.db.prepare("SELECT DISTINCT year FROM eventos ORDER BY year DESC").all();
-    return rows.map((r) => r.year);
-  }
-  /**
-   * Returns all events for a given year, sorted by name.
-   */
-  getByYear(year) {
-    return this.db.prepare("SELECT * FROM eventos WHERE year = ? ORDER BY nevento ASC").all(year);
-  }
-  /**
-   * Returns a single event by ID.
-   */
-  getById(id) {
-    const row = this.db.prepare("SELECT * FROM eventos WHERE id = ?").get(id);
-    return row ?? null;
-  }
-  /**
-   * Creates a new event. Returns the created event with its ID.
-   */
-  create(input) {
-    const stmt = this.db.prepare(`
-      INSERT INTO eventos (year, codigo, nevento, nferia, nlugar, motivoi, motivod, fecha, localidad, tariff_group_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const result = stmt.run(
-      input.year,
-      input.codigo,
-      input.nevento,
-      input.nferia,
-      input.nlugar,
-      input.motivoi,
-      input.motivod,
-      input.fecha,
-      input.localidad,
-      input.tariff_group_id ?? null
-    );
-    return this.getById(Number(result.lastInsertRowid));
-  }
-  /**
-   * Updates an existing event by ID. Returns the updated event.
-   */
-  update(id, input) {
-    const existing = this.getById(id);
-    if (!existing) return null;
-    const updated = {
-      year: input.year ?? existing.year,
-      codigo: input.codigo ?? existing.codigo,
-      nevento: input.nevento ?? existing.nevento,
-      nferia: input.nferia ?? existing.nferia,
-      nlugar: input.nlugar ?? existing.nlugar,
-      motivoi: input.motivoi ?? existing.motivoi,
-      motivod: input.motivod ?? existing.motivod,
-      fecha: input.fecha ?? existing.fecha,
-      localidad: input.localidad ?? existing.localidad,
-      tariff_group_id: input.tariff_group_id !== void 0 ? input.tariff_group_id : existing.tariff_group_id
-    };
-    this.db.prepare(`
-      UPDATE eventos SET
-        year = ?, codigo = ?, nevento = ?, nferia = ?, nlugar = ?,
-        motivoi = ?, motivod = ?, fecha = ?, localidad = ?,
-        tariff_group_id = ?,
-        updated_at = datetime('now')
-      WHERE id = ?
-    `).run(
-      updated.year,
-      updated.codigo,
-      updated.nevento,
-      updated.nferia,
-      updated.nlugar,
-      updated.motivoi,
-      updated.motivod,
-      updated.fecha,
-      updated.localidad,
-      updated.tariff_group_id ?? null,
-      id
-    );
-    return this.getById(id);
-  }
-  /**
-   * Deletes an event by ID. Returns true if deleted.
-   */
-  delete(id) {
-    const result = this.db.prepare("DELETE FROM eventos WHERE id = ?").run(id);
-    return result.changes > 0;
-  }
-  /**
-   * Returns all events (all years).
-   */
-  getAll() {
-    return this.db.prepare("SELECT * FROM eventos ORDER BY year DESC, nevento ASC").all();
-  }
-}
 function registerEventosHandlers() {
   const repo = new EventosRepository();
   handleIpc("eventos:getYears", () => {
@@ -3449,195 +3997,6 @@ function registerEventosHandlers() {
   handleIpc("eventos:delete", (id) => {
     return repo.delete(id);
   });
-}
-const TARIFF_GROUP_ERRORS = {
-  DUPLICATE_YEAR_TITLE: "Ya existe un grupo con ese año y título",
-  MIN_TARIFFS: "Se requieren al menos 2 tarifas",
-  MAX_TARIFFS: "El máximo permitido es 10 tarifas",
-  EMPTY_TITLE: "El título es obligatorio",
-  EMPTY_CURRENCY: "El tipo de moneda es obligatorio",
-  EMPTY_TARIFF_NAME: "El nombre de la tarifa es obligatorio",
-  TARIFF_NAME_TOO_LONG: "El nombre no puede exceder 16 caracteres",
-  INVALID_PRICE: "El precio debe ser un número positivo",
-  GROUP_IN_USE: "No se puede eliminar: el grupo está asociado a eventos",
-  NOT_FOUND: "Grupo de tarifas no encontrado"
-};
-class TariffGroupsRepository {
-  db;
-  constructor(db2) {
-    this.db = db2 ?? getDatabase();
-  }
-  /**
-   * Validates tariff group input fields.
-   * Throws an error with a descriptive message if validation fails.
-   */
-  validate(input) {
-    if (input.title !== void 0 && !input.title.trim()) {
-      throw new Error(TARIFF_GROUP_ERRORS.EMPTY_TITLE);
-    }
-    if (input.currency !== void 0 && !input.currency.trim()) {
-      throw new Error(TARIFF_GROUP_ERRORS.EMPTY_CURRENCY);
-    }
-    if (input.tariffs.length < 2) {
-      throw new Error(TARIFF_GROUP_ERRORS.MIN_TARIFFS);
-    }
-    if (input.tariffs.length > 10) {
-      throw new Error(TARIFF_GROUP_ERRORS.MAX_TARIFFS);
-    }
-    for (const tariff of input.tariffs) {
-      if (!tariff.name || !tariff.name.trim()) {
-        throw new Error(TARIFF_GROUP_ERRORS.EMPTY_TARIFF_NAME);
-      }
-      if (tariff.name.length > 16) {
-        throw new Error(TARIFF_GROUP_ERRORS.TARIFF_NAME_TOO_LONG);
-      }
-      if (tariff.price <= 0 || typeof tariff.price !== "number" || isNaN(tariff.price)) {
-        throw new Error(TARIFF_GROUP_ERRORS.INVALID_PRICE);
-      }
-    }
-  }
-  /**
-   * Attaches tariffs to an array of group rows, returning full TariffGroup objects.
-   */
-  _attachTariffs(groups) {
-    return groups.map((group) => {
-      const tariffs = this.db.prepare("SELECT id, group_id, name, price, position FROM tariffs WHERE group_id = ? ORDER BY position ASC").all(group.id);
-      return {
-        ...group,
-        tariffs: tariffs.map((t) => ({
-          id: t.id,
-          name: t.name,
-          price: t.price,
-          position: t.position
-        }))
-      };
-    });
-  }
-  /**
-   * Returns all distinct years that have tariff groups, sorted descending.
-   */
-  getYears() {
-    const rows = this.db.prepare("SELECT DISTINCT year FROM tariff_groups ORDER BY year DESC").all();
-    return rows.map((r) => r.year);
-  }
-  /**
-   * Returns all tariff groups with their tariffs included.
-   */
-  getAll() {
-    const groups = this.db.prepare("SELECT * FROM tariff_groups ORDER BY year DESC, title ASC").all();
-    return this._attachTariffs(groups);
-  }
-  /**
-   * Returns tariff groups for a given year with their tariffs.
-   */
-  getByYear(year) {
-    const groups = this.db.prepare("SELECT * FROM tariff_groups WHERE year = ? ORDER BY title ASC").all(year);
-    return this._attachTariffs(groups);
-  }
-  /**
-   * Returns a single tariff group by ID with its tariffs, or null if not found.
-   */
-  getById(id) {
-    const group = this.db.prepare("SELECT * FROM tariff_groups WHERE id = ?").get(id);
-    if (!group) return null;
-    return this._attachTariffs([group])[0];
-  }
-  /**
-   * Creates a new tariff group with its tariffs atomically in a transaction.
-   * Returns the created group with its tariffs.
-   */
-  create(input) {
-    this.validate({ title: input.title, currency: input.currency, tariffs: input.tariffs });
-    const insertGroup = this.db.prepare(`
-      INSERT INTO tariff_groups (year, title, currency)
-      VALUES (?, ?, ?)
-    `);
-    const insertTariff = this.db.prepare(`
-      INSERT INTO tariffs (group_id, name, price, position)
-      VALUES (?, ?, ?, ?)
-    `);
-    const createTransaction = this.db.transaction(() => {
-      let result;
-      try {
-        result = insertGroup.run(input.year, input.title, input.currency);
-      } catch (err) {
-        if (err instanceof Error && err.message.includes("UNIQUE constraint failed")) {
-          throw new Error(TARIFF_GROUP_ERRORS.DUPLICATE_YEAR_TITLE);
-        }
-        throw err;
-      }
-      const groupId2 = Number(result.lastInsertRowid);
-      for (const tariff of input.tariffs) {
-        insertTariff.run(groupId2, tariff.name, tariff.price, tariff.position);
-      }
-      return groupId2;
-    });
-    const groupId = createTransaction();
-    return this.getById(groupId);
-  }
-  /**
-   * Updates an existing tariff group and syncs its tariffs (delete + re-insert) atomically.
-   * Returns the updated group or null if not found.
-   */
-  update(id, input) {
-    const existing = this.getById(id);
-    if (!existing) return null;
-    const title = input.title ?? existing.title;
-    const currency = input.currency ?? existing.currency;
-    this.validate({ title, currency, tariffs: input.tariffs });
-    const updateGroup = this.db.prepare(`
-      UPDATE tariff_groups SET
-        year = ?, title = ?, currency = ?,
-        updated_at = datetime('now')
-      WHERE id = ?
-    `);
-    const deleteTariffs = this.db.prepare("DELETE FROM tariffs WHERE group_id = ?");
-    const insertTariff = this.db.prepare(`
-      INSERT INTO tariffs (group_id, name, price, position)
-      VALUES (?, ?, ?, ?)
-    `);
-    const updateTransaction = this.db.transaction(() => {
-      const year = input.year ?? existing.year;
-      try {
-        updateGroup.run(year, title, currency, id);
-      } catch (err) {
-        if (err instanceof Error && err.message.includes("UNIQUE constraint failed")) {
-          throw new Error(TARIFF_GROUP_ERRORS.DUPLICATE_YEAR_TITLE);
-        }
-        throw err;
-      }
-      deleteTariffs.run(id);
-      for (const tariff of input.tariffs) {
-        insertTariff.run(id, tariff.name, tariff.price, tariff.position);
-      }
-    });
-    updateTransaction();
-    return this.getById(id);
-  }
-  /**
-   * Deletes a tariff group by ID.
-   * Verifies no events reference the group before deleting.
-   * Returns { success: true } on success, or { success: false, error } if the group is in use.
-   */
-  delete(id) {
-    const existing = this.getById(id);
-    if (!existing) {
-      return { success: false, error: TARIFF_GROUP_ERRORS.NOT_FOUND };
-    }
-    const events = this.getEventsByGroupId(id);
-    if (events.length > 0) {
-      return { success: false, error: TARIFF_GROUP_ERRORS.GROUP_IN_USE };
-    }
-    this.db.prepare("DELETE FROM tariff_groups WHERE id = ?").run(id);
-    return { success: true };
-  }
-  /**
-   * Returns IDs of events that reference the given tariff group.
-   */
-  getEventsByGroupId(groupId) {
-    const rows = this.db.prepare("SELECT id FROM eventos WHERE tariff_group_id = ?").all(groupId);
-    return rows.map((r) => r.id);
-  }
 }
 function registerTariffGroupsHandlers() {
   const repo = new TariffGroupsRepository();
