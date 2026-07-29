@@ -19,7 +19,6 @@ export interface Tariff {
 export interface Strip {
   id?: number
   name: string
-  description: string
   local_price: number
   secondary_price: number
   position: number
@@ -58,7 +57,6 @@ export interface TariffInput {
 
 export interface StripInput {
   name: string
-  description: string
   local_price: number
   secondary_price: number
   position: number
@@ -187,11 +185,10 @@ export class TariffGroupsRepository {
         typeof tariff.secondary_price !== 'number' ||
         isNaN(tariff.secondary_price) ||
         !isFinite(tariff.secondary_price) ||
-        tariff.secondary_price <= 0
+        tariff.secondary_price < 0
       ) {
         throw new Error(TARIFF_GROUP_ERRORS.INVALID_SECONDARY_PRICE)
       }
-      // description is allowed to be empty string — no validation needed
     }
 
     // Validate each strip
@@ -214,7 +211,7 @@ export class TariffGroupsRepository {
         typeof strip.secondary_price !== 'number' ||
         isNaN(strip.secondary_price) ||
         !isFinite(strip.secondary_price) ||
-        strip.secondary_price <= 0
+        strip.secondary_price < 0
       ) {
         throw new Error(TARIFF_GROUP_ERRORS.INVALID_SECONDARY_PRICE)
       }
@@ -249,7 +246,6 @@ export class TariffGroupsRepository {
           strips.push({
             id: row.id,
             name: row.name,
-            description: row.description ?? '',
             local_price: row.local_price,
             secondary_price: row.secondary_price,
             position: row.position,
@@ -373,9 +369,12 @@ export class TariffGroupsRepository {
 
       const groupId = Number(result.lastInsertRowid)
 
-      // Insert individual tariffs
+      // Insert individual tariffs and track position → new ID.
+      // The frontend sends tariff_ids as 1-indexed positions, so we need
+      // to resolve them to the newly generated database IDs.
+      const positionToNewId = new Map<number, number>()
       for (const tariff of input.tariffs) {
-        insertTariff.run(
+        const tariffResult = insertTariff.run(
           groupId,
           tariff.name,
           tariff.description ?? '',
@@ -384,6 +383,7 @@ export class TariffGroupsRepository {
           tariff.position,
           'individual'
         )
+        positionToNewId.set(tariff.position, Number(tariffResult.lastInsertRowid))
       }
 
       // Insert strips and their junction rows
@@ -391,7 +391,7 @@ export class TariffGroupsRepository {
         const stripResult = insertTariff.run(
           groupId,
           strip.name,
-          strip.description ?? '',
+          '',
           strip.local_price,
           strip.secondary_price,
           strip.position,
@@ -399,8 +399,12 @@ export class TariffGroupsRepository {
         )
         const stripId = Number(stripResult.lastInsertRowid)
 
-        for (const tariffId of strip.tariff_ids) {
-          insertStripTariff.run(stripId, tariffId)
+        for (const tariffPosition of strip.tariff_ids) {
+          // tariff_ids from the frontend are 1-indexed positions, not DB IDs
+          const newTariffId = positionToNewId.get(tariffPosition)
+          if (newTariffId != null) {
+            insertStripTariff.run(stripId, newTariffId)
+          }
         }
       }
 
@@ -465,9 +469,12 @@ export class TariffGroupsRepository {
       // Delete existing tariffs (CASCADE handles strip_tariffs junction rows)
       deleteTariffs.run(id)
 
-      // Re-insert individual tariffs
+      // Re-insert individual tariffs and track position → new ID.
+      // The frontend sends tariff_ids as 1-indexed positions, so we need
+      // to resolve them to the newly generated database IDs.
+      const positionToNewId = new Map<number, number>()
       for (const tariff of input.tariffs) {
-        insertTariff.run(
+        const tariffResult = insertTariff.run(
           id,
           tariff.name,
           tariff.description ?? '',
@@ -476,6 +483,7 @@ export class TariffGroupsRepository {
           tariff.position,
           'individual'
         )
+        positionToNewId.set(tariff.position, Number(tariffResult.lastInsertRowid))
       }
 
       // Re-insert strips and their junction rows
@@ -483,7 +491,7 @@ export class TariffGroupsRepository {
         const stripResult = insertTariff.run(
           id,
           strip.name,
-          strip.description ?? '',
+          '',
           strip.local_price,
           strip.secondary_price,
           strip.position,
@@ -491,8 +499,12 @@ export class TariffGroupsRepository {
         )
         const stripId = Number(stripResult.lastInsertRowid)
 
-        for (const tariffId of strip.tariff_ids) {
-          insertStripTariff.run(stripId, tariffId)
+        for (const tariffPosition of strip.tariff_ids) {
+          // tariff_ids from the frontend are 1-indexed positions, not DB IDs
+          const newTariffId = positionToNewId.get(tariffPosition)
+          if (newTariffId != null) {
+            insertStripTariff.run(stripId, newTariffId)
+          }
         }
       }
     })

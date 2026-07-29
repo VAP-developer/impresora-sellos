@@ -11,6 +11,7 @@
  */
 
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { SelloConfig } from '@renderer/types/config'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -20,6 +21,8 @@ export interface PerfilesSectionProps {
   sello: SelloConfig
   /** Callback when the user edits a profile name. Only profile 4 is editable. */
   onProfileNameChange: (profileIndex: number, value: string) => void
+  /** Callback when the user clicks save to persist profile names. */
+  onSave?: () => void
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -31,8 +34,10 @@ const READONLY_PROFILES = new Set([1, 2, 3, 5, 6])
 
 export default function PerfilesSection({
   sello,
-  onProfileNameChange
+  onProfileNameChange,
+  onSave
 }: PerfilesSectionProps): JSX.Element {
+  const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
 
   /** Get profile name from sello config by index (1-based). */
@@ -122,6 +127,18 @@ export default function PerfilesSection({
               </div>
             )
           })}
+
+          {onSave && (
+            <div className="flex justify-end w-[250px] mt-2">
+              <button
+                type="button"
+                onClick={onSave}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-4 rounded text-sm"
+              >
+                {t('settings.save')}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </section>

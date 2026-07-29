@@ -71,11 +71,7 @@ export default function StampModelSingle({ model }: StampModelSingleProps): JSX.
   const fecha = activeEvento?.fecha ?? ''
   const localidad = activeEvento?.localidad ?? ''
 
-  // Tarifa info - show the primary tariff for this model
-  const tarifaPrice = model === 'A'
-    ? (config?.precios?.tarifaA ?? 0)
-    : (config?.precios?.tarifaB ?? 0)
-  const tarifaLabel = model === 'A' ? 'Tarifa A' : 'Tarifa B'
+  // Event description
   const tarifaDesc = activeEvento?.nevento ?? ''
 
   // Code
@@ -137,42 +133,40 @@ export default function StampModelSingle({ model }: StampModelSingleProps): JSX.
         )}
 
         {/* Overlay text — positioned to replicate stamp-renderer layout */}
-        <div className="absolute inset-0 flex flex-col justify-end p-2 pointer-events-none">
-          {/* Tarifa name (biggest, bold) */}
-          <p className="text-white text-sm font-bold leading-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
-            {tarifaLabel} — {tarifaPrice.toFixed(2)}€
-          </p>
-
+        {/* Only show overlay text when the stamp has an image loaded */}
+        {imageUrl && (
+        <div className="absolute inset-0 flex flex-col justify-end p-2 pl-[11px] pointer-events-none">
           {/* Tarifa description / event name */}
           {tarifaDesc && (
-            <p className="text-white text-xs leading-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+            <p className="text-black text-xs leading-tight">
               {tarifaDesc}
             </p>
           )}
 
           {/* Fecha (month + year) */}
           {fechaDisplay && (
-            <p className="text-white text-xs leading-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+            <p className="text-black text-xs leading-tight">
               {fechaDisplay}
             </p>
           )}
 
           {/* Localidad */}
           {localidad && (
-            <p className="text-white text-xs leading-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+            <p className="text-black text-xs leading-tight">
               {localidad}
             </p>
           )}
 
           {/* Código (2 lines) */}
           {codeLines && (
-            <p className="text-white text-[10px] font-bold leading-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+            <p className="text-black text-[10px] font-bold leading-tight">
               {codeLines.line1}
               {codeLines.line2 && <br />}
               {codeLines.line2}
             </p>
           )}
         </div>
+        )}
       </div>
     </div>
   )

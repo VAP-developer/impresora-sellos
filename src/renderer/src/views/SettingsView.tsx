@@ -126,29 +126,19 @@ export default function SettingsView(): JSX.Element {
 
           {/* Section: Edit Profiles */}
           {config && (
-            <div>
-              <PerfilesSection
-                sello={{
-                  ...config.sello,
-                  nperfil1: localProfileNames[1],
-                  nperfil2: localProfileNames[2],
-                  nperfil3: localProfileNames[3],
-                  nperfil4: localProfileNames[4],
-                  nperfil5: localProfileNames[5],
-                  nperfil6: localProfileNames[6]
-                }}
-                onProfileNameChange={handleProfileNameChange}
-              />
-              <div className="flex justify-end mt-2">
-                <button
-                  type="button"
-                  onClick={handleSaveProfiles}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-4 rounded text-sm"
-                >
-                  {t('settings.save')}
-                </button>
-              </div>
-            </div>
+            <PerfilesSection
+              sello={{
+                ...config.sello,
+                nperfil1: localProfileNames[1],
+                nperfil2: localProfileNames[2],
+                nperfil3: localProfileNames[3],
+                nperfil4: localProfileNames[4],
+                nperfil5: localProfileNames[5],
+                nperfil6: localProfileNames[6]
+              }}
+              onProfileNameChange={handleProfileNameChange}
+              onSave={handleSaveProfiles}
+            />
           )}
 
           {/* Section: Printer Management */}
@@ -172,7 +162,7 @@ export default function SettingsView(): JSX.Element {
                 tabIndex={-1}
                 aria-hidden="true"
               />
-              <h3 className="text-base font-bold m-0">
+              <h3 className="text-lg font-bold m-0">
                 {t('settings.tariffGroups').toUpperCase()}
               </h3>
             </button>
@@ -206,7 +196,7 @@ export default function SettingsView(): JSX.Element {
                 tabIndex={-1}
                 aria-hidden="true"
               />
-              <h3 className="text-base font-bold m-0">
+              <h3 className="text-lg font-bold m-0">
                 {t('settings.cutNumber').toUpperCase()}
               </h3>
             </button>
@@ -240,7 +230,7 @@ export default function SettingsView(): JSX.Element {
                 tabIndex={-1}
                 aria-hidden="true"
               />
-              <h3 className="text-base font-bold m-0">
+              <h3 className="text-lg font-bold m-0">
                 {t('settings.language').toUpperCase()}
               </h3>
             </button>

@@ -166,7 +166,7 @@ export default function EventoSection({
           id="evento-section-heading"
           className="text-black text-lg font-bold cursor-pointer"
         >
-          EVENTO: {bloqueado ? 'BLOQUEADO' : 'DESBLOQUEADO'}
+          EVENTO: {bloqueado ? 'BLOQUEADO' : 'ACTUAL'}
         </label>
       </div>
 

@@ -92,26 +92,29 @@ export default function DynamicTariffTable(): JSX.Element {
       aria-label="Tabla de tarifas dinámica"
     >
       {/* ─── Header row ─── */}
-      <div className="grid grid-cols-[1fr_1fr_1.2fr_2fr_1.2fr_1fr_1fr] bg-gray-100 border-b border-gray-300">
-        <div className="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wide">
+      <div className="grid grid-cols-[1fr_1fr_1.2fr_1.4fr_1fr_1.2fr_1fr_1fr] bg-gray-100 border-b border-gray-300">
+        <div className="px-3 py-2 text-center text-base font-semibold text-gray-600 uppercase tracking-wide">
           Subtotal
         </div>
-        <div className="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wide">
+        <div className="px-3 py-2 text-center text-base font-semibold text-gray-600 uppercase tracking-wide">
           Límite
         </div>
-        <div className="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wide">
+        <div className="px-3 py-2 text-center text-base font-semibold text-gray-600 uppercase tracking-wide">
           Cantidad
         </div>
-        <div className="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wide">
+        <div className="px-3 py-2 text-center text-base font-semibold text-gray-600 uppercase tracking-wide">
           Modalidad
         </div>
-        <div className="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wide">
+        <div className="px-3 py-2 text-center text-base font-semibold text-gray-600 uppercase tracking-wide">
+          Precio
+        </div>
+        <div className="px-3 py-2 text-center text-base font-semibold text-gray-600 uppercase tracking-wide">
           Cantidad
         </div>
-        <div className="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wide">
+        <div className="px-3 py-2 text-center text-base font-semibold text-gray-600 uppercase tracking-wide">
           Límite
         </div>
-        <div className="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wide">
+        <div className="px-3 py-2 text-center text-base font-semibold text-gray-600 uppercase tracking-wide">
           Subtotal
         </div>
       </div>
@@ -136,17 +139,17 @@ export default function DynamicTariffTable(): JSX.Element {
         return (
           <div
             key={`row-${tariffId}`}
-            className={`grid grid-cols-[1fr_1fr_1.2fr_2fr_1.2fr_1fr_1fr] items-center ${stripBg} ${rowBorder}`}
+            className={`grid grid-cols-[1fr_1fr_1.2fr_1.4fr_1fr_1.2fr_1fr_1fr] items-center ${stripBg} ${rowBorder}`}
             role="row"
             aria-label={row.name}
           >
             {/* Subtotal Sello A */}
-            <div className="px-3 py-3 text-center text-sm font-medium text-gray-700">
+            <div className="px-3 py-3 text-center text-base font-medium text-gray-700">
               {subtotalS1 > 0 ? `${subtotalS1.toFixed(2)} ${activeCurrency}` : '—'}
             </div>
 
             {/* Límite Sello A */}
-            <div className="px-3 py-3 text-center text-sm font-medium text-gray-600">
+            <div className="px-3 py-3 text-center text-base font-medium text-gray-600">
               {limitS1}
             </div>
 
@@ -157,28 +160,32 @@ export default function DynamicTariffTable(): JSX.Element {
                 min="0"
                 value={qtyS1}
                 onChange={handleChange(tariffId, 1)}
-                className="w-16 h-10 text-center text-lg font-semibold border-2 border-gray-300 rounded-lg
+                className="w-16 h-10 text-center text-xl font-semibold border-2 border-gray-300 rounded-lg
                            focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-colors"
                 aria-label={`Cantidad ${row.name} Sello A`}
               />
             </div>
 
-            {/* Modalidad + Precio (center) */}
+            {/* Modalidad (name + description) */}
             <div className="px-3 py-3 flex flex-col items-center justify-center">
-              <span className="text-base font-bold text-gray-800">{row.name}</span>
+              <span className="text-lg font-bold text-gray-800">{row.name}</span>
               {row.description && (
-                <span className="text-xs text-gray-500">{row.description}</span>
+                <span className="text-sm text-gray-500">{row.description}</span>
               )}
+            </div>
+
+            {/* Precio */}
+            <div className="px-3 py-3 flex justify-center">
               <button
                 type="button"
                 onClick={togglePrice}
-                className="mt-0.5 text-sm font-semibold text-blue-700 hover:text-blue-900
+                className="text-base font-semibold text-blue-700 hover:text-blue-900
                            hover:bg-blue-100 rounded px-2 py-0.5 transition-colors cursor-pointer"
                 aria-label={`Alternar precio: ${showSecondary ? 'secundario' : 'local'}`}
                 title={showSecondary ? 'Precio secundario (clic para volver a local)' : 'Precio local (clic para ver secundario)'}
               >
                 {activePrice.toFixed(2)} {activeCurrency}
-                <span className="ml-1 text-[10px] text-gray-500">
+                <span className="ml-1 text-xs text-gray-500">
                   {showSecondary ? '(sec)' : '(loc)'}
                 </span>
               </button>
@@ -191,19 +198,19 @@ export default function DynamicTariffTable(): JSX.Element {
                 min="0"
                 value={qtyS2}
                 onChange={handleChange(tariffId, 2)}
-                className="w-16 h-10 text-center text-lg font-semibold border-2 border-gray-300 rounded-lg
+                className="w-16 h-10 text-center text-xl font-semibold border-2 border-gray-300 rounded-lg
                            focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition-colors"
                 aria-label={`Cantidad ${row.name} Sello B`}
               />
             </div>
 
             {/* Límite Sello B */}
-            <div className="px-3 py-3 text-center text-sm font-medium text-gray-600">
+            <div className="px-3 py-3 text-center text-base font-medium text-gray-600">
               {limitS2}
             </div>
 
             {/* Subtotal Sello B */}
-            <div className="px-3 py-3 text-center text-sm font-medium text-gray-700">
+            <div className="px-3 py-3 text-center text-base font-medium text-gray-700">
               {subtotalS2 > 0 ? `${subtotalS2.toFixed(2)} ${activeCurrency}` : '—'}
             </div>
           </div>

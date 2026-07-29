@@ -32,7 +32,6 @@ interface TariffFormRow {
 
 interface StripFormRow {
   name: string
-  description: string
   local_price: string
   secondary_price: string
   selected_tariff_indices: number[]
@@ -77,7 +76,7 @@ function emptyTariffRow(): TariffFormRow {
 }
 
 function emptyStripRow(): StripFormRow {
-  return { name: '', description: '', local_price: '', secondary_price: '', selected_tariff_indices: [] }
+  return { name: '', local_price: '', secondary_price: '', selected_tariff_indices: [] }
 }
 
 function groupToFormState(group: TariffGroup): FormState {
@@ -102,7 +101,6 @@ function groupToFormState(group: TariffGroup): FormState {
     })),
     strips: group.strips.map((s) => ({
       name: s.name,
-      description: s.description,
       local_price: String(s.local_price),
       secondary_price: String(s.secondary_price),
       selected_tariff_indices: s.tariff_ids
@@ -193,7 +191,7 @@ export function TariffGroupSection(): JSX.Element {
         }
 
         const secondaryPrice = Number(row.secondary_price)
-        if (!row.secondary_price.trim() || isNaN(secondaryPrice) || !isFinite(secondaryPrice) || secondaryPrice <= 0) {
+        if (row.secondary_price.trim() && (isNaN(secondaryPrice) || !isFinite(secondaryPrice) || secondaryPrice < 0)) {
           rowErr.secondary_price = t('validation.secondaryPricePositive')
         }
 
@@ -217,8 +215,8 @@ export function TariffGroupSection(): JSX.Element {
           rowErr.local_price = t('validation.localPricePositive')
         }
 
-        const secondaryPrice = Number(row.secondary_price)
-        if (!row.secondary_price.trim() || isNaN(secondaryPrice) || !isFinite(secondaryPrice) || secondaryPrice <= 0) {
+        const secondaryPrice2 = Number(row.secondary_price)
+        if (row.secondary_price.trim() && (isNaN(secondaryPrice2) || !isFinite(secondaryPrice2) || secondaryPrice2 < 0)) {
           rowErr.secondary_price = t('validation.secondaryPricePositive')
         }
 
@@ -284,15 +282,14 @@ export function TariffGroupSection(): JSX.Element {
         name: row.name.trim(),
         description: row.description.trim(),
         local_price: Number(row.local_price),
-        secondary_price: Number(row.secondary_price),
+        secondary_price: row.secondary_price.trim() ? Number(row.secondary_price) : 0,
         position: i + 1
       }))
 
       const strips = form.strips.map((row, i) => ({
         name: row.name.trim(),
-        description: row.description.trim(),
         local_price: Number(row.local_price),
-        secondary_price: Number(row.secondary_price),
+        secondary_price: row.secondary_price.trim() ? Number(row.secondary_price) : 0,
         position: i + 1,
         tariff_ids: row.selected_tariff_indices.map((idx) => idx + 1) // position-based (1-indexed)
       }))
@@ -701,7 +698,7 @@ export function TariffGroupSection(): JSX.Element {
                   value={row.secondary_price}
                   onChange={(e) => updateTariffRow(i, 'secondary_price', e.target.value)}
                   step="0.01"
-                  min="0.01"
+                  min="0"
                   aria-invalid={!!rowErrors?.secondary_price}
                   className={cn(
                     'h-8 w-full px-2 rounded border text-sm',
@@ -787,21 +784,6 @@ export function TariffGroupSection(): JSX.Element {
                   )}
                 </div>
 
-                {/* Description */}
-                <div className="flex-1 min-w-0">
-                  <input
-                    type="text"
-                    placeholder={t('settings.description')}
-                    value={row.description}
-                    onChange={(e) => updateStripRow(i, 'description', e.target.value)}
-                    className={cn(
-                      'h-8 w-full px-2 rounded border text-sm',
-                      'focus:outline-none focus:ring-1 focus:ring-blue-400',
-                      'border-gray-300'
-                    )}
-                  />
-                </div>
-
                 {/* Local Price */}
                 <div className="w-24">
                   <input
@@ -831,7 +813,7 @@ export function TariffGroupSection(): JSX.Element {
                     value={row.secondary_price}
                     onChange={(e) => updateStripRow(i, 'secondary_price', e.target.value)}
                     step="0.01"
-                    min="0.01"
+                    min="0"
                     aria-invalid={!!rowErrors?.secondary_price}
                     className={cn(
                       'h-8 w-full px-2 rounded border text-sm',
