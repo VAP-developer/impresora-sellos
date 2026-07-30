@@ -12,7 +12,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useTariffGroupsStore } from '@renderer/stores/tariff-groups.store'
-import { CurrencySelector } from './CurrencySelector'
+import { CurrencySelector, CURRENCIES } from './CurrencySelector'
 import { TariffMultiSelect } from './TariffMultiSelect'
 import { cn } from '../../lib/utils'
 import type {
@@ -70,6 +70,14 @@ interface FormErrors {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Convert currency code to symbol (e.g., 'EUR' → '€', 'USD' → '$')
+ */
+function getCurrencySymbol(code: string): string {
+  const currency = CURRENCIES.find((c) => c.code === code)
+  return currency?.symbol ?? code
+}
 
 function emptyTariffRow(): TariffFormRow {
   return { name: '', description: '', local_price: '', secondary_price: '' }
@@ -458,7 +466,7 @@ export function TariffGroupSection(): JSX.Element {
                     {group.title}
                   </span>
                   <span className="ml-2 text-xs text-gray-400">
-                    ({group.local_currency} / {group.complementary_currency})
+                    ({getCurrencySymbol(group.local_currency)} / {getCurrencySymbol(group.complementary_currency)})
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -623,7 +631,7 @@ export function TariffGroupSection(): JSX.Element {
             {t('settings.individual')} ({form.tariffs.length})
           </div>
           <div className="text-xs text-gray-400">
-            {form.local_currency} / {form.complementary_currency}
+            {getCurrencySymbol(form.local_currency)} / {getCurrencySymbol(form.complementary_currency)}
           </div>
         </div>
 
@@ -752,7 +760,7 @@ export function TariffGroupSection(): JSX.Element {
             {t('settings.strips')} ({form.strips.length})
           </div>
           <div className="text-xs text-gray-400">
-            {form.local_currency} / {form.complementary_currency}
+            {getCurrencySymbol(form.local_currency)} / {getCurrencySymbol(form.complementary_currency)}
           </div>
         </div>
 

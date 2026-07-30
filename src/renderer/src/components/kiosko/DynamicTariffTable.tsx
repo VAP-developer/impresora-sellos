@@ -1,11 +1,11 @@
 /**
  * DynamicTariffTable.tsx
  *
- * Dynamic tariff panel — unified block with mirrored columns:
- *   Subtotal | Límite | Cantidad | [ Modalidad · Precio ] | Cantidad | Límite | Subtotal
+ * Dynamic tariff panel using tabbed interface.
+ * Splits strips and individual tariffs into separate tables.
  *
  * Left = Sello A (Modelo 1), Right = Sello B (Modelo 2).
- * Strips are shown first, then individual tariffs.
+ * Strips are shown in one tab, individual tariffs in another.
  * A toggle on the price lets the user switch between local and secondary (complementary) price.
  *
  * Replaces TariffTableSplit when an active tariff group is present.
@@ -17,11 +17,27 @@ import { useConfigStore } from '@renderer/stores/config.store'
 import { calcDynamicLimits } from '@renderer/lib/tariff-calc'
 import type { DynamicQuantities, DynamicLimits } from '@renderer/lib/tariff-calc'
 import type { Tariff, Strip } from '@renderer/lib/ipc-client'
+import TabbedTariffContainer from './TabbedTariffContainer'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface TariffRowDef {
+  label: string
+  localPrice: number
+  secondaryPrice: number
+  qtyFieldS1: string
+  qtyFieldS2: string
+  limitFieldS1: string
+  limitFieldS2: string
+  isStrip: boolean
+  tariffId?: number
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function DynamicTariffTable(): JSX.Element {
   const activeTariffGroup = useKioskoStore((state) => state.activeTariffGroup)
+  const activeEvento = useKioskoStore((state) => state.activeEvento)
   const quantities = useKioskoStore((state) => state.quantities)
   const setQuantity = useKioskoStore((state) => state.setQuantity)
   const config = useConfigStore((state) => state.config)
@@ -31,17 +47,35 @@ export default function DynamicTariffTable(): JSX.Element {
   const setUseSecondaryPrice = useKioskoStore((state) => state.setUseSecondaryPrice)
 
   // Separate strips and individual tariffs, sorted by position
+  // FILTER based on selected IDs from activeEvento
   const strips = useMemo(() => {
     if (!activeTariffGroup) return []
-    return [...(activeTariffGroup.strips ?? [])].sort((a, b) => a.position - b.position)
-  }, [activeTariffGroup])
+    const allStrips = [...(activeTariffGroup.strips ?? [])].sort((a, b) => a.position - b.position)
+    
+    // If evento has selected strip IDs, filter to only those
+    if (activeEvento && activeEvento.selected_strip_ids && activeEvento.selected_strip_ids.length > 0) {
+      const selectedIds = new Set(activeEvento.selected_strip_ids)
+      return allStrips.filter(s => s.id && selectedIds.has(s.id))
+    }
+    
+    return allStrips
+  }, [activeTariffGroup, activeEvento])
 
   const tariffs = useMemo(() => {
     if (!activeTariffGroup) return []
-    return [...(activeTariffGroup.tariffs ?? [])].sort((a, b) => a.position - b.position)
-  }, [activeTariffGroup])
+    const allTariffs = [...(activeTariffGroup.tariffs ?? [])].sort((a, b) => a.position - b.position)
+    
+    // If evento has selected tariff IDs, filter to only those
+    if (activeEvento && activeEvento.selected_tariff_ids && activeEvento.selected_tariff_ids.length > 0) {
+      const selectedIds = new Set(activeEvento.selected_tariff_ids)
+      return allTariffs.filter(t => t.id && selectedIds.has(t.id))
+    }
+    
+    return allTariffs
+  }, [activeTariffGroup, activeEvento])
 
   // Merged list: strips first, then individual tariffs
+  // Add _isStrip flag during construction
   const allRows = useMemo(() => {
     const result: Array<(Tariff | Strip) & { _isStrip: boolean }> = []
     for (const s of strips) {
@@ -56,10 +90,12 @@ export default function DynamicTariffTable(): JSX.Element {
   // Compute dynamic limits for all tariff/model combinations
   const limits = useMemo(() => {
     if (!activeTariffGroup || !config) return {}
-    // Combine tariffs and strips for limit calculation
-    const allTariffs = [...(activeTariffGroup.tariffs ?? []), ...(activeTariffGroup.strips ?? [])]
+    // Use filtered tariffs and strips for limit calculation
+    const filteredTariffs = tariffs
+    const filteredStrips = strips
+    const allTariffs = [...filteredTariffs, ...filteredStrips]
     return calcDynamicLimits(quantities, allTariffs, config.ticket, config.sello, showSecondary)
-  }, [activeTariffGroup, quantities, config, showSecondary])
+  }, [tariffs, strips, quantities, config, showSecondary])
 
   const localCurrency = activeTariffGroup?.local_currency ?? 'EUR'
   const secondaryCurrency = activeTariffGroup?.complementary_currency ?? 'EUR'
@@ -71,17 +107,65 @@ export default function DynamicTariffTable(): JSX.Element {
     return symbols[activeCurrency] ?? activeCurrency
   }, [activeCurrency])
 
-  const handleChange = useCallback(
-    (tariffId: number, model: 1 | 2) => (e: React.ChangeEvent<HTMLInputElement>) => {
-      const val = e.target.valueAsNumber
-      setQuantity(tariffId, model, Number.isNaN(val) ? 0 : val)
-    },
-    [setQuantity]
-  )
-
   const togglePrice = useCallback(() => {
     setUseSecondaryPrice(!showSecondary)
   }, [showSecondary, setUseSecondaryPrice])
+
+  // Transform dynamic rows into TariffRowDef format for TabbedTariffContainer
+  const rowDefs = useMemo((): TariffRowDef[] => {
+    return allRows.map(row => {
+      const tariffId = row.id!
+      const key1 = buildQuantityKey(tariffId, 1)
+      const key2 = buildQuantityKey(tariffId, 2)
+      
+      return {
+        label: row.name,
+        localPrice: row.local_price,
+        secondaryPrice: row.secondary_price,
+        qtyFieldS1: key1,
+        qtyFieldS2: key2,
+        limitFieldS1: key1, // Limits use same keys as quantities
+        limitFieldS2: key2,
+        isStrip: row._isStrip,
+        tariffId: tariffId
+      }
+    })
+  }, [allRows])
+
+  // Split rows into strips and individual tariffs based on _isStrip flag
+  const stripRows = useMemo(() => rowDefs.filter(r => r.isStrip), [rowDefs])
+  const individualRows = useMemo(() => rowDefs.filter(r => !r.isStrip), [rowDefs])
+
+  // Convert quantities to Record<string, number> format for TabbedTariffContainer
+  const quantitiesRecord = useMemo(() => {
+    const record: Record<string, number> = {}
+    for (const key in quantities) {
+      record[key] = (quantities as DynamicQuantities)[key] ?? 0
+    }
+    return record
+  }, [quantities])
+
+  // Convert limits to Record<string, number> format for TabbedTariffContainer
+  const limitsRecord = useMemo(() => {
+    const record: Record<string, number> = {}
+    for (const key in limits) {
+      record[key] = (limits as DynamicLimits)[key] ?? 0
+    }
+    return record
+  }, [limits])
+
+  // Adapter function to match TabbedTariffContainer's setQuantity signature
+  const handleSetQuantity = useCallback((field: string, value: number) => {
+    // Parse tariffId and model from the dynamic quantity key (format: "qty_<tariffId>_<model>")
+    const parts = field.split('_')
+    if (parts.length === 3 && parts[0] === 'qty') {
+      const tariffId = parseInt(parts[1], 10)
+      const model = parseInt(parts[2], 10) as 1 | 2
+      if (!isNaN(tariffId) && (model === 1 || model === 2)) {
+        setQuantity(tariffId, model, value)
+      }
+    }
+  }, [setQuantity])
 
   if (!activeTariffGroup) {
     return (
@@ -92,136 +176,16 @@ export default function DynamicTariffTable(): JSX.Element {
   }
 
   return (
-    <div
-      className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden"
-      role="table"
-      aria-label="Tabla de tarifas dinámica"
-    >
-      {/* ─── Header row ─── */}
-      <div className="grid grid-cols-[1fr_1fr_1.2fr_1.4fr_1fr_1.2fr_1fr_1fr] bg-gradient-to-r from-blue-600 to-blue-700 border-b-2 border-blue-800">
-        <div className="px-2 py-2 text-center text-sm font-bold text-white uppercase tracking-wide">
-          Subtotal
-        </div>
-        <div className="px-2 py-2 text-center text-sm font-bold text-white uppercase tracking-wide">
-          Límite
-        </div>
-        <div className="px-2 py-2 text-center text-sm font-bold text-white uppercase tracking-wide">
-          Cantidad
-        </div>
-        <div className="px-2 py-2 text-center text-sm font-bold text-white uppercase tracking-wide">
-          Modalidad
-        </div>
-        <div className="px-2 py-2 text-center text-sm font-bold text-white uppercase tracking-wide">
-          <button
-            type="button"
-            onClick={togglePrice}
-            className="cursor-pointer hover:text-blue-200 transition-colors"
-            aria-label={`Alternar precio: ${showSecondary ? 'secundario' : 'local'}`}
-            title="Clic para alternar entre precio local y secundario"
-          >
-            Precio {showSecondary ? '(sec)' : '(loc)'}
-          </button>
-        </div>
-        <div className="px-2 py-2 text-center text-sm font-bold text-white uppercase tracking-wide">
-          Cantidad
-        </div>
-        <div className="px-2 py-2 text-center text-sm font-bold text-white uppercase tracking-wide">
-          Límite
-        </div>
-        <div className="px-2 py-2 text-center text-sm font-bold text-white uppercase tracking-wide">
-          Subtotal
-        </div>
-      </div>
-
-      {/* ─── Data rows ─── */}
-      {allRows.map((row, idx) => {
-        const tariffId = row.id!
-        const key1 = buildQuantityKey(tariffId, 1)
-        const key2 = buildQuantityKey(tariffId, 2)
-        const qtyS1 = (quantities as DynamicQuantities)[key1] ?? 0
-        const qtyS2 = (quantities as DynamicQuantities)[key2] ?? 0
-        const limitS1 = (limits as DynamicLimits)[key1] ?? 0
-        const limitS2 = (limits as DynamicLimits)[key2] ?? 0
-
-        const activePrice = showSecondary ? row.secondary_price : row.local_price
-        const subtotalS1 = activePrice * qtyS1
-        const subtotalS2 = activePrice * qtyS2
-
-        const stripBg = row._isStrip ? 'bg-amber-100 border-l-4 border-l-amber-500' : ''
-        const rowBorder = idx < allRows.length - 1 ? 'border-b border-gray-200' : ''
-
-        return (
-          <div
-            key={`row-${tariffId}`}
-            className={`grid grid-cols-[1fr_1fr_1.2fr_1.4fr_1fr_1.2fr_1fr_1fr] items-center ${stripBg} ${rowBorder}`}
-            role="row"
-            aria-label={row.name}
-          >
-            {/* Subtotal Sello A */}
-            <div className="px-2 py-2 text-center text-lg font-bold text-gray-800">
-              {subtotalS1 > 0 ? `${subtotalS1.toFixed(2)}${currencySymbol}` : '—'}
-            </div>
-
-            {/* Límite Sello A */}
-            <div className="px-2 py-2 text-center text-lg font-semibold text-gray-700">
-              {limitS1}
-            </div>
-
-            {/* Cantidad Sello A */}
-            <div className="px-2 py-2 flex justify-center">
-              <input
-                type="number"
-                min="0"
-                value={qtyS1}
-                onChange={handleChange(tariffId, 1)}
-                className="w-20 h-12 text-center text-2xl font-bold border-2 border-gray-400 rounded-lg
-                           focus:border-blue-600 focus:ring-2 focus:ring-blue-300 outline-none transition-colors
-                           bg-white shadow-sm"
-                aria-label={`Cantidad ${row.name} Sello A`}
-              />
-            </div>
-
-            {/* Modalidad (name + description) */}
-            <div className="px-2 py-2 flex flex-col items-center justify-center">
-              <span className={`text-xl font-extrabold ${row._isStrip ? 'text-amber-800' : 'text-gray-900'}`}>
-                {row.name}
-              </span>
-              {'description' in row && row.description && (
-                <span className="text-xs text-gray-600 mt-0.5">{row.description}</span>
-              )}
-            </div>
-
-            {/* Precio (plain text, toggle is in header) */}
-            <div className="px-2 py-2 text-center text-lg font-bold text-green-700">
-              {activePrice.toFixed(2)}{currencySymbol}
-            </div>
-
-            {/* Cantidad Sello B */}
-            <div className="px-2 py-2 flex justify-center">
-              <input
-                type="number"
-                min="0"
-                value={qtyS2}
-                onChange={handleChange(tariffId, 2)}
-                className="w-20 h-12 text-center text-2xl font-bold border-2 border-gray-400 rounded-lg
-                           focus:border-green-600 focus:ring-2 focus:ring-green-300 outline-none transition-colors
-                           bg-white shadow-sm"
-                aria-label={`Cantidad ${row.name} Sello B`}
-              />
-            </div>
-
-            {/* Límite Sello B */}
-            <div className="px-2 py-2 text-center text-lg font-semibold text-gray-700">
-              {limitS2}
-            </div>
-
-            {/* Subtotal Sello B */}
-            <div className="px-2 py-2 text-center text-lg font-bold text-gray-800">
-              {subtotalS2 > 0 ? `${subtotalS2.toFixed(2)}${currencySymbol}` : '—'}
-            </div>
-          </div>
-        )
-      })}
-    </div>
+    <TabbedTariffContainer
+      stripRows={stripRows}
+      individualRows={individualRows}
+      quantities={quantitiesRecord}
+      setQuantity={handleSetQuantity}
+      limits={limitsRecord}
+      showSecondary={showSecondary}
+      toggleSecondary={togglePrice}
+      currencySymbol={currencySymbol}
+      isDynamic={true}
+    />
   )
 }

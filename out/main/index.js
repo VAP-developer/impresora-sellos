@@ -4141,6 +4141,21 @@ async function generateEspecialStrips(config, quantities, counterRef, pdfs) {
     }
   }
 }
+function getCurrencySymbol(code) {
+  const symbols = {
+    EUR: "€",
+    USD: "$",
+    GBP: "£",
+    JPY: "¥",
+    CHF: "Fr",
+    CNY: "¥",
+    MXN: "$",
+    ARS: "$",
+    COP: "$",
+    BRL: "R$"
+  };
+  return symbols[code] ?? code;
+}
 const pdfCache = /* @__PURE__ */ new Map();
 function registerSaleHandlers() {
   const configRepo = new ConfigRepository();

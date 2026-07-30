@@ -32,6 +32,27 @@ import type {
   CancelSaleOutcome
 } from '../sales/sale.service'
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Convert currency code to symbol (e.g., 'EUR' → '€', 'USD' → '$')
+ */
+function getCurrencySymbol(code: string): string {
+  const symbols: Record<string, string> = {
+    EUR: '€',
+    USD: '$',
+    GBP: '£',
+    JPY: '¥',
+    CHF: 'Fr',
+    CNY: '¥',
+    MXN: '$',
+    ARS: '$',
+    COP: '$',
+    BRL: 'R$'
+  }
+  return symbols[code] ?? code
+}
+
 // ─── PDF Cache ────────────────────────────────────────────────────────────────
 
 /**

@@ -1,6 +1,7 @@
 {
   "nav": {
     "home": "Home",
+    "reports": "Reports",
     "print": "Events",
     "machine": "Machine",
     "kiosko": "Kiosk",

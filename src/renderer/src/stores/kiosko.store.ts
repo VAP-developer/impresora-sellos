@@ -16,7 +16,7 @@
 
 import { create } from 'zustand'
 import type { AppConfig, PreciosConfig, TicketConfig, SelloConfig } from '@renderer/types/config'
-import type { TariffGroup } from '@renderer/lib/ipc-client'
+import type { TariffGroup, EventoRow } from '@renderer/lib/ipc-client'
 import {
   normalizeQty,
   calcTotal,
@@ -64,6 +64,40 @@ export function parseQuantityKey(key: string): { tariffId: number; model: 1 | 2 
   return { tariffId: Number(match[1]), model: Number(match[2]) as 1 | 2 }
 }
 
+/**
+ * Get filtered tariffs based on activeEvento selections.
+ * If evento has selected_tariff_ids, return only those tariffs.
+ * Otherwise, return all tariffs from the group.
+ */
+function getFilteredTariffs(group: TariffGroup | null, evento: EventoRow | null) {
+  if (!group) return []
+  const allTariffs = group.tariffs ?? []
+  
+  if (evento && evento.selected_tariff_ids && evento.selected_tariff_ids.length > 0) {
+    const selectedIds = new Set(evento.selected_tariff_ids)
+    return allTariffs.filter(t => t.id && selectedIds.has(t.id))
+  }
+  
+  return allTariffs
+}
+
+/**
+ * Get filtered strips based on activeEvento selections.
+ * If evento has selected_strip_ids, return only those strips.
+ * Otherwise, return all strips from the group.
+ */
+function getFilteredStrips(group: TariffGroup | null, evento: EventoRow | null) {
+  if (!group) return []
+  const allStrips = group.strips ?? []
+  
+  if (evento && evento.selected_strip_ids && evento.selected_strip_ids.length > 0) {
+    const selectedIds = new Set(evento.selected_strip_ids)
+    return allStrips.filter(s => s.id && selectedIds.has(s.id))
+  }
+  
+  return allStrips
+}
+
 // ─── Store ────────────────────────────────────────────────────────────────────
 
 export interface KioskoState {
@@ -72,6 +106,9 @@ export interface KioskoState {
 
   /** The active tariff group determining which tariffs are available */
   activeTariffGroup: TariffGroup | null
+
+  /** The active event (contains selected tariff/strip IDs) */
+  activeEvento: EventoRow | null
 
   /** Whether the user toggled to secondary/complementary pricing */
   useSecondaryPrice: boolean
@@ -146,6 +183,11 @@ export interface KioskoState {
   setActiveTariffGroup: (group: TariffGroup | null) => void
 
   /**
+   * Set the active evento (contains selected tariff/strip IDs).
+   */
+  setActiveEvento: (evento: EventoRow | null) => void
+
+  /**
    * Toggle between local and secondary pricing.
    */
   setUseSecondaryPrice: (value: boolean) => void
@@ -197,6 +239,7 @@ function toLegacyQuantities(quantities: DynamicQuantities): KioskoQuantities {
 export const useKioskoStore = create<KioskoState>((set, get) => ({
   quantities: { ...LEGACY_EMPTY_QUANTITIES },
   activeTariffGroup: null,
+  activeEvento: null,
   useSecondaryPrice: false,
   lastSale: { sellos1: 0, sellos2: 0, tickets: 0 },
 
@@ -213,10 +256,13 @@ export const useKioskoStore = create<KioskoState>((set, get) => ({
   },
 
   getDynamicTotal: () => {
-    const { quantities, activeTariffGroup, useSecondaryPrice } = get()
+    const { quantities, activeTariffGroup, activeEvento, useSecondaryPrice } = get()
     if (!activeTariffGroup) return 0
 
-    const allTariffs = [...(activeTariffGroup.tariffs ?? []), ...(activeTariffGroup.strips ?? [])]
+    const filteredTariffs = getFilteredTariffs(activeTariffGroup, activeEvento)
+    const filteredStrips = getFilteredStrips(activeTariffGroup, activeEvento)
+    const allTariffs = [...filteredTariffs, ...filteredStrips]
+    
     let total = 0
     for (const tariff of allTariffs) {
       if (!tariff.id) continue
@@ -251,18 +297,18 @@ export const useKioskoStore = create<KioskoState>((set, get) => ({
       // Individual tariffs: 1 stamp each
       // Strips: number of tariffs they contain
       let used = 0
-      const allIndividualTariffs = state.activeTariffGroup.tariffs ?? []
-      const allStrips = state.activeTariffGroup.strips ?? []
+      const filteredTariffs = getFilteredTariffs(state.activeTariffGroup, state.activeEvento)
+      const filteredStrips = getFilteredStrips(state.activeTariffGroup, state.activeEvento)
       
       // Count individual tariffs
-      for (const tariff of allIndividualTariffs) {
+      for (const tariff of filteredTariffs) {
         if (!tariff.id) continue
         const key = buildQuantityKey(tariff.id, 1)
         used += state.quantities[key] ?? 0
       }
       
       // Count strips (each strip = number of tariffs it contains)
-      for (const strip of allStrips) {
+      for (const strip of filteredStrips) {
         if (!strip.id) continue
         const key = buildQuantityKey(strip.id, 1)
         const stripQty = state.quantities[key] ?? 0
@@ -281,18 +327,18 @@ export const useKioskoStore = create<KioskoState>((set, get) => ({
       // Individual tariffs: 1 stamp each
       // Strips: number of tariffs they contain
       let used = 0
-      const allIndividualTariffs = state.activeTariffGroup.tariffs ?? []
-      const allStrips = state.activeTariffGroup.strips ?? []
+      const filteredTariffs = getFilteredTariffs(state.activeTariffGroup, state.activeEvento)
+      const filteredStrips = getFilteredStrips(state.activeTariffGroup, state.activeEvento)
       
       // Count individual tariffs
-      for (const tariff of allIndividualTariffs) {
+      for (const tariff of filteredTariffs) {
         if (!tariff.id) continue
         const key = buildQuantityKey(tariff.id, 2)
         used += state.quantities[key] ?? 0
       }
       
       // Count strips (each strip = number of tariffs it contains)
-      for (const strip of allStrips) {
+      for (const strip of filteredStrips) {
         if (!strip.id) continue
         const key = buildQuantityKey(strip.id, 2)
         const stripQty = state.quantities[key] ?? 0
@@ -309,9 +355,9 @@ export const useKioskoStore = create<KioskoState>((set, get) => ({
     const state = get()
     if (state.activeTariffGroup) {
       let totalStripQty = 0
-      const allStrips = state.activeTariffGroup.strips ?? []
+      const filteredStrips = getFilteredStrips(state.activeTariffGroup, state.activeEvento)
       
-      for (const strip of allStrips) {
+      for (const strip of filteredStrips) {
         if (!strip.id) continue
         const key1 = buildQuantityKey(strip.id, 1)
         const key2 = buildQuantityKey(strip.id, 2)
@@ -415,6 +461,10 @@ export const useKioskoStore = create<KioskoState>((set, get) => ({
         quantities: { ...LEGACY_EMPTY_QUANTITIES }
       })
     }
+  },
+
+  setActiveEvento: (evento) => {
+    set({ activeEvento: evento })
   },
 
   setUseSecondaryPrice: (value) => {

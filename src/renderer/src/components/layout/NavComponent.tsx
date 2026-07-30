@@ -39,7 +39,24 @@ export default function NavComponent(): JSX.Element {
 
         <div className="flex-1" />
 
-        {/* 2. Configuración (Settings) */}
+        {/* 2. Informes */}
+        <Link
+          to="/informes"
+          className={cn(
+            'flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded transition-colors',
+            isActive('/informes') ? 'bg-yellow-500/50' : 'hover:bg-yellow-500/30'
+          )}
+          aria-label={t('nav.reports')}
+        >
+          <ReportsIcon />
+          <span className="text-sm font-semibold text-gray-800 hidden sm:inline">
+            {t('nav.reports')}
+          </span>
+        </Link>
+
+        <div className="flex-1" />
+
+        {/* 3. Configuración (Settings) */}
         <Link
           to="/settings"
           className={cn(
@@ -56,7 +73,7 @@ export default function NavComponent(): JSX.Element {
 
         <div className="flex-1" />
 
-        {/* 3. Máquina */}
+        {/* 4. Máquina */}
         <Link
           to="/maquina"
           className={cn(
@@ -71,7 +88,7 @@ export default function NavComponent(): JSX.Element {
 
         <div className="flex-1" />
 
-        {/* 4. Eventos */}
+        {/* 5. Eventos */}
         <Link
           to="/imprimir"
           className={cn(
@@ -86,7 +103,7 @@ export default function NavComponent(): JSX.Element {
 
         <div className="flex-1" />
 
-        {/* 5. Kiosko */}
+        {/* 6. Kiosko */}
         <Link
           to="/kiosko"
           className={cn(
@@ -207,6 +224,27 @@ function SettingsIcon(): JSX.Element {
     >
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
+    </svg>
+  )
+}
+
+function ReportsIcon(): JSX.Element {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className="w-7 h-7 text-gray-800"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {/* Chart bar icon representing reports */}
+      <line x1="18" y1="20" x2="18" y2="10" />
+      <line x1="12" y1="20" x2="12" y2="4" />
+      <line x1="6" y1="20" x2="6" y2="14" />
     </svg>
   )
 }

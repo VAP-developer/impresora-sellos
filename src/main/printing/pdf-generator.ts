@@ -172,10 +172,23 @@ export interface DynamicTariffContext {
   groupId: number
   /** Group title */
   title: string
+  /** Event name (optional, for ticket header) */
+  eventName?: string
   /** Currency code */
   currency: string
+  /** Currency symbol (e.g., '€', '$') */
+  currencySymbol: string
   /** Active tariffs in this group */
   tariffs: DynamicTariffDef[]
+  /** Active strips in this group */
+  strips?: Array<{
+    id: number
+    name: string
+    price: number
+    secondaryPrice: number
+    position: number
+    tariff_ids: number[]
+  }>
 }
 
 /** Target printer for a generated PDF */

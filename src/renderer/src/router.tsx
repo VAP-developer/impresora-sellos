@@ -2,6 +2,7 @@ import { createHashRouter, Navigate } from 'react-router-dom'
 import MainLayout from './components/layout/MainLayout'
 import {
   HomeView,
+  InformesView,
   KioskoView,
   MaquinaView,
   ImprimirView,
@@ -21,6 +22,10 @@ export const router = createHashRouter([
       {
         path: 'home',
         element: <HomeView />
+      },
+      {
+        path: 'informes',
+        element: <InformesView />
       },
       {
         path: 'kiosko',

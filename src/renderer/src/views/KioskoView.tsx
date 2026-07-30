@@ -24,6 +24,7 @@ export default function KioskoView(): JSX.Element {
   const config = useConfigStore((state) => state.config)
   const activeTariffGroup = useKioskoStore((state) => state.activeTariffGroup)
   const setActiveTariffGroup = useKioskoStore((state) => state.setActiveTariffGroup)
+  const setActiveEvento = useKioskoStore((state) => state.setActiveEvento)
 
   // Load the tariff group from the active event when the view mounts
   // or when the active event changes (config.sello.elevento)
@@ -35,6 +36,7 @@ export default function KioskoView(): JSX.Element {
     async function loadTariffGroup(): Promise<void> {
       if (!activeEventId || activeEventId <= 0) {
         setActiveTariffGroup(null)
+        setActiveEvento(null)
         return
       }
 
@@ -44,6 +46,7 @@ export default function KioskoView(): JSX.Element {
 
         if (!evento || !evento.tariff_group_id) {
           setActiveTariffGroup(null)
+          setActiveEvento(null)
           return
         }
 
@@ -51,10 +54,12 @@ export default function KioskoView(): JSX.Element {
         if (cancelled) return
 
         setActiveTariffGroup(group)
+        setActiveEvento(evento)
       } catch {
         // If loading fails, fall back to no dynamic group
         if (!cancelled) {
           setActiveTariffGroup(null)
+          setActiveEvento(null)
         }
       }
     }
@@ -64,7 +69,7 @@ export default function KioskoView(): JSX.Element {
     return () => {
       cancelled = true
     }
-  }, [activeEventId, setActiveTariffGroup])
+  }, [activeEventId, setActiveTariffGroup, setActiveEvento])
 
   return (
     <div className="flex flex-col h-full p-2 gap-2 overflow-auto">
