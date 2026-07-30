@@ -146,6 +146,8 @@ export function registerSaleHandlers(): void {
                 groupId: group.id,
                 title: group.title,
                 eventName: evento?.nferia, // Add event name for ticket header
+                eventFecha: evento?.fecha, // Add event date for stamp labels
+                eventLocalidad: evento?.localidad, // Add event locality for stamp labels
                 currency: group.local_currency,
                 currencySymbol: getCurrencySymbol(group.local_currency), // Add currency symbol
                 tariffs: group.tariffs.map((t) => ({

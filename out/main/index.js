@@ -2265,7 +2265,8 @@ class TariffGroupsRepository {
           "strip"
         );
         const stripId = Number(stripResult.lastInsertRowid);
-        for (const tariffPosition of strip.tariff_ids) {
+        const uniqueTariffPositions = [...new Set(strip.tariff_ids)];
+        for (const tariffPosition of uniqueTariffPositions) {
           const newTariffId = positionToNewId.get(tariffPosition);
           if (newTariffId != null) {
             insertStripTariff.run(stripId, newTariffId);
@@ -2350,7 +2351,8 @@ class TariffGroupsRepository {
           "strip"
         );
         const stripId = Number(stripResult.lastInsertRowid);
-        for (const tariffPosition of strip.tariff_ids) {
+        const uniqueTariffPositions = [...new Set(strip.tariff_ids)];
+        for (const tariffPosition of uniqueTariffPositions) {
           const newTariffId = positionToNewId.get(tariffPosition);
           if (newTariffId != null) {
             insertStripTariff.run(stripId, newTariffId);
@@ -3756,12 +3758,23 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
     cutNumber = 4;
   }
   let productoCounter = 1;
-  const eventoIndex = config.sello.elevento;
-  const evento = config.sello.eventos?.[eventoIndex];
-  const stampFecha = evento?.fecha ?? "";
-  const stampEvento = evento?.localidad ?? "";
-  const model1Name = evento?.motivoi ?? config.sello.modelo1 ?? "";
-  const model2Name = evento?.motivod ?? config.sello.modelo2 ?? "";
+  let stampFecha;
+  let stampEvento;
+  let model1Name;
+  let model2Name;
+  if (dynamicTariffCtx) {
+    stampFecha = dynamicTariffCtx.eventFecha ?? "";
+    stampEvento = dynamicTariffCtx.eventLocalidad ?? "";
+    model1Name = config.sello.modelo1 ?? "";
+    model2Name = config.sello.modelo2 ?? "";
+  } else {
+    const eventoIndex = config.sello.elevento;
+    const evento = config.sello.eventos?.[eventoIndex];
+    stampFecha = evento?.fecha ?? "";
+    stampEvento = evento?.localidad ?? "";
+    model1Name = evento?.motivoi ?? config.sello.modelo1 ?? "";
+    model2Name = evento?.motivod ?? config.sello.modelo2 ?? "";
+  }
   let bg1 = null;
   let bg2 = null;
   let overlay1 = null;
@@ -4209,6 +4222,10 @@ function registerSaleHandlers() {
                 title: group.title,
                 eventName: evento?.nferia,
                 // Add event name for ticket header
+                eventFecha: evento?.fecha,
+                // Add event date for stamp labels
+                eventLocalidad: evento?.localidad,
+                // Add event locality for stamp labels
                 currency: group.local_currency,
                 currencySymbol: getCurrencySymbol(group.local_currency),
                 // Add currency symbol

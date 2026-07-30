@@ -399,7 +399,11 @@ export class TariffGroupsRepository {
         )
         const stripId = Number(stripResult.lastInsertRowid)
 
-        for (const tariffPosition of strip.tariff_ids) {
+        // Get unique tariff positions (a strip can have multiple copies of the same tariff,
+        // but we only need one junction row per unique tariff)
+        const uniqueTariffPositions = [...new Set(strip.tariff_ids)]
+
+        for (const tariffPosition of uniqueTariffPositions) {
           // tariff_ids from the frontend are 1-indexed positions, not DB IDs
           const newTariffId = positionToNewId.get(tariffPosition)
           if (newTariffId != null) {
@@ -508,7 +512,11 @@ export class TariffGroupsRepository {
         )
         const stripId = Number(stripResult.lastInsertRowid)
 
-        for (const tariffPosition of strip.tariff_ids) {
+        // Get unique tariff positions (a strip can have multiple copies of the same tariff,
+        // but we only need one junction row per unique tariff)
+        const uniqueTariffPositions = [...new Set(strip.tariff_ids)]
+
+        for (const tariffPosition of uniqueTariffPositions) {
           // tariff_ids from the frontend are 1-indexed positions, not DB IDs
           const newTariffId = positionToNewId.get(tariffPosition)
           if (newTariffId != null) {

@@ -174,6 +174,10 @@ export interface DynamicTariffContext {
   title: string
   /** Event name (optional, for ticket header) */
   eventName?: string
+  /** Event date for stamp labels (e.g., "21-24 abril 2025") */
+  eventFecha?: string
+  /** Event locality for stamp labels (e.g., "Madrid") */
+  eventLocalidad?: string
   /** Currency code */
   currency: string
   /** Currency symbol (e.g., '€', '$') */
@@ -468,15 +472,31 @@ export async function generateSalePdfs(
   // Product counter starts at 1 for each new sale (resets per client/order)
   let productoCounter = 1
 
-  // Get active event data for stamp text
-  const eventoIndex = config.sello.elevento
-  const evento = config.sello.eventos?.[eventoIndex]
-  const stampFecha = evento?.fecha ?? ''
-  const stampEvento = evento?.localidad ?? ''
+  // Get active event data for stamp text and model backgrounds
+  // When using dynamic tariffs, get fecha/localidad from dynamicTariffCtx (sourced from eventos table)
+  // Otherwise, use legacy config.sello.eventos array (indexed by elevento)
+  let stampFecha: string
+  let stampEvento: string
+  let model1Name: string
+  let model2Name: string
 
-  // Get background images for each model
-  const model1Name = evento?.motivoi ?? config.sello.modelo1 ?? ''
-  const model2Name = evento?.motivod ?? config.sello.modelo2 ?? ''
+  if (dynamicTariffCtx) {
+    // Dynamic: use event data from the eventos table (passed via dynamicTariffCtx)
+    stampFecha = dynamicTariffCtx.eventFecha ?? ''
+    stampEvento = dynamicTariffCtx.eventLocalidad ?? ''
+    // For dynamic tariffs, modelo1/modelo2 are managed by the fair image system
+    // so we use fallback to config.sello values
+    model1Name = config.sello.modelo1 ?? ''
+    model2Name = config.sello.modelo2 ?? ''
+  } else {
+    // Legacy: use event data from config.sello.eventos array
+    const eventoIndex = config.sello.elevento
+    const evento = config.sello.eventos?.[eventoIndex]
+    stampFecha = evento?.fecha ?? ''
+    stampEvento = evento?.localidad ?? ''
+    model1Name = evento?.motivoi ?? config.sello.modelo1 ?? ''
+    model2Name = evento?.motivod ?? config.sello.modelo2 ?? ''
+  }
 
   // Resolve image layers: when ImageLayerOptions is provided, use the layer
   // composition logic; otherwise fall back to legacy model-based background.
