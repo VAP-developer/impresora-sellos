@@ -22,11 +22,10 @@ export interface EventoRow {
 }
 
 // === Selection Limits ===
-
-/** Maximum number of individual tariffs that can be selected per event (inclusive) */
-export const MAX_EVENT_TARIFFS = 8
-/** Maximum number of strips that can be selected per event (inclusive) */
-export const MAX_EVENT_STRIPS = 4
+//
+// There is no upper limit on how many tariffs or strips an event can select.
+// The kiosko table renders rows dynamically from the selection, so the user is
+// free to pick as many as the tariff group offers.
 
 export interface EventoInput {
   year: number
@@ -106,26 +105,9 @@ export class EventosRepository {
   }
 
   /**
-   * Validates tariff selection constraints.
-   */
-  private validateTariffSelection(input: { selected_tariff_ids?: number[]; selected_strip_ids?: number[] }): void {
-    const tariffCount = input.selected_tariff_ids?.length ?? 0
-    const stripCount = input.selected_strip_ids?.length ?? 0
-
-    if (tariffCount > MAX_EVENT_TARIFFS) {
-      throw new Error(`Máximo ${MAX_EVENT_TARIFFS} tarifas individuales por evento`)
-    }
-    if (stripCount > MAX_EVENT_STRIPS) {
-      throw new Error(`Máximo ${MAX_EVENT_STRIPS} tiras por evento`)
-    }
-  }
-
-  /**
    * Creates a new event. Returns the created event with its ID.
    */
   create(input: EventoInput): EventoRow {
-    this.validateTariffSelection(input)
-
     const selectedTariffIds = JSON.stringify(input.selected_tariff_ids ?? [])
     const selectedStripIds = JSON.stringify(input.selected_strip_ids ?? [])
 
@@ -156,8 +138,6 @@ export class EventosRepository {
   update(id: number, input: Partial<EventoInput>): EventoRow | null {
     const existing = this.getById(id)
     if (!existing) return null
-
-    this.validateTariffSelection(input)
 
     const updated = {
       year: input.year ?? existing.year,

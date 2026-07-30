@@ -234,6 +234,8 @@ export interface EventoRow {
   fecha: string
   localidad: string
   tariff_group_id: number | null
+  selected_tariff_ids: number[]
+  selected_strip_ids: number[]
   created_at: string
   updated_at: string
 }
@@ -249,6 +251,8 @@ export interface EventoInput {
   fecha: string
   localidad: string
   tariff_group_id?: number | null
+  selected_tariff_ids?: number[]
+  selected_strip_ids?: number[]
 }
 
 // === Tariff Group Types ===

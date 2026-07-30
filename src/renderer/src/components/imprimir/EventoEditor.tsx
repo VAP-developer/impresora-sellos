@@ -35,12 +35,9 @@ export interface EventoEditorProps {
 type EditorMode = 'idle' | 'creating' | 'editing'
 
 /**
- * Selection limits per event. These must stay in sync with
- * MAX_EVENT_TARIFFS / MAX_EVENT_STRIPS in eventos.repository.ts,
- * which enforces them on save.
+ * There is no limit on how many tariffs or strips an event can select:
+ * the kiosko table renders rows dynamically from the selection.
  */
-const MAX_EVENT_TARIFFS = 8
-const MAX_EVENT_STRIPS = 4
 
 const EMPTY_FORM: EventoInput = {
   year: new Date().getFullYear(),
@@ -284,37 +281,41 @@ export default function EventoEditor({
   }
 
   const handleTariffToggle = (tariffId: number): void => {
-    setSelectedTariffIds((prev) => {
-      if (prev.includes(tariffId)) {
-        return prev.filter((id) => id !== tariffId)
-      } else {
-        if (prev.length >= MAX_EVENT_TARIFFS) {
-          setTariffSelectionError(`Máximo ${MAX_EVENT_TARIFFS} tarifas individuales`)
-          return prev
-        }
-        setTariffSelectionError(null)
-        return [...prev, tariffId]
-      }
-    })
+    setSelectedTariffIds((prev) =>
+      prev.includes(tariffId) ? prev.filter((id) => id !== tariffId) : [...prev, tariffId]
+    )
   }
 
   const handleStripToggle = (stripId: number): void => {
-    setSelectedStripIds((prev) => {
-      if (prev.includes(stripId)) {
-        return prev.filter((id) => id !== stripId)
-      } else {
-        if (prev.length >= MAX_EVENT_STRIPS) {
-          setTariffSelectionError(`Máximo ${MAX_EVENT_STRIPS} tiras`)
-          return prev
-        }
-        setTariffSelectionError(null)
-        return [...prev, stripId]
-      }
-    })
+    setSelectedStripIds((prev) =>
+      prev.includes(stripId) ? prev.filter((id) => id !== stripId) : [...prev, stripId]
+    )
+  }
+
+  const handleSelectAllTariffs = (): void => {
+    if (!selectedTariffGroup) return
+    setSelectedTariffIds(
+      selectedTariffGroup.tariffs.map((t) => t.id!).filter((id) => id !== undefined)
+    )
+  }
+
+  const handleClearTariffs = (): void => {
+    setSelectedTariffIds([])
+  }
+
+  const handleSelectAllStrips = (): void => {
+    if (!selectedTariffGroup) return
+    setSelectedStripIds(
+      selectedTariffGroup.strips.map((s) => s.id!).filter((id) => id !== undefined)
+    )
+  }
+
+  const handleClearStrips = (): void => {
+    setSelectedStripIds([])
   }
 
   const formatTariffGroupLabel = (group: TariffGroup): string => {
-    return `${group.title} (${group.year}) - ${group.currency}`
+    return `${group.title} (${group.year}) - ${group.local_currency}`
   }
 
   const handleSave = async (): Promise<void> => {
@@ -696,9 +697,25 @@ export default function EventoEditor({
                       
                       {/* Individual tariffs */}
                       <div className="mb-4">
-                        <h6 className="font-semibold text-sm text-gray-700 mb-2">
-                          Tarifas Individuales (máximo {MAX_EVENT_TARIFFS})
-                        </h6>
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          <h6 className="font-semibold text-sm text-gray-700">
+                            Tarifas Individuales
+                          </h6>
+                          <button
+                            type="button"
+                            onClick={handleSelectAllTariffs}
+                            className="text-xs text-blue-600 hover:underline"
+                          >
+                            Seleccionar todas
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleClearTariffs}
+                            className="text-xs text-gray-500 hover:underline"
+                          >
+                            Ninguna
+                          </button>
+                        </div>
                         <div className="space-y-1 max-h-[300px] overflow-y-auto">
                           {selectedTariffGroup.tariffs.map((tariff) => (
                             <label
@@ -729,17 +746,32 @@ export default function EventoEditor({
                           ))}
                         </div>
                         <p className="text-xs text-gray-500 mt-1">
-                          Seleccionadas: {selectedTariffIds.length} de {MAX_EVENT_TARIFFS}
+                          Seleccionadas: {selectedTariffIds.length} de{' '}
+                          {selectedTariffGroup.tariffs.length}
                         </p>
                       </div>
 
                       {/* Strips */}
                       {selectedTariffGroup.strips.length > 0 && (
                         <div>
-                          <h6 className="font-semibold text-sm text-gray-700 mb-2">
-                            Tiras (máximo {MAX_EVENT_STRIPS})
-                          </h6>
-                          <div className="space-y-1">
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
+                            <h6 className="font-semibold text-sm text-gray-700">Tiras</h6>
+                            <button
+                              type="button"
+                              onClick={handleSelectAllStrips}
+                              className="text-xs text-blue-600 hover:underline"
+                            >
+                              Seleccionar todas
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleClearStrips}
+                              className="text-xs text-gray-500 hover:underline"
+                            >
+                              Ninguna
+                            </button>
+                          </div>
+                          <div className="space-y-1 max-h-[300px] overflow-y-auto">
                             {selectedTariffGroup.strips.map((strip) => (
                               <label
                                 key={strip.id}
@@ -764,7 +796,8 @@ export default function EventoEditor({
                             ))}
                           </div>
                           <p className="text-xs text-gray-500 mt-1">
-                            Seleccionadas: {selectedStripIds.length} de {MAX_EVENT_STRIPS}
+                            Seleccionadas: {selectedStripIds.length} de{' '}
+                            {selectedTariffGroup.strips.length}
                           </p>
                         </div>
                       )}
