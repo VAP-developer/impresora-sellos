@@ -442,6 +442,12 @@ export class TariffGroupsRepository {
       WHERE id = ?
     `)
 
+    const deleteStripTariffs = this.db.prepare(`
+      DELETE FROM strip_tariffs WHERE strip_id IN (
+        SELECT id FROM tariffs WHERE group_id = ? AND type = 'strip'
+      )
+    `)
+
     const deleteTariffs = this.db.prepare('DELETE FROM tariffs WHERE group_id = ?')
 
     const insertTariff = this.db.prepare(`
@@ -466,7 +472,10 @@ export class TariffGroupsRepository {
         throw err
       }
 
-      // Delete existing tariffs (CASCADE handles strip_tariffs junction rows)
+      // Delete existing strip_tariffs junction rows explicitly before deleting tariffs
+      deleteStripTariffs.run(id)
+
+      // Delete existing tariffs (CASCADE should handle remaining strip_tariffs, but we already cleared them)
       deleteTariffs.run(id)
 
       // Re-insert individual tariffs and track position → new ID.

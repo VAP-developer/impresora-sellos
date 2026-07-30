@@ -1,11 +1,10 @@
 /**
  * DynamicTariffTable.tsx
  *
- * Dynamic tariff panel using tabbed interface.
- * Splits strips and individual tariffs into separate tables.
+ * Dynamic tariff panel with unified table (no tabs).
+ * Shows strips first, then individual tariffs below.
  *
  * Left = Sello A (Modelo 1), Right = Sello B (Modelo 2).
- * Strips are shown in one tab, individual tariffs in another.
  * A toggle on the price lets the user switch between local and secondary (complementary) price.
  *
  * Replaces TariffTableSplit when an active tariff group is present.
@@ -17,7 +16,7 @@ import { useConfigStore } from '@renderer/stores/config.store'
 import { calcDynamicLimits } from '@renderer/lib/tariff-calc'
 import type { DynamicQuantities, DynamicLimits } from '@renderer/lib/tariff-calc'
 import type { Tariff, Strip } from '@renderer/lib/ipc-client'
-import TabbedTariffContainer from './TabbedTariffContainer'
+import TariffTableContent from './TariffTableContent'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -111,7 +110,7 @@ export default function DynamicTariffTable(): JSX.Element {
     setUseSecondaryPrice(!showSecondary)
   }, [showSecondary, setUseSecondaryPrice])
 
-  // Transform dynamic rows into TariffRowDef format for TabbedTariffContainer
+  // Transform dynamic rows into TariffRowDef format for TariffTableContent
   const rowDefs = useMemo((): TariffRowDef[] => {
     return allRows.map(row => {
       const tariffId = row.id!
@@ -132,11 +131,7 @@ export default function DynamicTariffTable(): JSX.Element {
     })
   }, [allRows])
 
-  // Split rows into strips and individual tariffs based on _isStrip flag
-  const stripRows = useMemo(() => rowDefs.filter(r => r.isStrip), [rowDefs])
-  const individualRows = useMemo(() => rowDefs.filter(r => !r.isStrip), [rowDefs])
-
-  // Convert quantities to Record<string, number> format for TabbedTariffContainer
+  // Convert quantities to Record<string, number> format for TariffTableContent
   const quantitiesRecord = useMemo(() => {
     const record: Record<string, number> = {}
     for (const key in quantities) {
@@ -145,7 +140,7 @@ export default function DynamicTariffTable(): JSX.Element {
     return record
   }, [quantities])
 
-  // Convert limits to Record<string, number> format for TabbedTariffContainer
+  // Convert limits to Record<string, number> format for TariffTableContent
   const limitsRecord = useMemo(() => {
     const record: Record<string, number> = {}
     for (const key in limits) {
@@ -154,7 +149,7 @@ export default function DynamicTariffTable(): JSX.Element {
     return record
   }, [limits])
 
-  // Adapter function to match TabbedTariffContainer's setQuantity signature
+  // Adapter function to match TariffTableContent's setQuantity signature
   const handleSetQuantity = useCallback((field: string, value: number) => {
     // Parse tariffId and model from the dynamic quantity key (format: "tariff_<tariffId>_s<model>")
     const parts = field.split('_')
@@ -177,16 +172,16 @@ export default function DynamicTariffTable(): JSX.Element {
   }
 
   return (
-    <TabbedTariffContainer
-      stripRows={stripRows}
-      individualRows={individualRows}
-      quantities={quantitiesRecord}
-      setQuantity={handleSetQuantity}
-      limits={limitsRecord}
-      showSecondary={showSecondary}
-      toggleSecondary={togglePrice}
-      currencySymbol={currencySymbol}
-      isDynamic={true}
-    />
+    <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+      <TariffTableContent
+        rows={rowDefs}
+        quantities={quantitiesRecord}
+        setQuantity={handleSetQuantity}
+        limits={limitsRecord}
+        showSecondary={showSecondary}
+        toggleSecondary={togglePrice}
+        currencySymbol={currencySymbol}
+      />
+    </div>
   )
 }

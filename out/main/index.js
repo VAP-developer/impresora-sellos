@@ -2300,6 +2300,11 @@ class TariffGroupsRepository {
         updated_at = datetime('now')
       WHERE id = ?
     `);
+    const deleteStripTariffs = this.db.prepare(`
+      DELETE FROM strip_tariffs WHERE strip_id IN (
+        SELECT id FROM tariffs WHERE group_id = ? AND type = 'strip'
+      )
+    `);
     const deleteTariffs = this.db.prepare("DELETE FROM tariffs WHERE group_id = ?");
     const insertTariff = this.db.prepare(`
       INSERT INTO tariffs (group_id, name, description, local_price, secondary_price, position, type)
@@ -2319,6 +2324,7 @@ class TariffGroupsRepository {
         }
         throw err;
       }
+      deleteStripTariffs.run(id);
       deleteTariffs.run(id);
       const positionToNewId = /* @__PURE__ */ new Map();
       for (const tariff of input.tariffs) {
