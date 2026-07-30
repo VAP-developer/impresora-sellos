@@ -23,6 +23,7 @@ import {
   getImageByName
 } from '@renderer/lib/ipc-client'
 import { useTariffGroupsStore } from '@renderer/stores/tariff-groups.store'
+import { CURRENCIES } from '../settings/CurrencySelector'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,6 +47,16 @@ const EMPTY_FORM: EventoInput = {
   tariff_group_id: null,
   selected_tariff_ids: [],
   selected_strip_ids: []
+}
+
+// ─── Helper Functions ─────────────────────────────────────────────────────────
+
+/**
+ * Convert currency code to symbol (e.g., 'EUR' → '€', 'USD' → '$')
+ */
+function getCurrencySymbol(code: string): string {
+  const currency = CURRENCIES.find((c) => c.code === code)
+  return currency?.symbol ?? code
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -284,8 +295,8 @@ export default function EventoEditor({
       if (prev.includes(stripId)) {
         return prev.filter((id) => id !== stripId)
       } else {
-        if (prev.length >= 2) {
-          setTariffSelectionError('Máximo 2 tiras')
+        if (prev.length >= 4) {
+          setTariffSelectionError('Máximo 4 tiras')
           return prev
         }
         setTariffSelectionError(null)
@@ -702,8 +713,8 @@ export default function EventoEditor({
                                   </span>
                                 )}
                                 <span className="block text-xs text-gray-600">
-                                  {tariff.local_price} {selectedTariffGroup.local_currency}
-                                  {tariff.secondary_price > 0 && ` / ${tariff.secondary_price} ${selectedTariffGroup.complementary_currency}`}
+                                  {tariff.local_price} {getCurrencySymbol(selectedTariffGroup.local_currency)}
+                                  {tariff.secondary_price > 0 && ` / ${tariff.secondary_price} ${getCurrencySymbol(selectedTariffGroup.complementary_currency)}`}
                                 </span>
                               </div>
                             </label>
@@ -718,7 +729,7 @@ export default function EventoEditor({
                       {selectedTariffGroup.strips.length > 0 && (
                         <div>
                           <h6 className="font-semibold text-sm text-gray-700 mb-2">
-                            Tiras (máximo 2)
+                            Tiras (máximo 4)
                           </h6>
                           <div className="space-y-1">
                             {selectedTariffGroup.strips.map((strip) => (
@@ -737,15 +748,15 @@ export default function EventoEditor({
                                 <div className="flex-1">
                                   <span className="font-medium text-sm">{strip.name}</span>
                                   <span className="block text-xs text-gray-600">
-                                    {strip.local_price} {selectedTariffGroup.local_currency}
-                                    {strip.secondary_price > 0 && ` / ${strip.secondary_price} ${selectedTariffGroup.complementary_currency}`}
+                                    {strip.local_price} {getCurrencySymbol(selectedTariffGroup.local_currency)}
+                                    {strip.secondary_price > 0 && ` / ${strip.secondary_price} ${getCurrencySymbol(selectedTariffGroup.complementary_currency)}`}
                                   </span>
                                 </div>
                               </label>
                             ))}
                           </div>
                           <p className="text-xs text-gray-500 mt-1">
-                            Seleccionadas: {selectedStripIds.length} de 2
+                            Seleccionadas: {selectedStripIds.length} de 4
                           </p>
                         </div>
                       )}

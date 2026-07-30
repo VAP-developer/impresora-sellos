@@ -251,8 +251,8 @@ export default function CartControls({
       role="region"
       aria-label="Controles de cesta"
     >
-      {/* Left column: Filatelia + Error buttons */}
-      <div className="flex flex-col items-center gap-2">
+      {/* Left column: Filatelia button */}
+      <div className="flex flex-col items-center gap-2 mr-6">
         <button
           type="button"
           className="w-[80px] h-[65px] bg-purple-700 hover:bg-purple-800 text-white rounded
@@ -264,33 +264,6 @@ export default function CartControls({
           onClick={handlePrintFilatelia}
         >
           Filatelia
-        </button>
-        <button
-          type="button"
-          className="w-[70px] h-[70px] bg-red-600 hover:bg-red-700 text-white rounded-full
-                     flex items-center justify-center cursor-pointer
-                     transition-colors focus:outline-none focus:ring-2 focus:ring-red-400
-                     disabled:opacity-50 disabled:cursor-not-allowed"
-          aria-label="Error impresión - anular última venta"
-          disabled={printing}
-          onClick={handlePrintError}
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="w-8 h-8"
-            aria-hidden="true"
-          >
-            <circle cx="9" cy="21" r="1" />
-            <circle cx="20" cy="21" r="1" />
-            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-            <line x1="4" y1="4" x2="22" y2="20" />
-          </svg>
         </button>
       </div>
 
@@ -318,63 +291,65 @@ export default function CartControls({
         )}
       </div>
 
-      {/* Right column: Print Normal + Reset + Profile buttons */}
-      <div className="flex flex-col items-center gap-2">
-        {/* Print Normal (shopping cart icon) */}
-        <button
-          type="button"
-          className="bg-transparent border-none cursor-pointer p-0
-                     hover:opacity-80 transition-opacity
-                     focus:outline-none focus:ring-2 focus:ring-[rgb(24,62,117)] rounded
-                     disabled:opacity-50 disabled:cursor-not-allowed"
-          aria-label="Imprimir normal - confirmar venta"
-          disabled={printing}
-          onClick={handlePrintNormal}
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="rgb(24,62,117)"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="w-16 h-16"
-            aria-hidden="true"
+      {/* Right column: Print Normal + Reset + Logo PNG checkbox */}
+      <div className="flex flex-col items-center gap-3 ml-6">
+        <div className="flex items-center gap-3">
+          {/* Print Normal (shopping cart icon) */}
+          <button
+            type="button"
+            className="bg-transparent border-none cursor-pointer p-0
+                       hover:opacity-80 transition-opacity
+                       focus:outline-none focus:ring-2 focus:ring-[rgb(24,62,117)] rounded
+                       disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label="Imprimir normal - confirmar venta"
+            disabled={printing}
+            onClick={handlePrintNormal}
           >
-            <circle cx="9" cy="21" r="1" />
-            <circle cx="20" cy="21" r="1" />
-            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-          </svg>
-        </button>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="rgb(24,62,117)"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="w-16 h-16"
+              aria-hidden="true"
+            >
+              <circle cx="9" cy="21" r="1" />
+              <circle cx="20" cy="21" r="1" />
+              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+            </svg>
+          </button>
 
-        {/* Reset / Cancel button */}
-        <button
-          type="button"
-          className="w-[50px] h-[50px] bg-gray-200 hover:bg-gray-300 rounded-full
-                     flex items-center justify-center cursor-pointer
-                     transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400"
-          aria-label="Reset - limpiar cantidades"
-          onClick={() => {
-            reset()
-            onReset?.()
-          }}
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="w-6 h-6 text-red-600"
-            aria-hidden="true"
+          {/* Reset / Cancel button */}
+          <button
+            type="button"
+            className="w-[50px] h-[50px] bg-gray-200 hover:bg-gray-300 rounded-full
+                       flex items-center justify-center cursor-pointer
+                       transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400"
+            aria-label="Reset - limpiar cantidades"
+            onClick={() => {
+              reset()
+              onReset?.()
+            }}
           >
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="w-6 h-6 text-red-600"
+              aria-hidden="true"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
 
         {/* Logo PNG checkbox */}
         <label className="flex items-center gap-1 text-xs cursor-pointer">

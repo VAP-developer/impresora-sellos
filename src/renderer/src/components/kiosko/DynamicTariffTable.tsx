@@ -156,11 +156,12 @@ export default function DynamicTariffTable(): JSX.Element {
 
   // Adapter function to match TabbedTariffContainer's setQuantity signature
   const handleSetQuantity = useCallback((field: string, value: number) => {
-    // Parse tariffId and model from the dynamic quantity key (format: "qty_<tariffId>_<model>")
+    // Parse tariffId and model from the dynamic quantity key (format: "tariff_<tariffId>_s<model>")
     const parts = field.split('_')
-    if (parts.length === 3 && parts[0] === 'qty') {
+    if (parts.length === 3 && parts[0] === 'tariff') {
       const tariffId = parseInt(parts[1], 10)
-      const model = parseInt(parts[2], 10) as 1 | 2
+      const modelStr = parts[2] // "s1" or "s2"
+      const model = parseInt(modelStr.substring(1), 10) as 1 | 2
       if (!isNaN(tariffId) && (model === 1 || model === 2)) {
         setQuantity(tariffId, model, value)
       }

@@ -45,7 +45,9 @@
     "secondaryPrice": "Precio complementario",
     "strips": "Tiras",
     "selectTariffs": "Seleccionar tarifas",
-    "stripTariffWarning": "La tira debe tener al menos 2 tarifas seleccionadas"
+    "stripTariffWarning": "La tira debe tener al menos 2 tarifas seleccionadas",
+    "stamps": "sellos",
+    "times": "veces"
   },
   "validation": {
     "nameRequired": "El nombre es obligatorio",

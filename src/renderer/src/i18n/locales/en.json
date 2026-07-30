@@ -45,7 +45,9 @@
     "secondaryPrice": "Secondary Price",
     "strips": "Strips",
     "selectTariffs": "Select tariffs",
-    "stripTariffWarning": "Strip must have at least 2 tariffs selected"
+    "stripTariffWarning": "Strip must have at least 2 tariffs selected",
+    "stamps": "stamps",
+    "times": "times"
   },
   "validation": {
     "nameRequired": "Name is required",

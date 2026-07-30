@@ -108,20 +108,20 @@ export default function TariffTable({
   // Opacity for inactive tables (reduced to indicate background state)
   const opacityClass = isActive ? 'opacity-100' : 'opacity-80'
 
-  // Pointer events
-  const pointerClass = isActive ? '' : 'pointer-events-none'
-
   // Transform for slide effect (applied via inline style for precise values)
   const transform = isActive ? 'scale(1) translateY(0)' : 'scale(0.98) translateY(4px)'
 
   // Shadow for depth perception
   const shadowClass = isActive ? 'shadow-lg' : 'shadow-none'
 
+  // Pointer events for content (not header)
+  const contentPointerClass = isActive ? '' : 'pointer-events-none'
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div
-      className={`rounded-lg overflow-hidden transition-all duration-[400ms] ${positionClass} ${opacityClass} ${pointerClass} ${shadowClass}`}
+      className={`rounded-lg overflow-hidden transition-all duration-[400ms] ${positionClass} ${opacityClass} ${shadowClass}`}
       style={{ 
         transform,
         transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)'
@@ -132,7 +132,7 @@ export default function TariffTable({
       <div
         id={tabId}
         className={`flex items-center justify-between px-6 cursor-pointer transition-opacity rounded-t-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${headerBgClass} ${headerBorderClass} ${headerHoverClass}`}
-        style={{ minHeight: '44px', paddingTop: '0.75rem', paddingBottom: '0.75rem' }}
+        style={{ minHeight: '44px', paddingTop: '0.75rem', paddingBottom: '0.75rem', pointerEvents: 'auto' }}
         onClick={handleTabClick}
         onKeyDown={handleKeyDown}
         role="tab"
@@ -160,7 +160,7 @@ export default function TariffTable({
         id={`${tabId}-panel`}
         role="tabpanel"
         aria-labelledby={tabId}
-        className={`bg-white ${isStrip ? '' : 'border-x border-b border-gray-300'}`}
+        className={`bg-white ${isStrip ? '' : 'border-x border-b border-gray-300'} ${contentPointerClass}`}
       >
         <TariffTableContent
           rows={rows}

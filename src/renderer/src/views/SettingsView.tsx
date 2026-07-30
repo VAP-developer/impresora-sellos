@@ -2,11 +2,9 @@
  * SettingsView.tsx
  *
  * Main Settings view with clearly differentiated sections:
- * 1. Profile Mode — select active sales profile (1-6)
- * 2. Edit Profiles — edit profile names
- * 3. Tariff Groups — manage tariff groups by year
- * 4. Cut Number — configure label grouping size
- * 5. Language — switch between Español and English
+ * 1. Tariff Groups — manage tariff groups by year
+ * 2. Cut Number — configure label grouping size
+ * 3. Language — switch between Español and English
  *
  * Each section is wrapped in a collapsible box matching the pattern
  * used in other views (MaquinaView, ImprimirView).
@@ -14,13 +12,9 @@
  * Requirements: 1.1, 1.2, 1.3, 1.4, 13.1, 13.4
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSettingsStore } from '@renderer/stores/settings.store'
-import { useConfigStore } from '@renderer/stores/config.store'
-import type { SelloConfig } from '@renderer/types/config'
-import PerfilSection from '@renderer/components/imprimir/PerfilSection'
-import PerfilesSection from '@renderer/components/imprimir/PerfilesSection'
 import PrinterSection from '@renderer/components/imprimir/PrinterSection'
 import { TariffGroupSection } from '@renderer/components/settings/TariffGroupSection'
 import { CutNumberSection } from '@renderer/components/settings/CutNumberSection'
@@ -29,79 +23,14 @@ import { LanguageSection } from '@renderer/components/settings/LanguageSection'
 export default function SettingsView(): JSX.Element {
   const { t } = useTranslation()
   const { loadSettings } = useSettingsStore()
-  const config = useConfigStore((s) => s.config)
-  const updateImprimir = useConfigStore((s) => s.updateImprimir)
 
   const [tariffOpen, setTariffOpen] = useState(false)
   const [cutOpen, setCutOpen] = useState(false)
   const [langOpen, setLangOpen] = useState(false)
 
-  // Local state for profile selection
-  const [selectedPerfil, setSelectedPerfil] = useState<number>(
-    config?.sello.elperfil ?? 6
-  )
-
-  // Local editable profile names (only nperfil4 is actually editable)
-  const [localProfileNames, setLocalProfileNames] = useState<Record<number, string>>(() => ({
-    1: config?.sello.nperfil1 ?? 'Filatelia',
-    2: config?.sello.nperfil2 ?? 'Esporádicos',
-    3: config?.sello.nperfil3 ?? 'SPDE',
-    4: config?.sello.nperfil4 ?? '',
-    5: config?.sello.nperfil5 ?? 'Abono/Envío',
-    6: config?.sello.nperfil6 ?? 'FERIA'
-  }))
-
   useEffect(() => {
     loadSettings()
   }, [loadSettings])
-
-  // Sync local profile names from config when it loads/changes externally
-  useEffect(() => {
-    if (config?.sello) {
-      setSelectedPerfil(config.sello.elperfil ?? 6)
-      setLocalProfileNames({
-        1: config.sello.nperfil1 ?? 'Filatelia',
-        2: config.sello.nperfil2 ?? 'Esporádicos',
-        3: config.sello.nperfil3 ?? 'SPDE',
-        4: config.sello.nperfil4 ?? '',
-        5: config.sello.nperfil5 ?? 'Abono/Envío',
-        6: config.sello.nperfil6 ?? 'FERIA'
-      })
-    }
-  }, [config?.sello.elperfil, config?.sello.nperfil1, config?.sello.nperfil2, config?.sello.nperfil3, config?.sello.nperfil4, config?.sello.nperfil5, config?.sello.nperfil6])
-
-  const handlePerfilChange = useCallback(async (perfil: number) => {
-    setSelectedPerfil(perfil)
-    if (!config) return
-    // Persist profile selection immediately
-    const perfilNames: Record<number, string> = localProfileNames
-    const elnperfil = perfilNames[perfil] ?? ''
-    const selloUpdate: Partial<SelloConfig> = {
-      elperfil: perfil,
-      elnperfil
-    }
-    await updateImprimir({ sello: selloUpdate, precios: config.precios })
-  }, [config, localProfileNames, updateImprimir])
-
-  const handleProfileNameChange = useCallback(
-    (profileIndex: number, value: string) => {
-      setLocalProfileNames((prev) => ({ ...prev, [profileIndex]: value }))
-    },
-    []
-  )
-
-  const handleSaveProfiles = useCallback(async () => {
-    if (!config) return
-    const selloUpdate: Partial<SelloConfig> = {
-      nperfil1: localProfileNames[1],
-      nperfil2: localProfileNames[2],
-      nperfil3: localProfileNames[3],
-      nperfil4: localProfileNames[4],
-      nperfil5: localProfileNames[5],
-      nperfil6: localProfileNames[6]
-    }
-    await updateImprimir({ sello: selloUpdate, precios: config.precios })
-  }, [config, localProfileNames, updateImprimir])
 
   return (
     <div className="p-4 bg-gray-100 min-h-screen">
@@ -114,32 +43,6 @@ export default function SettingsView(): JSX.Element {
 
       <div className="flex justify-center mt-4">
         <div className="w-full max-w-4xl px-4 space-y-4">
-
-          {/* Section: Profile Mode */}
-          {config && (
-            <PerfilSection
-              sello={config.sello}
-              selectedPerfil={selectedPerfil}
-              onPerfilChange={handlePerfilChange}
-            />
-          )}
-
-          {/* Section: Edit Profiles */}
-          {config && (
-            <PerfilesSection
-              sello={{
-                ...config.sello,
-                nperfil1: localProfileNames[1],
-                nperfil2: localProfileNames[2],
-                nperfil3: localProfileNames[3],
-                nperfil4: localProfileNames[4],
-                nperfil5: localProfileNames[5],
-                nperfil6: localProfileNames[6]
-              }}
-              onProfileNameChange={handleProfileNameChange}
-              onSave={handleSaveProfiles}
-            />
-          )}
 
           {/* Section: Printer Management */}
           <PrinterSection />
