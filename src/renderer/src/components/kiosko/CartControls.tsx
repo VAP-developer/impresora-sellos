@@ -61,6 +61,8 @@ export default function CartControls({
   // Image layer flags from images store
   const printFondo = useImagesStore((state) => state.printFondo)
   const printSello = useImagesStore((state) => state.printSello)
+  const printLogoPng = useImagesStore((state) => state.printLogoPng)
+  const setPrintLogoPng = useImagesStore((state) => state.setPrintLogoPng)
   const useSecondaryPrice = useKioskoStore((state) => state.useSecondaryPrice)
 
   const [printing, setPrinting] = useState(false)
@@ -140,7 +142,7 @@ export default function CartControls({
         //   - 'protocolo' -> "Protocolo de: {titulo_base}"
         //   - 'spde' -> "SPDE de: {titulo_base}"
         //   - 'normal' -> unchanged titulo_base
-        const saleResult = await ipc.print(config, quantities as unknown as ipc.KioskoQuantities, profile, { printFondo, printSello, useSecondaryPrice })
+        const saleResult = await ipc.print(config, quantities as unknown as ipc.KioskoQuantities, profile, { printFondo, printSello, printLogoPng, useSecondaryPrice })
 
         // Check if the sale failed
         if (saleResult && !saleResult.success) {
@@ -160,7 +162,7 @@ export default function CartControls({
         setPrinting(false)
       }
     },
-    [config, quantities, printing, validateSale, recordLastSale, reset, printFondo, printSello, useSecondaryPrice]
+    [config, quantities, printing, validateSale, recordLastSale, reset, printFondo, printSello, printLogoPng, useSecondaryPrice]
   )
 
   /**
@@ -373,6 +375,18 @@ export default function CartControls({
             <line x1="6" y1="6" x2="18" y2="18" />
           </svg>
         </button>
+
+        {/* Logo PNG checkbox */}
+        <label className="flex items-center gap-1 text-xs cursor-pointer">
+          <input
+            type="checkbox"
+            checked={printLogoPng}
+            onChange={(e) => setPrintLogoPng(e.target.checked)}
+            className="w-4 h-4 cursor-pointer"
+            aria-label="Imprimir logo PNG a la derecha"
+          />
+          <span className="text-gray-700 font-medium">Logo PNG</span>
+        </label>
       </div>
     </div>
   )

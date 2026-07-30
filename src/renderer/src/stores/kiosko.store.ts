@@ -247,14 +247,28 @@ export const useKioskoStore = create<KioskoState>((set, get) => ({
   getUsedRollo1: () => {
     const state = get()
     if (state.activeTariffGroup) {
-      // Dynamic: sum all quantities for model 1 (each stamp = 1 unit from rollo1)
+      // Dynamic: sum all quantities for model 1
+      // Individual tariffs: 1 stamp each
+      // Strips: number of tariffs they contain
       let used = 0
-      const allTariffs = [...(state.activeTariffGroup.tariffs ?? []), ...(state.activeTariffGroup.strips ?? [])]
-      for (const tariff of allTariffs) {
+      const allIndividualTariffs = state.activeTariffGroup.tariffs ?? []
+      const allStrips = state.activeTariffGroup.strips ?? []
+      
+      // Count individual tariffs
+      for (const tariff of allIndividualTariffs) {
         if (!tariff.id) continue
         const key = buildQuantityKey(tariff.id, 1)
         used += state.quantities[key] ?? 0
       }
+      
+      // Count strips (each strip = number of tariffs it contains)
+      for (const strip of allStrips) {
+        if (!strip.id) continue
+        const key = buildQuantityKey(strip.id, 1)
+        const stripQty = state.quantities[key] ?? 0
+        used += stripQty * (strip.tariff_ids?.length ?? 0)
+      }
+      
       return used
     }
     return calcUsedRollo1(toLegacyQuantities(state.quantities))
@@ -263,25 +277,48 @@ export const useKioskoStore = create<KioskoState>((set, get) => ({
   getUsedRollo2: () => {
     const state = get()
     if (state.activeTariffGroup) {
-      // Dynamic: sum all quantities for model 2 (each stamp = 1 unit from rollo2)
+      // Dynamic: sum all quantities for model 2
+      // Individual tariffs: 1 stamp each
+      // Strips: number of tariffs they contain
       let used = 0
-      const allTariffs = [...(state.activeTariffGroup.tariffs ?? []), ...(state.activeTariffGroup.strips ?? [])]
-      for (const tariff of allTariffs) {
+      const allIndividualTariffs = state.activeTariffGroup.tariffs ?? []
+      const allStrips = state.activeTariffGroup.strips ?? []
+      
+      // Count individual tariffs
+      for (const tariff of allIndividualTariffs) {
         if (!tariff.id) continue
         const key = buildQuantityKey(tariff.id, 2)
         used += state.quantities[key] ?? 0
       }
+      
+      // Count strips (each strip = number of tariffs it contains)
+      for (const strip of allStrips) {
+        if (!strip.id) continue
+        const key = buildQuantityKey(strip.id, 2)
+        const stripQty = state.quantities[key] ?? 0
+        used += stripQty * (strip.tariff_ids?.length ?? 0)
+      }
+      
       return used
     }
     return calcUsedRollo2(toLegacyQuantities(state.quantities))
   },
 
   getUsedTickets: () => {
-    // In the dynamic model, tickets are not consumed per-tariff
-    // (tiras are a legacy concept). Return 0 when using dynamic tariffs.
+    // In the dynamic model, tickets are consumed by strips (1 per strip)
     const state = get()
     if (state.activeTariffGroup) {
-      return 0
+      let totalStripQty = 0
+      const allStrips = state.activeTariffGroup.strips ?? []
+      
+      for (const strip of allStrips) {
+        if (!strip.id) continue
+        const key1 = buildQuantityKey(strip.id, 1)
+        const key2 = buildQuantityKey(strip.id, 2)
+        totalStripQty += (state.quantities[key1] ?? 0) + (state.quantities[key2] ?? 0)
+      }
+      
+      return totalStripQty
     }
     return calcUsedTickets(toLegacyQuantities(state.quantities))
   },

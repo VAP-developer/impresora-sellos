@@ -68,8 +68,8 @@ export default function KioskoView(): JSX.Element {
 
   return (
     <div className="flex flex-col h-full p-2 gap-2 overflow-auto">
-      {/* Top: Sello A | Cart Controls | Sello B */}
-      <div className="flex items-start justify-between bg-white rounded px-4 py-2">
+      {/* Top: Sello A | Cart Controls | Sello B - with better centering */}
+      <div className="flex items-start justify-center gap-12 bg-white rounded px-8 py-3">
         <StampModelSingle model="A" />
         <CartControls />
         <StampModelSingle model="B" />

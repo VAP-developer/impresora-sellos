@@ -2097,7 +2097,7 @@ class TariffGroupsRepository {
       if (typeof tariff.local_price !== "number" || isNaN(tariff.local_price) || !isFinite(tariff.local_price) || tariff.local_price <= 0) {
         throw new Error(TARIFF_GROUP_ERRORS.INVALID_LOCAL_PRICE);
       }
-      if (typeof tariff.secondary_price !== "number" || isNaN(tariff.secondary_price) || !isFinite(tariff.secondary_price) || tariff.secondary_price <= 0) {
+      if (typeof tariff.secondary_price !== "number" || isNaN(tariff.secondary_price) || !isFinite(tariff.secondary_price) || tariff.secondary_price < 0) {
         throw new Error(TARIFF_GROUP_ERRORS.INVALID_SECONDARY_PRICE);
       }
     }
@@ -2111,7 +2111,7 @@ class TariffGroupsRepository {
       if (typeof strip.local_price !== "number" || isNaN(strip.local_price) || !isFinite(strip.local_price) || strip.local_price <= 0) {
         throw new Error(TARIFF_GROUP_ERRORS.INVALID_LOCAL_PRICE);
       }
-      if (typeof strip.secondary_price !== "number" || isNaN(strip.secondary_price) || !isFinite(strip.secondary_price) || strip.secondary_price <= 0) {
+      if (typeof strip.secondary_price !== "number" || isNaN(strip.secondary_price) || !isFinite(strip.secondary_price) || strip.secondary_price < 0) {
         throw new Error(TARIFF_GROUP_ERRORS.INVALID_SECONDARY_PRICE);
       }
       if (!strip.tariff_ids || strip.tariff_ids.length < 2) {
@@ -2139,7 +2139,6 @@ class TariffGroupsRepository {
           strips.push({
             id: row.id,
             name: row.name,
-            description: row.description ?? "",
             local_price: row.local_price,
             secondary_price: row.secondary_price,
             position: row.position,
@@ -2242,8 +2241,9 @@ class TariffGroupsRepository {
         throw err;
       }
       const groupId2 = Number(result.lastInsertRowid);
+      const positionToNewId = /* @__PURE__ */ new Map();
       for (const tariff of input.tariffs) {
-        insertTariff.run(
+        const tariffResult = insertTariff.run(
           groupId2,
           tariff.name,
           tariff.description ?? "",
@@ -2252,20 +2252,24 @@ class TariffGroupsRepository {
           tariff.position,
           "individual"
         );
+        positionToNewId.set(tariff.position, Number(tariffResult.lastInsertRowid));
       }
       for (const strip of input.strips) {
         const stripResult = insertTariff.run(
           groupId2,
           strip.name,
-          strip.description ?? "",
+          "",
           strip.local_price,
           strip.secondary_price,
           strip.position,
           "strip"
         );
         const stripId = Number(stripResult.lastInsertRowid);
-        for (const tariffId of strip.tariff_ids) {
-          insertStripTariff.run(stripId, tariffId);
+        for (const tariffPosition of strip.tariff_ids) {
+          const newTariffId = positionToNewId.get(tariffPosition);
+          if (newTariffId != null) {
+            insertStripTariff.run(stripId, newTariffId);
+          }
         }
       }
       return groupId2;
@@ -2316,8 +2320,9 @@ class TariffGroupsRepository {
         throw err;
       }
       deleteTariffs.run(id);
+      const positionToNewId = /* @__PURE__ */ new Map();
       for (const tariff of input.tariffs) {
-        insertTariff.run(
+        const tariffResult = insertTariff.run(
           id,
           tariff.name,
           tariff.description ?? "",
@@ -2326,20 +2331,24 @@ class TariffGroupsRepository {
           tariff.position,
           "individual"
         );
+        positionToNewId.set(tariff.position, Number(tariffResult.lastInsertRowid));
       }
       for (const strip of input.strips) {
         const stripResult = insertTariff.run(
           id,
           strip.name,
-          strip.description ?? "",
+          "",
           strip.local_price,
           strip.secondary_price,
           strip.position,
           "strip"
         );
         const stripId = Number(stripResult.lastInsertRowid);
-        for (const tariffId of strip.tariff_ids) {
-          insertStripTariff.run(stripId, tariffId);
+        for (const tariffPosition of strip.tariff_ids) {
+          const newTariffId = positionToNewId.get(tariffPosition);
+          if (newTariffId != null) {
+            insertStripTariff.run(stripId, newTariffId);
+          }
         }
       }
     });
@@ -2384,25 +2393,61 @@ class EventosRepository {
     return rows.map((r) => r.year);
   }
   /**
+   * Parse JSON arrays from database rows for selected IDs.
+   */
+  parseEventoRow(row) {
+    return {
+      ...row,
+      selected_tariff_ids: this.parseJsonArray(row.selected_tariff_ids),
+      selected_strip_ids: this.parseJsonArray(row.selected_strip_ids)
+    };
+  }
+  parseJsonArray(jsonStr) {
+    if (!jsonStr) return [];
+    try {
+      const parsed = JSON.parse(jsonStr);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  /**
    * Returns all events for a given year, sorted by name.
    */
   getByYear(year) {
-    return this.db.prepare("SELECT * FROM eventos WHERE year = ? ORDER BY nevento ASC").all(year);
+    const rows = this.db.prepare("SELECT * FROM eventos WHERE year = ? ORDER BY nevento ASC").all(year);
+    return rows.map((row) => this.parseEventoRow(row));
   }
   /**
    * Returns a single event by ID.
    */
   getById(id) {
     const row = this.db.prepare("SELECT * FROM eventos WHERE id = ?").get(id);
-    return row ?? null;
+    return row ? this.parseEventoRow(row) : null;
+  }
+  /**
+   * Validates tariff selection constraints.
+   */
+  validateTariffSelection(input) {
+    const tariffCount = input.selected_tariff_ids?.length ?? 0;
+    const stripCount = input.selected_strip_ids?.length ?? 0;
+    if (tariffCount > 6) {
+      throw new Error("Máximo 6 tarifas individuales por evento");
+    }
+    if (stripCount > 2) {
+      throw new Error("Máximo 2 tiras por evento");
+    }
   }
   /**
    * Creates a new event. Returns the created event with its ID.
    */
   create(input) {
+    this.validateTariffSelection(input);
+    const selectedTariffIds = JSON.stringify(input.selected_tariff_ids ?? []);
+    const selectedStripIds = JSON.stringify(input.selected_strip_ids ?? []);
     const stmt = this.db.prepare(`
-      INSERT INTO eventos (year, codigo, nevento, nferia, nlugar, motivoi, motivod, fecha, localidad, tariff_group_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO eventos (year, codigo, nevento, nferia, nlugar, motivoi, motivod, fecha, localidad, tariff_group_id, selected_tariff_ids, selected_strip_ids)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const result = stmt.run(
       input.year,
@@ -2414,7 +2459,9 @@ class EventosRepository {
       input.motivod,
       input.fecha,
       input.localidad,
-      input.tariff_group_id ?? null
+      input.tariff_group_id ?? null,
+      selectedTariffIds,
+      selectedStripIds
     );
     return this.getById(Number(result.lastInsertRowid));
   }
@@ -2424,6 +2471,7 @@ class EventosRepository {
   update(id, input) {
     const existing = this.getById(id);
     if (!existing) return null;
+    this.validateTariffSelection(input);
     const updated = {
       year: input.year ?? existing.year,
       codigo: input.codigo ?? existing.codigo,
@@ -2434,13 +2482,19 @@ class EventosRepository {
       motivod: input.motivod ?? existing.motivod,
       fecha: input.fecha ?? existing.fecha,
       localidad: input.localidad ?? existing.localidad,
-      tariff_group_id: input.tariff_group_id !== void 0 ? input.tariff_group_id : existing.tariff_group_id
+      tariff_group_id: input.tariff_group_id !== void 0 ? input.tariff_group_id : existing.tariff_group_id,
+      selected_tariff_ids: input.selected_tariff_ids !== void 0 ? input.selected_tariff_ids : existing.selected_tariff_ids,
+      selected_strip_ids: input.selected_strip_ids !== void 0 ? input.selected_strip_ids : existing.selected_strip_ids
     };
+    const selectedTariffIds = JSON.stringify(updated.selected_tariff_ids);
+    const selectedStripIds = JSON.stringify(updated.selected_strip_ids);
     this.db.prepare(`
       UPDATE eventos SET
         year = ?, codigo = ?, nevento = ?, nferia = ?, nlugar = ?,
         motivoi = ?, motivod = ?, fecha = ?, localidad = ?,
         tariff_group_id = ?,
+        selected_tariff_ids = ?,
+        selected_strip_ids = ?,
         updated_at = datetime('now')
       WHERE id = ?
     `).run(
@@ -2454,6 +2508,8 @@ class EventosRepository {
       updated.fecha,
       updated.localidad,
       updated.tariff_group_id ?? null,
+      selectedTariffIds,
+      selectedStripIds,
       id
     );
     return this.getById(id);
@@ -2469,7 +2525,8 @@ class EventosRepository {
    * Returns all events (all years).
    */
   getAll() {
-    return this.db.prepare("SELECT * FROM eventos ORDER BY year DESC, nevento ASC").all();
+    const rows = this.db.prepare("SELECT * FROM eventos ORDER BY year DESC, nevento ASC").all();
+    return rows.map((row) => this.parseEventoRow(row));
   }
 }
 function calcSellos1(q) {
@@ -2485,24 +2542,40 @@ function calcTicketsUsed(q) {
 function buildDynamicKey(tariffId, model) {
   return `tariff_${tariffId}_s${model}`;
 }
-function calcDynamicSellos1(quantities, tariffs) {
+function calcDynamicSellos1(quantities, tariffs, strips) {
   let total = 0;
   for (const tariff of tariffs) {
     const key = buildDynamicKey(tariff.id, 1);
     total += quantities[key] ?? 0;
   }
+  for (const strip of strips) {
+    const key = buildDynamicKey(strip.id, 1);
+    const stripQty = quantities[key] ?? 0;
+    total += stripQty * strip.tariff_ids.length;
+  }
   return total;
 }
-function calcDynamicSellos2(quantities, tariffs) {
+function calcDynamicSellos2(quantities, tariffs, strips) {
   let total = 0;
   for (const tariff of tariffs) {
     const key = buildDynamicKey(tariff.id, 2);
     total += quantities[key] ?? 0;
   }
+  for (const strip of strips) {
+    const key = buildDynamicKey(strip.id, 2);
+    const stripQty = quantities[key] ?? 0;
+    total += stripQty * strip.tariff_ids.length;
+  }
   return total;
 }
-function calcDynamicTicketsUsed(_quantities, _tariffs) {
-  return 2;
+function calcDynamicTicketsUsed(quantities, _tariffs, strips) {
+  let totalStripQty = 0;
+  for (const strip of strips) {
+    const key1 = buildDynamicKey(strip.id, 1);
+    const key2 = buildDynamicKey(strip.id, 2);
+    totalStripQty += (quantities[key1] ?? 0) + (quantities[key2] ?? 0);
+  }
+  return totalStripQty + 2;
 }
 function generateOrderLines(config, quantities, profile, sesionId) {
   const orders = [];
@@ -2569,8 +2642,8 @@ function generateDynamicOrderLines(config, quantities, tariffGroup, profile, ses
   const feria = evento?.nferia ?? sello.feria ?? "";
   const lugar = evento?.nlugar ?? sello.lugar ?? "";
   const fecha = evento?.fecha ?? "";
-  const sellos1 = calcDynamicSellos1(quantities, tariffGroup.tariffs);
-  const sellos2 = calcDynamicSellos2(quantities, tariffGroup.tariffs);
+  const sellos1 = calcDynamicSellos1(quantities, tariffGroup.tariffs, tariffGroup.strips);
+  const sellos2 = calcDynamicSellos2(quantities, tariffGroup.tariffs, tariffGroup.strips);
   const base = {
     event: eventName,
     venue: lugar,
@@ -2616,6 +2689,33 @@ function generateDynamicOrderLines(config, quantities, tariffGroup, profile, ses
       });
     }
   }
+  for (const strip of tariffGroup.strips) {
+    const stripTariffCount = strip.tariff_ids.length;
+    const qty1 = quantities[buildDynamicKey(strip.id, 1)] ?? 0;
+    if (qty1 > 0) {
+      orders.push({
+        ...base,
+        vendType: strip.name,
+        productName: "Tira Modelo 1",
+        quantity: qty1,
+        quantitySet: stripTariffCount,
+        totalStamps: qty1 * stripTariffCount,
+        value: qty1 * strip.price
+      });
+    }
+    const qty2 = quantities[buildDynamicKey(strip.id, 2)] ?? 0;
+    if (qty2 > 0) {
+      orders.push({
+        ...base,
+        vendType: strip.name,
+        productName: "Tira Modelo 2",
+        quantity: qty2,
+        quantitySet: stripTariffCount,
+        totalStamps: qty2 * stripTariffCount,
+        value: qty2 * strip.price
+      });
+    }
+  }
   return orders;
 }
 function executeSale(config, quantities, profile, db2, tariffGroupCtx) {
@@ -2626,9 +2726,9 @@ function executeSale(config, quantities, profile, db2, tariffGroupCtx) {
   let ticketsUsed;
   if (isDynamic) {
     const dynQty = quantities;
-    sellos1 = calcDynamicSellos1(dynQty, tariffGroupCtx.tariffs);
-    sellos2 = calcDynamicSellos2(dynQty, tariffGroupCtx.tariffs);
-    ticketsUsed = calcDynamicTicketsUsed(dynQty, tariffGroupCtx.tariffs);
+    sellos1 = calcDynamicSellos1(dynQty, tariffGroupCtx.tariffs, tariffGroupCtx.strips);
+    sellos2 = calcDynamicSellos2(dynQty, tariffGroupCtx.tariffs, tariffGroupCtx.strips);
+    ticketsUsed = calcDynamicTicketsUsed(dynQty, tariffGroupCtx.tariffs, tariffGroupCtx.strips);
   } else {
     const legacyQty = quantities;
     sellos1 = calcSellos1(legacyQty);
@@ -2910,6 +3010,25 @@ function drawOverlay(doc, imageSource) {
   } catch {
   }
 }
+function drawLogoPng(doc, imageSource) {
+  if (!imageSource) return;
+  const logoX = 32 * MM_TO_PT$1;
+  const logoY = 2.5 * MM_TO_PT$1;
+  const logoWidth = 20 * MM_TO_PT$1;
+  const logoHeight = 20 * MM_TO_PT$1;
+  try {
+    if (imageSource.startsWith("data:")) {
+      const base64Data = imageSource.split(",")[1];
+      if (base64Data) {
+        const buffer = Buffer.from(base64Data, "base64");
+        doc.image(buffer, logoX, logoY, { width: logoWidth, height: logoHeight });
+      }
+    } else if (fs.existsSync(imageSource)) {
+      doc.image(imageSource, logoX, logoY, { width: logoWidth, height: logoHeight });
+    }
+  } catch {
+  }
+}
 function collectPdf$1(doc) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -2934,13 +3053,18 @@ async function renderStampMultiPage(stamps) {
       doc.addPage({ size: [STAMP_WIDTH, STAMP_HEIGHT], margin: 0 });
     }
     drawBackground(doc, stamp.backgroundImage);
-    drawOverlay(doc, stamp.overlayImage);
-    drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12, 2, 49);
-    drawTextLeft(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 8, 2, 43);
-    drawTextLeft(doc, stamp.evento, FONTS.regular, 8, 2, 40);
+    if (stamp.printLogoPng && stamp.logoPngImage) {
+      drawLogoPng(doc, stamp.logoPngImage);
+    } else {
+      drawOverlay(doc, stamp.overlayImage);
+    }
+    drawTextLeft(doc, stamp.tarifa, FONTS.regular, 13, 2, 50);
+    drawTextLeft(doc, stamp.tarifaDescripcion ?? "", FONTS.regular, 9, 2, 46.5);
+    drawTextLeft(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 2, 43);
+    drawTextLeft(doc, stamp.evento, FONTS.regular, 9, 2, 39.5);
     const { line1, line2 } = formatCodigoLines(stamp.codigo);
-    drawTextLeft(doc, line1, FONTS.regular, 7, 2, 36);
-    drawTextLeft(doc, line2, FONTS.regular, 6, 2, 33);
+    drawTextLeft(doc, line1, FONTS.regular, 8, 2, 36);
+    drawTextLeft(doc, line2, FONTS.regular, 7, 2, 32.5);
   });
   doc.end();
   return result;
@@ -3009,9 +3133,9 @@ function formatClientId(id) {
   if (id < 1e3) return "0" + id;
   return "" + id;
 }
-function formatPrice(value) {
+function formatPrice(value, currencySymbol = "€") {
   const str = value.toFixed(2);
-  return str + "€";
+  return str + currencySymbol;
 }
 function drawCentered(doc, text, fontName, fontSize, y, pageWidth) {
   doc.font(fontName).fontSize(fontSize);
@@ -3019,9 +3143,14 @@ function drawCentered(doc, text, fontName, fontSize, y, pageWidth) {
   const x = (pageWidth - textWidth) / 2;
   doc.text(text, x, y, { lineBreak: false });
 }
-function drawLeft(doc, text, fontName, fontSize, x, y) {
+function drawLeft(doc, text, fontName, fontSize, x, y, maxWidth) {
   doc.font(fontName).fontSize(fontSize);
-  doc.text(text, x, y, { lineBreak: false });
+  const options = maxWidth ? { width: maxWidth, lineBreak: true } : { lineBreak: false };
+  doc.text(text, x, y, options);
+  if (maxWidth) {
+    return doc.heightOfString(text, options);
+  }
+  return fontSize * 0.352778;
 }
 function drawRight(doc, text, fontName, fontSize, xRight, y) {
   doc.font(fontName).fontSize(fontSize);
@@ -3066,6 +3195,34 @@ function collectPdf(doc) {
 function calcTicketHeightMm(numItems) {
   return TICKET_MARGIN_TOP + TICKET_LOGO_HEIGHT + TICKET_HEADER_HEIGHT + TICKET_COLUMNS_HEIGHT + numItems * TICKET_ITEM_ROW_HEIGHT + TICKET_TOTAL_HEIGHT + TICKET_FOOTER_HEIGHT + TICKET_MARGIN_BOTTOM;
 }
+function calcActualTicketHeight(params) {
+  const tempDoc = new PDFDocument({ size: [TICKET_WIDTH, 1e3 * MM_TO_PT], margin: 0 });
+  registerFonts(tempDoc);
+  const { items, productos, modelo1Ticket, modelo2Ticket } = params;
+  let totalHeight = 0;
+  totalHeight += TICKET_MARGIN_TOP;
+  totalHeight += TICKET_LOGO_HEIGHT;
+  totalHeight += TICKET_HEADER_HEIGHT;
+  totalHeight += TICKET_COLUMNS_HEIGHT;
+  const itemNameMaxWidth = 40 * MM_TO_PT;
+  for (let index = 0; index < items.length; index++) {
+    const item = items[index];
+    if (item.cantidad > 0) {
+      const producto = productos[index];
+      const modeloTicket = item.idProducto.slice(-1) === "1" ? modelo1Ticket : modelo2Ticket;
+      const itemName = modeloTicket + " " + producto.nombre_ticket;
+      tempDoc.font(FONTS.condensed).fontSize(8);
+      const textHeight = tempDoc.heightOfString(itemName, { width: itemNameMaxWidth, lineBreak: true });
+      const textHeightMm = textHeight / MM_TO_PT;
+      totalHeight += Math.max(TICKET_ITEM_ROW_HEIGHT, textHeightMm + 0.5);
+    }
+  }
+  totalHeight += TICKET_TOTAL_HEIGHT;
+  totalHeight += TICKET_FOOTER_HEIGHT;
+  totalHeight += TICKET_MARGIN_BOTTOM;
+  tempDoc.end();
+  return totalHeight;
+}
 const TICKET_MARGIN_TOP = 5;
 const TICKET_LOGO_HEIGHT = 24;
 const TICKET_HEADER_HEIGHT = 32;
@@ -3105,10 +3262,10 @@ async function genTicket(params) {
     cp,
     l1,
     l2,
-    l3
+    l3,
+    currencySymbol = "€"
   } = params;
-  const nitems = countActiveItems(items);
-  const pageHeightMm = calcTicketHeightMm(nitems);
+  const pageHeightMm = calcActualTicketHeight(params);
   const pageHeight = pageHeightMm * MM_TO_PT;
   const doc = new PDFDocument({
     size: [TICKET_WIDTH, pageHeight],
@@ -3149,6 +3306,7 @@ async function genTicket(params) {
   y += 2;
   let totalProductos = 0;
   let totalImporte = 0;
+  const itemNameMaxWidth = 40 * MM_TO_PT;
   for (let index = 0; index < items.length; index++) {
     const item = items[index];
     if (item.cantidad > 0) {
@@ -3158,13 +3316,14 @@ async function genTicket(params) {
       totalImporte += item.cantidad * producto.precio;
       const itemName = modeloTicket + " " + producto.nombre_ticket;
       const quantity = String(item.cantidad);
-      const price = formatPrice(producto.precio);
-      const total = formatPrice(item.cantidad * producto.precio);
-      drawLeft(doc, itemName, FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT);
+      const price = formatPrice(producto.precio, currencySymbol);
+      const total = formatPrice(item.cantidad * producto.precio, currencySymbol);
+      const textHeightPt = drawLeft(doc, itemName, FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT, itemNameMaxWidth);
+      const textHeightMm = textHeightPt / MM_TO_PT;
       drawRight(doc, quantity, FONTS.condensed, 8, 50 * MM_TO_PT, y * MM_TO_PT);
       drawRight(doc, price, FONTS.condensed, 8, 62 * MM_TO_PT, y * MM_TO_PT);
       drawRight(doc, total, FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT);
-      y += TICKET_ITEM_ROW_HEIGHT;
+      y += Math.max(TICKET_ITEM_ROW_HEIGHT, textHeightMm + 0.5);
     }
   }
   y += 1;
@@ -3172,7 +3331,7 @@ async function genTicket(params) {
   y += 3;
   drawLeft(doc, "Total:", FONTS.condensed, 8, 35 * MM_TO_PT, y * MM_TO_PT);
   drawRight(doc, String(totalProductos), FONTS.condensed, 8, 50 * MM_TO_PT, y * MM_TO_PT);
-  drawRight(doc, formatPrice(totalImporte), FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT);
+  drawRight(doc, formatPrice(totalImporte, currencySymbol), FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT);
   y += 4;
   drawLine(doc, 5 * MM_TO_PT, y * MM_TO_PT, pageWidth - 2 * 5 * MM_TO_PT);
   y += 4;
@@ -3188,6 +3347,29 @@ async function genTicket(params) {
   doc.end();
   return result;
 }
+function calcActualTicketCajaHeight(params) {
+  const tempDoc = new PDFDocument({ size: [TICKET_WIDTH, 1e3 * MM_TO_PT], margin: 0 });
+  registerFonts(tempDoc);
+  const { items, productos, modelo1Ticket, modelo2Ticket } = params;
+  const HEADER_HEIGHT_MM = 72;
+  const FOOTER_HEIGHT_MM = 22;
+  const itemNameMaxWidth = 25 * MM_TO_PT;
+  let itemsHeight = 0;
+  for (let index = 0; index < items.length; index++) {
+    const item = items[index];
+    if (item.cantidad > 0) {
+      const producto = productos[index];
+      const modeloTicket = item.idProducto.slice(-1) === "1" ? modelo1Ticket : modelo2Ticket;
+      const itemName = modeloTicket + " " + producto.nombre_ticket;
+      tempDoc.font(FONTS.condensed).fontSize(8);
+      const textHeight = tempDoc.heightOfString(itemName, { width: itemNameMaxWidth, lineBreak: true });
+      const textHeightMm = textHeight / MM_TO_PT;
+      itemsHeight += Math.max(3.5, textHeightMm + 0.5);
+    }
+  }
+  tempDoc.end();
+  return HEADER_HEIGHT_MM + itemsHeight + FOOTER_HEIGHT_MM;
+}
 async function genTicketCaja(params) {
   const {
     items,
@@ -3197,13 +3379,10 @@ async function genTicketCaja(params) {
     feria,
     modoTicket,
     modelo1Ticket,
-    modelo2Ticket
+    modelo2Ticket,
+    currencySymbol = "€"
   } = params;
-  const nitems = countActiveItems(items);
-  const HEADER_HEIGHT_MM = 72;
-  const FOOTER_HEIGHT_MM = 22;
-  const ITEM_HEIGHT_MM = 3.5;
-  const pageHeightMm = HEADER_HEIGHT_MM + nitems * ITEM_HEIGHT_MM + FOOTER_HEIGHT_MM;
+  const pageHeightMm = calcActualTicketCajaHeight(params);
   const pageHeight = pageHeightMm * MM_TO_PT;
   const doc = new PDFDocument({
     size: [TICKET_WIDTH, pageHeight],
@@ -3243,6 +3422,7 @@ async function genTicketCaja(params) {
   let totalProductos = 0;
   let totalImporte = 0;
   let inicioMod2 = false;
+  const itemNameMaxWidth = 25 * MM_TO_PT;
   for (let index = 0; index < items.length; index++) {
     const item = items[index];
     if (item.cantidad > 0) {
@@ -3258,13 +3438,14 @@ async function genTicketCaja(params) {
       totalImporte += item.cantidad * producto.precio;
       const itemName = modeloTicket + " " + producto.nombre_ticket;
       const quantity = String(item.cantidad);
-      const price = formatPrice(producto.precio);
-      const total = formatPrice(item.cantidad * producto.precio);
-      drawLeft(doc, itemName, FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT);
+      const price = formatPrice(producto.precio, currencySymbol);
+      const total = formatPrice(item.cantidad * producto.precio, currencySymbol);
+      const textHeightPt = drawLeft(doc, itemName, FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT, itemNameMaxWidth);
+      const textHeightMm = textHeightPt / MM_TO_PT;
       drawRight(doc, quantity, FONTS.condensed, 8, 50 * MM_TO_PT, y * MM_TO_PT);
       drawRight(doc, price, FONTS.condensed, 8, 62 * MM_TO_PT, y * MM_TO_PT);
       drawRight(doc, total, FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT);
-      y += ITEM_HEIGHT_MM;
+      y += Math.max(3.5, textHeightMm + 0.5);
     }
   }
   y += 2;
@@ -3272,7 +3453,7 @@ async function genTicketCaja(params) {
   y += 3;
   drawLeft(doc, "Total:", FONTS.condensed, 8, 35 * MM_TO_PT, y * MM_TO_PT);
   drawRight(doc, String(totalProductos), FONTS.condensed, 8, 50 * MM_TO_PT, y * MM_TO_PT);
-  drawRight(doc, formatPrice(totalImporte), FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT);
+  drawRight(doc, formatPrice(totalImporte, currencySymbol), FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT);
   y += 4;
   drawLine(doc, 5 * MM_TO_PT, y * MM_TO_PT, pageWidth - 2 * 5 * MM_TO_PT);
   y += 4;
@@ -3285,6 +3466,28 @@ async function genTicketCaja(params) {
   drawCentered(doc, "PASE POR CAJA y ENTREGUE ESTE RESGUARDO", FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
   doc.end();
   return result;
+}
+function calcActualTicketMasterHeight(params) {
+  const tempDoc = new PDFDocument({ size: [TICKET_WIDTH, 1e3 * MM_TO_PT], margin: 0 });
+  registerFonts(tempDoc);
+  const { items, modelo1Ticket, modelo2Ticket } = params;
+  const HEADER_HEIGHT_MM = 66;
+  const FOOTER_HEIGHT_MM = 30;
+  const itemNameMaxWidth = 40 * MM_TO_PT;
+  let itemsHeight = 0;
+  for (let index = 0; index < items.length; index++) {
+    const item = items[index];
+    if (item.cantidad > 0) {
+      const modeloTicket = item.idProducto.slice(-1) === "1" ? modelo1Ticket : modelo2Ticket;
+      const itemName = modeloTicket + " Master Set";
+      tempDoc.font(FONTS.condensed).fontSize(8);
+      const textHeight = tempDoc.heightOfString(itemName, { width: itemNameMaxWidth, lineBreak: true });
+      const textHeightMm = textHeight / MM_TO_PT;
+      itemsHeight += Math.max(3, textHeightMm + 0.5);
+    }
+  }
+  tempDoc.end();
+  return HEADER_HEIGHT_MM + itemsHeight + FOOTER_HEIGHT_MM;
 }
 async function genTicketMaster(params) {
   const {
@@ -3302,13 +3505,10 @@ async function genTicketMaster(params) {
     cp,
     l1,
     l2,
-    l3
+    l3,
+    currencySymbol = "€"
   } = params;
-  const nitems = countActiveItems(items);
-  const HEADER_HEIGHT_MM = 66;
-  const FOOTER_HEIGHT_MM = 30;
-  const ITEM_HEIGHT_MM = 3;
-  const pageHeightMm = HEADER_HEIGHT_MM + nitems * ITEM_HEIGHT_MM + FOOTER_HEIGHT_MM;
+  const pageHeightMm = calcActualTicketMasterHeight(params);
   const pageHeight = pageHeightMm * MM_TO_PT;
   const doc = new PDFDocument({
     size: [TICKET_WIDTH, pageHeight],
@@ -3347,17 +3547,19 @@ async function genTicketMaster(params) {
   y += 2;
   const MASTER_SET_PRICE = 31.05;
   let totalItems = 0;
+  const itemNameMaxWidth = 40 * MM_TO_PT;
   for (let index = 0; index < items.length; index++) {
     const item = items[index];
     if (item.cantidad > 0) {
       const modeloTicket = item.idProducto.slice(-1) === "1" ? modelo1Ticket : modelo2Ticket;
       totalItems++;
       const itemName = modeloTicket + " Master Set";
-      drawLeft(doc, itemName, FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT);
+      const textHeightPt = drawLeft(doc, itemName, FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT, itemNameMaxWidth);
+      const textHeightMm = textHeightPt / MM_TO_PT;
       drawRight(doc, "1", FONTS.condensed, 8, 50 * MM_TO_PT, y * MM_TO_PT);
-      drawRight(doc, formatPrice(MASTER_SET_PRICE), FONTS.condensed, 8, 62 * MM_TO_PT, y * MM_TO_PT);
-      drawRight(doc, formatPrice(MASTER_SET_PRICE), FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT);
-      y += ITEM_HEIGHT_MM;
+      drawRight(doc, formatPrice(MASTER_SET_PRICE, currencySymbol), FONTS.condensed, 8, 62 * MM_TO_PT, y * MM_TO_PT);
+      drawRight(doc, formatPrice(MASTER_SET_PRICE, currencySymbol), FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT);
+      y += Math.max(3, textHeightMm + 0.5);
     }
   }
   y += 2;
@@ -3365,7 +3567,7 @@ async function genTicketMaster(params) {
   y += 3;
   const masterTotal = totalItems * MASTER_SET_PRICE;
   drawLeft(doc, `Total:     ${totalItems}`, FONTS.condensed, 8, 40 * MM_TO_PT, y * MM_TO_PT);
-  drawLeft(doc, formatPrice(masterTotal), FONTS.condensed, 8, 65 * MM_TO_PT, y * MM_TO_PT);
+  drawLeft(doc, formatPrice(masterTotal, currencySymbol), FONTS.condensed, 8, 65 * MM_TO_PT, y * MM_TO_PT);
   y += 4;
   drawLine(doc, 5 * MM_TO_PT, y * MM_TO_PT, pageWidth - 2 * 5 * MM_TO_PT);
   y += 4;
@@ -3558,6 +3760,8 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
   let bg2 = null;
   let overlay1 = null;
   let overlay2 = null;
+  let logoPng = null;
+  let printLogoPng = false;
   if (imageLayerOptions) {
     const layerResult = resolveImageLayers(imageLayerOptions);
     bg1 = layerResult.backgroundImage;
@@ -3565,6 +3769,10 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
     overlay1 = layerResult.overlayImage;
     overlay2 = layerResult.overlayImage;
     notifications.push(...layerResult.notifications);
+    printLogoPng = imageLayerOptions.printLogoPng ?? false;
+    if (printLogoPng) {
+      logoPng = imageLayerOptions.selloImage;
+    }
   } else {
     let syncRepo;
     try {
@@ -3587,11 +3795,14 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
         for (let i = 0; i < qty1; i++) {
           stamps.push({
             tarifa: tariff.name,
+            tarifaDescripcion: tariff.description,
             fecha: stampFecha,
             evento: stampEvento,
             codigo: buildLabelCode(config, productoCounter),
             backgroundImage: background,
-            overlayImage: overlay
+            overlayImage: overlay,
+            printLogoPng,
+            logoPngImage: logoPng
           });
           productoCounter++;
         }
@@ -3615,11 +3826,14 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
         for (let i = 0; i < qty2; i++) {
           stamps.push({
             tarifa: tariff.name,
+            tarifaDescripcion: tariff.description,
             fecha: stampFecha,
             evento: stampEvento,
             codigo: buildLabelCode(config, productoCounter),
             backgroundImage: background,
-            overlayImage: overlay
+            overlayImage: overlay,
+            printLogoPng,
+            logoPngImage: logoPng
           });
           productoCounter++;
         }
@@ -3654,7 +3868,9 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
                 evento: stampEvento,
                 codigo: buildLabelCode(config, productoCounter),
                 backgroundImage: background,
-                overlayImage: overlay
+                overlayImage: overlay,
+                printLogoPng,
+                logoPngImage: logoPng
               });
               productoCounter++;
             }
@@ -3666,7 +3882,9 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
                 evento: stampEvento,
                 codigo: buildLabelCode(config, productoCounter),
                 backgroundImage: background,
-                overlayImage: overlay
+                overlayImage: overlay,
+                printLogoPng,
+                logoPngImage: logoPng
               });
               productoCounter++;
             }
@@ -3688,7 +3906,9 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
             evento: stampEvento,
             codigo: buildLabelCode(config, productoCounter),
             backgroundImage: background,
-            overlayImage: overlay
+            overlayImage: overlay,
+            printLogoPng,
+            logoPngImage: logoPng
           });
           productoCounter++;
         }
@@ -3739,6 +3959,17 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
     const modoTicket = buildTicketTitle(profile, config.ticket.titulo);
     const modelo1Ticket = model1Name || "Modelo 1";
     const modelo2Ticket = model2Name || "Modelo 2";
+    const ticketFeria = dynamicTariffCtx ? dynamicTariffCtx.title || config.ticket.feria : config.ticket.feria;
+    const ticketLugar = dynamicTariffCtx ? config.sello.eventos?.[0]?.localidad || config.ticket.lugar : config.ticket.lugar;
+    if (imageLayerOptions?.useSecondaryPrice && dynamicTariffCtx) {
+      for (const producto of productos) {
+        const tariffId = parseInt(producto.idProducto.replace(/^D/, "").replace(/S[12]$/, ""), 10);
+        const matchingTariff = dynamicTariffCtx.tariffs.find((t) => t.id === tariffId);
+        if (matchingTariff && matchingTariff.secondaryPrice != null) {
+          producto.precio = matchingTariff.secondaryPrice;
+        }
+      }
+    }
     const nitems = countActiveItems(items);
     const ticketHeightMm = calcTicketHeightMm(nitems);
     const ticketCajaHeightMm = calcTicketCajaHeightMm(nitems);
@@ -3752,8 +3983,8 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
       idCliente: config.codigo.cliente,
       nombreMaquina: config.codigo.maquina,
       productos,
-      feria: config.ticket.feria,
-      lugar: config.ticket.lugar,
+      feria: ticketFeria,
+      lugar: ticketLugar,
       empresa: config.ticket.empresa,
       cif: config.ticket.cif,
       cp: config.ticket.cp,
@@ -3774,7 +4005,7 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
         idCliente: config.codigo.cliente,
         nombreMaquina: config.codigo.maquina,
         productos,
-        feria: config.ticket.feria,
+        feria: ticketFeria,
         modoTicket: config.ticket.tituloCopia || "COPIA Factura Simplificada",
         modelo1Ticket,
         modelo2Ticket
@@ -3796,8 +4027,8 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
         items,
         idCliente: config.codigo.cliente,
         nombreMaquina: config.codigo.maquina,
-        feria: config.ticket.feria,
-        lugar: config.ticket.lugar,
+        feria: ticketFeria,
+        lugar: ticketLugar,
         empresa: config.ticket.empresa,
         cif: config.ticket.cif,
         cp: config.ticket.cp,
@@ -3832,8 +4063,8 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
               idCliente: config.codigo.cliente,
               nombreMaquina: config.codigo.maquina,
               productos,
-              feria: config.ticket.feria,
-              lugar: config.ticket.lugar,
+              feria: ticketFeria,
+              lugar: ticketLugar,
               empresa: config.ticket.empresa,
               cif: config.ticket.cif,
               cp: config.ticket.cp,
@@ -3943,17 +4174,38 @@ function registerSaleHandlers() {
                   name: t.name,
                   price: t.local_price,
                   position: t.position
+                })),
+                strips: group.strips.map((s) => ({
+                  id: s.id,
+                  name: s.name,
+                  price: s.local_price,
+                  position: s.position,
+                  tariff_ids: s.tariff_ids
                 }))
               };
               dynamicTariffCtx = {
                 groupId: group.id,
                 title: group.title,
+                eventName: evento?.nferia,
+                // Add event name for ticket header
                 currency: group.local_currency,
+                currencySymbol: getCurrencySymbol(group.local_currency),
+                // Add currency symbol
                 tariffs: group.tariffs.map((t) => ({
                   id: t.id,
                   name: t.name,
+                  description: t.description,
                   price: t.local_price,
+                  secondaryPrice: t.secondary_price,
                   position: t.position
+                })),
+                strips: group.strips.map((s) => ({
+                  id: s.id,
+                  name: s.name,
+                  price: s.local_price,
+                  secondaryPrice: s.secondary_price,
+                  position: s.position,
+                  tariff_ids: s.tariff_ids
                 }))
               };
             }
@@ -3996,8 +4248,10 @@ function registerSaleHandlers() {
         imageLayerOptions = {
           printFondo: typedImageFlags.printFondo,
           printSello: typedImageFlags.printSello,
+          printLogoPng: typedImageFlags.printLogoPng ?? false,
           fondoImage,
-          selloImage
+          selloImage,
+          useSecondaryPrice: typedImageFlags.useSecondaryPrice ?? false
         };
       }
       try {

@@ -45,6 +45,8 @@ export interface ImageLayerOptions {
   printFondo: boolean
   /** Whether to print the stamp image (sello) */
   printSello: boolean
+  /** Whether to print the logo PNG on the right side of the stamp text fields */
+  printLogoPng?: boolean
   /** Background image as Data URI or null */
   fondoImage: string | null
   /** Stamp image as Data URI or null */
@@ -469,6 +471,8 @@ export async function generateSalePdfs(
   let bg2: string | null = null
   let overlay1: string | null = null
   let overlay2: string | null = null
+  let logoPng: string | null = null
+  let printLogoPng = false
 
   if (imageLayerOptions) {
     // Use fair-based image layer composition
@@ -478,6 +482,12 @@ export async function generateSalePdfs(
     overlay1 = layerResult.overlayImage
     overlay2 = layerResult.overlayImage
     notifications.push(...layerResult.notifications)
+    
+    // Handle printLogoPng flag: when true, use sello as logo PNG instead of overlay
+    printLogoPng = imageLayerOptions.printLogoPng ?? false
+    if (printLogoPng) {
+      logoPng = imageLayerOptions.selloImage
+    }
   } else {
     // Legacy: load background from images repository by model name
     // Create syncRepo for fair name fallback (may not be available in test environments)
@@ -517,7 +527,9 @@ export async function generateSalePdfs(
             evento: stampEvento,
             codigo: buildLabelCode(config, productoCounter),
             backgroundImage: background,
-            overlayImage: overlay
+            overlayImage: overlay,
+            printLogoPng,
+            logoPngImage: logoPng
           })
           productoCounter++
         }
@@ -549,7 +561,9 @@ export async function generateSalePdfs(
             evento: stampEvento,
             codigo: buildLabelCode(config, productoCounter),
             backgroundImage: background,
-            overlayImage: overlay
+            overlayImage: overlay,
+            printLogoPng,
+            logoPngImage: logoPng
           })
           productoCounter++
         }
@@ -601,7 +615,9 @@ export async function generateSalePdfs(
                 evento: stampEvento,
                 codigo: buildLabelCode(config, productoCounter),
                 backgroundImage: background,
-                overlayImage: overlay
+                overlayImage: overlay,
+            printLogoPng,
+            logoPngImage: logoPng
               })
               productoCounter++
             }
@@ -614,7 +630,9 @@ export async function generateSalePdfs(
                 evento: stampEvento,
                 codigo: buildLabelCode(config, productoCounter),
                 backgroundImage: background,
-                overlayImage: overlay
+                overlayImage: overlay,
+            printLogoPng,
+            logoPngImage: logoPng
               })
               productoCounter++
             }
@@ -639,7 +657,9 @@ export async function generateSalePdfs(
             evento: stampEvento,
             codigo: buildLabelCode(config, productoCounter),
             backgroundImage: background,
-            overlayImage: overlay
+            overlayImage: overlay,
+            printLogoPng,
+            logoPngImage: logoPng
           })
           productoCounter++
         }

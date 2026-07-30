@@ -107,6 +107,8 @@ export interface GenTicketParams {
   l2: string
   /** Legal text line 3 */
   l3: string
+  /** Currency symbol (default: '€') */
+  currencySymbol?: string
 }
 
 /** Parameters for genTicketCaja (cash register copy) */
@@ -127,6 +129,8 @@ export interface GenTicketCajaParams {
   modelo1Ticket: string
   /** Model 2 display name */
   modelo2Ticket: string
+  /** Currency symbol (default: '€') */
+  currencySymbol?: string
 }
 
 /** Parameters for genTicketMaster (master set ticket) */
@@ -163,6 +167,8 @@ export interface GenTicketMasterParams {
   l2: string
   /** Legal text line 3 */
   l3: string
+  /** Currency symbol (default: '€') */
+  currencySymbol?: string
 }
 
 // ─────────────────────────────────────────────
@@ -207,12 +213,14 @@ export function formatClientId(id: number): string {
 }
 
 /**
- * Formats a price value to display with euro sign.
+ * Formats a price value to display with currency symbol.
  * Ensures at least 2 decimal places.
+ * @param value - Price value
+ * @param currencySymbol - Currency symbol to use (default: '€')
  */
-export function formatPrice(value: number): string {
+export function formatPrice(value: number, currencySymbol = '€'): string {
   const str = value.toFixed(2)
-  return str + '€'
+  return str + currencySymbol
 }
 
 /**
@@ -234,6 +242,7 @@ function drawCentered(
 
 /**
  * Draws left-aligned text.
+ * @returns The actual height used by the text
  */
 function drawLeft(
   doc: PDFKit.PDFDocument,
@@ -241,10 +250,20 @@ function drawLeft(
   fontName: string,
   fontSize: number,
   x: number,
-  y: number
-): void {
+  y: number,
+  maxWidth?: number
+): number {
   doc.font(fontName).fontSize(fontSize)
-  doc.text(text, x, y, { lineBreak: false })
+  const options: PDFKit.Mixins.TextOptions = maxWidth 
+    ? { width: maxWidth, lineBreak: true }
+    : { lineBreak: false }
+  doc.text(text, x, y, options)
+  
+  // Calculate actual height used
+  if (maxWidth) {
+    return doc.heightOfString(text, options)
+  }
+  return fontSize * 0.352778 // Convert pt to mm (approximate single line height)
 }
 
 /**
@@ -357,13 +376,16 @@ export function calcTicketHeight(numItems: number): number {
 
 /**
  * Calculates the page height in mm for a ticket based on number of active items.
+ * 
+ * This is a conservative estimate. The actual height will be recalculated
+ * dynamically during rendering based on text content.
  *
  * Sections (all values in mm):
  *   - Top margin: 5
  *   - Logo: 14
  *   - Header info (feria, lugar, empresa, CIF, CP, fecha, modo): 32
  *   - Column headers + separator: 5
- *   - Item rows: nitems × 3.5
+ *   - Item rows: nitems × 3.5 (minimum, will expand based on content)
  *   - Total section (separator + total row): 8
  *   - Footer info (separator + session + legal texts): 20
  *   - Bottom margin: 5
@@ -377,6 +399,54 @@ export function calcTicketHeightMm(numItems: number): number {
     + TICKET_TOTAL_HEIGHT
     + TICKET_FOOTER_HEIGHT
     + TICKET_MARGIN_BOTTOM
+}
+
+/**
+ * Calculates actual content height by measuring text in a temporary document.
+ * This provides accurate height calculations before creating the final PDF.
+ */
+function calcActualTicketHeight(params: GenTicketParams): number {
+  const tempDoc = new PDFDocument({ size: [TICKET_WIDTH, 1000 * MM_TO_PT], margin: 0 })
+  registerFonts(tempDoc)
+  
+  const { items, productos, modelo1Ticket, modelo2Ticket } = params
+  
+  let totalHeight = 0
+  
+  // Fixed sections
+  totalHeight += TICKET_MARGIN_TOP
+  totalHeight += TICKET_LOGO_HEIGHT
+  totalHeight += TICKET_HEADER_HEIGHT
+  totalHeight += TICKET_COLUMNS_HEIGHT
+  
+  // Variable item rows - measure actual text height
+  const itemNameMaxWidth = 40 * MM_TO_PT // Width available for product name
+  
+  for (let index = 0; index < items.length; index++) {
+    const item = items[index]
+    if (item.cantidad > 0) {
+      const producto = productos[index]
+      const modeloTicket = item.idProducto.slice(-1) === '1' ? modelo1Ticket : modelo2Ticket
+      const itemName = modeloTicket + ' ' + producto.nombre_ticket
+      
+      tempDoc.font(FONTS.condensed).fontSize(8)
+      const textHeight = tempDoc.heightOfString(itemName, { width: itemNameMaxWidth, lineBreak: true })
+      const textHeightMm = textHeight / MM_TO_PT
+      
+      // Use at least TICKET_ITEM_ROW_HEIGHT, but expand if text needs more space
+      totalHeight += Math.max(TICKET_ITEM_ROW_HEIGHT, textHeightMm + 0.5) // +0.5mm padding
+    }
+  }
+  
+  // Fixed sections
+  totalHeight += TICKET_TOTAL_HEIGHT
+  totalHeight += TICKET_FOOTER_HEIGHT
+  totalHeight += TICKET_MARGIN_BOTTOM
+  
+  // Clean up temp document
+  tempDoc.end()
+  
+  return totalHeight
 }
 
 // Section heights for genTicket (in mm)
@@ -479,11 +549,12 @@ export async function genTicket(params: GenTicketParams): Promise<Buffer> {
     cp,
     l1,
     l2,
-    l3
+    l3,
+    currencySymbol = '€'
   } = params
 
-  const nitems = countActiveItems(items)
-  const pageHeightMm = calcTicketHeightMm(nitems)
+  // Calculate actual height based on content
+  const pageHeightMm = calcActualTicketHeight(params)
   const pageHeight = pageHeightMm * MM_TO_PT
 
   const doc = new PDFDocument({
@@ -541,6 +612,8 @@ export async function genTicket(params: GenTicketParams): Promise<Buffer> {
   // ─── Section 5: Item rows (variable) ───
   let totalProductos = 0
   let totalImporte = 0
+  
+  const itemNameMaxWidth = 40 * MM_TO_PT // Width available for product name
 
   for (let index = 0; index < items.length; index++) {
     const item = items[index]
@@ -553,15 +626,20 @@ export async function genTicket(params: GenTicketParams): Promise<Buffer> {
 
       const itemName = modeloTicket + ' ' + producto.nombre_ticket
       const quantity = String(item.cantidad)
-      const price = formatPrice(producto.precio)
-      const total = formatPrice(item.cantidad * producto.precio)
+      const price = formatPrice(producto.precio, currencySymbol)
+      const total = formatPrice(item.cantidad * producto.precio, currencySymbol)
 
-      drawLeft(doc, itemName, FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT)
+      // Draw item name with wrapping support
+      const textHeightPt = drawLeft(doc, itemName, FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT, itemNameMaxWidth)
+      const textHeightMm = textHeightPt / MM_TO_PT
+      
+      // Draw quantity, price, and total on the first line of the item
       drawRight(doc, quantity, FONTS.condensed, 8, 50 * MM_TO_PT, y * MM_TO_PT)
       drawRight(doc, price, FONTS.condensed, 8, 62 * MM_TO_PT, y * MM_TO_PT)
       drawRight(doc, total, FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT)
 
-      y += TICKET_ITEM_ROW_HEIGHT
+      // Advance Y position based on actual text height
+      y += Math.max(TICKET_ITEM_ROW_HEIGHT, textHeightMm + 0.5)
     }
   }
 
@@ -571,7 +649,7 @@ export async function genTicket(params: GenTicketParams): Promise<Buffer> {
   y += 3
   drawLeft(doc, 'Total:', FONTS.condensed, 8, 35 * MM_TO_PT, y * MM_TO_PT)
   drawRight(doc, String(totalProductos), FONTS.condensed, 8, 50 * MM_TO_PT, y * MM_TO_PT)
-  drawRight(doc, formatPrice(totalImporte), FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT)
+  drawRight(doc, formatPrice(totalImporte, currencySymbol), FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT)
   y += 4
 
   // ─── Section 7: Footer ───
@@ -593,6 +671,41 @@ export async function genTicket(params: GenTicketParams): Promise<Buffer> {
   return result
 }
 
+
+/**
+ * Calculates actual content height for genTicketCaja by measuring text in a temporary document.
+ */
+function calcActualTicketCajaHeight(params: GenTicketCajaParams): number {
+  const tempDoc = new PDFDocument({ size: [TICKET_WIDTH, 1000 * MM_TO_PT], margin: 0 })
+  registerFonts(tempDoc)
+  
+  const { items, productos, modelo1Ticket, modelo2Ticket } = params
+  
+  const HEADER_HEIGHT_MM = 72
+  const FOOTER_HEIGHT_MM = 22
+  const itemNameMaxWidth = 25 * MM_TO_PT
+  
+  let itemsHeight = 0
+  
+  for (let index = 0; index < items.length; index++) {
+    const item = items[index]
+    if (item.cantidad > 0) {
+      const producto = productos[index]
+      const modeloTicket = item.idProducto.slice(-1) === '1' ? modelo1Ticket : modelo2Ticket
+      const itemName = modeloTicket + ' ' + producto.nombre_ticket
+      
+      tempDoc.font(FONTS.condensed).fontSize(8)
+      const textHeight = tempDoc.heightOfString(itemName, { width: itemNameMaxWidth, lineBreak: true })
+      const textHeightMm = textHeight / MM_TO_PT
+      
+      itemsHeight += Math.max(3.5, textHeightMm + 0.5)
+    }
+  }
+  
+  tempDoc.end()
+  
+  return HEADER_HEIGHT_MM + itemsHeight + FOOTER_HEIGHT_MM
+}
 
 /**
  * Generates the cash register copy ticket (COPIA / ticket caja).
@@ -619,16 +732,12 @@ export async function genTicketCaja(params: GenTicketCajaParams): Promise<Buffer
     feria,
     modoTicket,
     modelo1Ticket,
-    modelo2Ticket
+    modelo2Ticket,
+    currencySymbol = '€'
   } = params
 
-  const nitems = countActiveItems(items)
-
-  // Calculate page height: header/payment fields (~72mm) + items + footer (~22mm)
-  const HEADER_HEIGHT_MM = 72
-  const FOOTER_HEIGHT_MM = 22
-  const ITEM_HEIGHT_MM = 3.5
-  const pageHeightMm = HEADER_HEIGHT_MM + (nitems * ITEM_HEIGHT_MM) + FOOTER_HEIGHT_MM
+  // Calculate actual height based on content
+  const pageHeightMm = calcActualTicketCajaHeight(params)
   const pageHeight = pageHeightMm * MM_TO_PT
 
   const doc = new PDFDocument({
@@ -692,6 +801,8 @@ export async function genTicketCaja(params: GenTicketCajaParams): Promise<Buffer
   let totalProductos = 0
   let totalImporte = 0
   let inicioMod2 = false
+  
+  const itemNameMaxWidth = 25 * MM_TO_PT // Width available for product name in caja ticket
 
   for (let index = 0; index < items.length; index++) {
     const item = items[index]
@@ -712,15 +823,20 @@ export async function genTicketCaja(params: GenTicketCajaParams): Promise<Buffer
 
       const itemName = modeloTicket + ' ' + producto.nombre_ticket
       const quantity = String(item.cantidad)
-      const price = formatPrice(producto.precio)
-      const total = formatPrice(item.cantidad * producto.precio)
+      const price = formatPrice(producto.precio, currencySymbol)
+      const total = formatPrice(item.cantidad * producto.precio, currencySymbol)
 
-      drawLeft(doc, itemName, FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT)
+      // Draw item name with wrapping support
+      const textHeightPt = drawLeft(doc, itemName, FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT, itemNameMaxWidth)
+      const textHeightMm = textHeightPt / MM_TO_PT
+      
+      // Draw quantity, price, and total on the first line of the item
       drawRight(doc, quantity, FONTS.condensed, 8, 50 * MM_TO_PT, y * MM_TO_PT)
       drawRight(doc, price, FONTS.condensed, 8, 62 * MM_TO_PT, y * MM_TO_PT)
       drawRight(doc, total, FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT)
 
-      y += ITEM_HEIGHT_MM
+      // Advance Y position based on actual text height
+      y += Math.max(3.5, textHeightMm + 0.5)
     }
   }
 
@@ -731,7 +847,7 @@ export async function genTicketCaja(params: GenTicketCajaParams): Promise<Buffer
 
   drawLeft(doc, 'Total:', FONTS.condensed, 8, 35 * MM_TO_PT, y * MM_TO_PT)
   drawRight(doc, String(totalProductos), FONTS.condensed, 8, 50 * MM_TO_PT, y * MM_TO_PT)
-  drawRight(doc, formatPrice(totalImporte), FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT)
+  drawRight(doc, formatPrice(totalImporte, currencySymbol), FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT)
   y += 4
 
   // 10. Bottom separator
@@ -751,6 +867,40 @@ export async function genTicketCaja(params: GenTicketCajaParams): Promise<Buffer
 
   doc.end()
   return result
+}
+
+/**
+ * Calculates actual content height for genTicketMaster by measuring text in a temporary document.
+ */
+function calcActualTicketMasterHeight(params: GenTicketMasterParams): number {
+  const tempDoc = new PDFDocument({ size: [TICKET_WIDTH, 1000 * MM_TO_PT], margin: 0 })
+  registerFonts(tempDoc)
+  
+  const { items, modelo1Ticket, modelo2Ticket } = params
+  
+  const HEADER_HEIGHT_MM = 66
+  const FOOTER_HEIGHT_MM = 30
+  const itemNameMaxWidth = 40 * MM_TO_PT
+  
+  let itemsHeight = 0
+  
+  for (let index = 0; index < items.length; index++) {
+    const item = items[index]
+    if (item.cantidad > 0) {
+      const modeloTicket = item.idProducto.slice(-1) === '1' ? modelo1Ticket : modelo2Ticket
+      const itemName = modeloTicket + ' Master Set'
+      
+      tempDoc.font(FONTS.condensed).fontSize(8)
+      const textHeight = tempDoc.heightOfString(itemName, { width: itemNameMaxWidth, lineBreak: true })
+      const textHeightMm = textHeight / MM_TO_PT
+      
+      itemsHeight += Math.max(3, textHeightMm + 0.5)
+    }
+  }
+  
+  tempDoc.end()
+  
+  return HEADER_HEIGHT_MM + itemsHeight + FOOTER_HEIGHT_MM
 }
 
 /**
@@ -786,16 +936,12 @@ export async function genTicketMaster(params: GenTicketMasterParams): Promise<Bu
     cp,
     l1,
     l2,
-    l3
+    l3,
+    currencySymbol = '€'
   } = params
 
-  const nitems = countActiveItems(items)
-
-  // Calculate page height
-  const HEADER_HEIGHT_MM = 66
-  const FOOTER_HEIGHT_MM = 30
-  const ITEM_HEIGHT_MM = 3
-  const pageHeightMm = HEADER_HEIGHT_MM + (nitems * ITEM_HEIGHT_MM) + FOOTER_HEIGHT_MM
+  // Calculate actual height based on content
+  const pageHeightMm = calcActualTicketMasterHeight(params)
   const pageHeight = pageHeightMm * MM_TO_PT
 
   const doc = new PDFDocument({
@@ -855,6 +1001,7 @@ export async function genTicketMaster(params: GenTicketMasterParams): Promise<Bu
   // 8. Item rows
   const MASTER_SET_PRICE = 31.05
   let totalItems = 0
+  const itemNameMaxWidth = 40 * MM_TO_PT
 
   for (let index = 0; index < items.length; index++) {
     const item = items[index]
@@ -864,12 +1011,17 @@ export async function genTicketMaster(params: GenTicketMasterParams): Promise<Bu
 
       const itemName = modeloTicket + ' Master Set'
 
-      drawLeft(doc, itemName, FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT)
+      // Draw item name with wrapping support
+      const textHeightPt = drawLeft(doc, itemName, FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT, itemNameMaxWidth)
+      const textHeightMm = textHeightPt / MM_TO_PT
+      
+      // Draw quantity, price, and total on the first line of the item
       drawRight(doc, '1', FONTS.condensed, 8, 50 * MM_TO_PT, y * MM_TO_PT)
-      drawRight(doc, formatPrice(MASTER_SET_PRICE), FONTS.condensed, 8, 62 * MM_TO_PT, y * MM_TO_PT)
-      drawRight(doc, formatPrice(MASTER_SET_PRICE), FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT)
+      drawRight(doc, formatPrice(MASTER_SET_PRICE, currencySymbol), FONTS.condensed, 8, 62 * MM_TO_PT, y * MM_TO_PT)
+      drawRight(doc, formatPrice(MASTER_SET_PRICE, currencySymbol), FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT)
 
-      y += ITEM_HEIGHT_MM
+      // Advance Y position based on actual text height
+      y += Math.max(3, textHeightMm + 0.5)
     }
   }
 
@@ -880,7 +1032,7 @@ export async function genTicketMaster(params: GenTicketMasterParams): Promise<Bu
 
   const masterTotal = totalItems * MASTER_SET_PRICE
   drawLeft(doc, `Total:     ${totalItems}`, FONTS.condensed, 8, 40 * MM_TO_PT, y * MM_TO_PT)
-  drawLeft(doc, formatPrice(masterTotal), FONTS.condensed, 8, 65 * MM_TO_PT, y * MM_TO_PT)
+  drawLeft(doc, formatPrice(masterTotal, currencySymbol), FONTS.condensed, 8, 65 * MM_TO_PT, y * MM_TO_PT)
   y += 4
 
   // 10. Bottom separator

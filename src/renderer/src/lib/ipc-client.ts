@@ -181,7 +181,7 @@ export async function print(
   config: AppConfig,
   quantities: KioskoQuantities,
   profile: string,
-  imageFlags?: { printFondo: boolean; printSello: boolean; useSecondaryPrice?: boolean }
+  imageFlags?: { printFondo: boolean; printSello: boolean; printLogoPng?: boolean; useSecondaryPrice?: boolean }
 ): Promise<SaleOutcome> {
   // Triggers the full sale flow: atomic transaction + PDF generation + print queue enqueue.
   return getAPI().sale.execute(config, quantities, profile, imageFlags)
@@ -240,7 +240,7 @@ export async function executeSale(
   config: AppConfig,
   quantities: KioskoQuantities,
   profile: string,
-  imageFlags?: { printFondo: boolean; printSello: boolean }
+  imageFlags?: { printFondo: boolean; printSello: boolean; printLogoPng?: boolean }
 ): Promise<SaleOutcome> {
   return getAPI().sale.execute(config, quantities, profile, imageFlags)
 }
@@ -281,6 +281,8 @@ export interface EventoRow {
   fecha: string
   localidad: string
   tariff_group_id: number | null
+  selected_tariff_ids: number[]
+  selected_strip_ids: number[]
   created_at: string
   updated_at: string
 }
@@ -296,6 +298,8 @@ export interface EventoInput {
   fecha: string
   localidad: string
   tariff_group_id?: number | null
+  selected_tariff_ids?: number[]
+  selected_strip_ids?: number[]
 }
 
 export async function getEventoYears(): Promise<number[]> {

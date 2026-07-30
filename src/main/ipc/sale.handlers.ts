@@ -78,7 +78,7 @@ export function registerSaleHandlers(): void {
       const typedConfig = config as AppConfig
       const typedQuantities = quantities as KioskoQuantities | DynamicQuantities
       const typedProfile = profile as string
-      const typedImageFlags = imageFlags as { printFondo: boolean; printSello: boolean; useSecondaryPrice?: boolean } | undefined
+      const typedImageFlags = imageFlags as { printFondo: boolean; printSello: boolean; printLogoPng?: boolean; useSecondaryPrice?: boolean } | undefined
 
       // Detect if this is a dynamic tariff sale by checking for dynamic keys (tariff_*_s*)
       const quantityKeys = Object.keys(typedQuantities)
@@ -112,12 +112,21 @@ export function registerSaleHandlers(): void {
                   name: t.name,
                   price: t.local_price,
                   position: t.position
+                })),
+                strips: group.strips.map((s) => ({
+                  id: s.id!,
+                  name: s.name,
+                  price: s.local_price,
+                  position: s.position,
+                  tariff_ids: s.tariff_ids
                 }))
               }
               dynamicTariffCtx = {
                 groupId: group.id,
                 title: group.title,
+                eventName: evento?.nferia, // Add event name for ticket header
                 currency: group.local_currency,
+                currencySymbol: getCurrencySymbol(group.local_currency), // Add currency symbol
                 tariffs: group.tariffs.map((t) => ({
                   id: t.id!,
                   name: t.name,
@@ -125,6 +134,14 @@ export function registerSaleHandlers(): void {
                   price: t.local_price,
                   secondaryPrice: t.secondary_price,
                   position: t.position
+                })),
+                strips: group.strips.map((s) => ({
+                  id: s.id!,
+                  name: s.name,
+                  price: s.local_price,
+                  secondaryPrice: s.secondary_price,
+                  position: s.position,
+                  tariff_ids: s.tariff_ids
                 }))
               }
             }
@@ -185,6 +202,7 @@ export function registerSaleHandlers(): void {
         imageLayerOptions = {
           printFondo: typedImageFlags.printFondo,
           printSello: typedImageFlags.printSello,
+          printLogoPng: typedImageFlags.printLogoPng ?? false,
           fondoImage,
           selloImage,
           useSecondaryPrice: typedImageFlags.useSecondaryPrice ?? false

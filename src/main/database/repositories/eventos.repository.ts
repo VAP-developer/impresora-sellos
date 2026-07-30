@@ -15,6 +15,8 @@ export interface EventoRow {
   fecha: string
   localidad: string
   tariff_group_id: number | null
+  selected_tariff_ids: number[]
+  selected_strip_ids: number[]
   created_at: string
   updated_at: string
 }
@@ -30,6 +32,8 @@ export interface EventoInput {
   fecha: string
   localidad: string
   tariff_group_id?: number | null
+  selected_tariff_ids?: number[]
+  selected_strip_ids?: number[]
 }
 
 /**
@@ -54,12 +58,34 @@ export class EventosRepository {
   }
 
   /**
+   * Parse JSON arrays from database rows for selected IDs.
+   */
+  private parseEventoRow(row: any): EventoRow {
+    return {
+      ...row,
+      selected_tariff_ids: this.parseJsonArray(row.selected_tariff_ids),
+      selected_strip_ids: this.parseJsonArray(row.selected_strip_ids)
+    }
+  }
+
+  private parseJsonArray(jsonStr: string | null): number[] {
+    if (!jsonStr) return []
+    try {
+      const parsed = JSON.parse(jsonStr)
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }
+
+  /**
    * Returns all events for a given year, sorted by name.
    */
   getByYear(year: number): EventoRow[] {
-    return this.db
+    const rows = this.db
       .prepare('SELECT * FROM eventos WHERE year = ? ORDER BY nevento ASC')
-      .all(year) as EventoRow[]
+      .all(year)
+    return rows.map((row) => this.parseEventoRow(row))
   }
 
   /**
@@ -68,17 +94,37 @@ export class EventosRepository {
   getById(id: number): EventoRow | null {
     const row = this.db
       .prepare('SELECT * FROM eventos WHERE id = ?')
-      .get(id) as EventoRow | undefined
-    return row ?? null
+      .get(id)
+    return row ? this.parseEventoRow(row) : null
+  }
+
+  /**
+   * Validates tariff selection constraints.
+   */
+  private validateTariffSelection(input: { selected_tariff_ids?: number[]; selected_strip_ids?: number[] }): void {
+    const tariffCount = input.selected_tariff_ids?.length ?? 0
+    const stripCount = input.selected_strip_ids?.length ?? 0
+
+    if (tariffCount > 6) {
+      throw new Error('Máximo 6 tarifas individuales por evento')
+    }
+    if (stripCount > 2) {
+      throw new Error('Máximo 2 tiras por evento')
+    }
   }
 
   /**
    * Creates a new event. Returns the created event with its ID.
    */
   create(input: EventoInput): EventoRow {
+    this.validateTariffSelection(input)
+
+    const selectedTariffIds = JSON.stringify(input.selected_tariff_ids ?? [])
+    const selectedStripIds = JSON.stringify(input.selected_strip_ids ?? [])
+
     const stmt = this.db.prepare(`
-      INSERT INTO eventos (year, codigo, nevento, nferia, nlugar, motivoi, motivod, fecha, localidad, tariff_group_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO eventos (year, codigo, nevento, nferia, nlugar, motivoi, motivod, fecha, localidad, tariff_group_id, selected_tariff_ids, selected_strip_ids)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     const result = stmt.run(
       input.year,
@@ -90,7 +136,9 @@ export class EventosRepository {
       input.motivod,
       input.fecha,
       input.localidad,
-      input.tariff_group_id ?? null
+      input.tariff_group_id ?? null,
+      selectedTariffIds,
+      selectedStripIds
     )
     return this.getById(Number(result.lastInsertRowid))!
   }
@@ -102,6 +150,8 @@ export class EventosRepository {
     const existing = this.getById(id)
     if (!existing) return null
 
+    this.validateTariffSelection(input)
+
     const updated = {
       year: input.year ?? existing.year,
       codigo: input.codigo ?? existing.codigo,
@@ -112,14 +162,21 @@ export class EventosRepository {
       motivod: input.motivod ?? existing.motivod,
       fecha: input.fecha ?? existing.fecha,
       localidad: input.localidad ?? existing.localidad,
-      tariff_group_id: input.tariff_group_id !== undefined ? input.tariff_group_id : existing.tariff_group_id
+      tariff_group_id: input.tariff_group_id !== undefined ? input.tariff_group_id : existing.tariff_group_id,
+      selected_tariff_ids: input.selected_tariff_ids !== undefined ? input.selected_tariff_ids : existing.selected_tariff_ids,
+      selected_strip_ids: input.selected_strip_ids !== undefined ? input.selected_strip_ids : existing.selected_strip_ids
     }
+
+    const selectedTariffIds = JSON.stringify(updated.selected_tariff_ids)
+    const selectedStripIds = JSON.stringify(updated.selected_strip_ids)
 
     this.db.prepare(`
       UPDATE eventos SET
         year = ?, codigo = ?, nevento = ?, nferia = ?, nlugar = ?,
         motivoi = ?, motivod = ?, fecha = ?, localidad = ?,
         tariff_group_id = ?,
+        selected_tariff_ids = ?,
+        selected_strip_ids = ?,
         updated_at = datetime('now')
       WHERE id = ?
     `).run(
@@ -133,6 +190,8 @@ export class EventosRepository {
       updated.fecha,
       updated.localidad,
       updated.tariff_group_id ?? null,
+      selectedTariffIds,
+      selectedStripIds,
       id
     )
 
@@ -151,8 +210,9 @@ export class EventosRepository {
    * Returns all events (all years).
    */
   getAll(): EventoRow[] {
-    return this.db
+    const rows = this.db
       .prepare('SELECT * FROM eventos ORDER BY year DESC, nevento ASC')
-      .all() as EventoRow[]
+      .all()
+    return rows.map((row) => this.parseEventoRow(row))
   }
 }

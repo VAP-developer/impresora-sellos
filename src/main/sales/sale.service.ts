@@ -46,12 +46,22 @@ export interface DynamicTariff {
   position: number
 }
 
+/** Strip definition from a tariff group */
+export interface DynamicStrip {
+  id: number
+  name: string
+  price: number
+  position: number
+  tariff_ids: number[]
+}
+
 /** Active tariff group context for dynamic sales */
 export interface ActiveTariffGroupContext {
   id: number
   title: string
   currency: string
   tariffs: DynamicTariff[]
+  strips: DynamicStrip[]
 }
 
 /** Result of a successful sale execution */
@@ -161,36 +171,67 @@ function buildDynamicKey(tariffId: number, model: 1 | 2): string {
 
 /**
  * Calculate stamps consumed from roll 1 using dynamic quantities.
- * All dynamic tariffs are simple stamps (1 stamp = 1 unit from roll).
+ * Individual tariffs count as 1 stamp each.
+ * Strips count as the number of tariffs they contain.
  */
-export function calcDynamicSellos1(quantities: DynamicQuantities, tariffs: DynamicTariff[]): number {
+export function calcDynamicSellos1(quantities: DynamicQuantities, tariffs: DynamicTariff[], strips: DynamicStrip[]): number {
   let total = 0
+  
+  // Count individual tariffs
   for (const tariff of tariffs) {
     const key = buildDynamicKey(tariff.id, 1)
     total += quantities[key] ?? 0
   }
+  
+  // Count strips (each strip = number of tariffs it contains)
+  for (const strip of strips) {
+    const key = buildDynamicKey(strip.id, 1)
+    const stripQty = quantities[key] ?? 0
+    total += stripQty * strip.tariff_ids.length
+  }
+  
   return total
 }
 
 /**
  * Calculate stamps consumed from roll 2 using dynamic quantities.
+ * Individual tariffs count as 1 stamp each.
+ * Strips count as the number of tariffs they contain.
  */
-export function calcDynamicSellos2(quantities: DynamicQuantities, tariffs: DynamicTariff[]): number {
+export function calcDynamicSellos2(quantities: DynamicQuantities, tariffs: DynamicTariff[], strips: DynamicStrip[]): number {
   let total = 0
+  
+  // Count individual tariffs
   for (const tariff of tariffs) {
     const key = buildDynamicKey(tariff.id, 2)
     total += quantities[key] ?? 0
   }
+  
+  // Count strips (each strip = number of tariffs it contains)
+  for (const strip of strips) {
+    const key = buildDynamicKey(strip.id, 2)
+    const stripQty = quantities[key] ?? 0
+    total += stripQty * strip.tariff_ids.length
+  }
+  
   return total
 }
 
 /**
  * Calculate tickets consumed for dynamic tariffs.
- * Dynamic tariffs are always simple stamps (no tiras), so only the 2 base tickets.
+ * Individual tariffs don't consume tickets.
+ * Each strip sale consumes 1 ticket, plus the 2 base tickets.
  */
-export function calcDynamicTicketsUsed(_quantities: DynamicQuantities, _tariffs: DynamicTariff[]): number {
-  // Dynamic tariffs don't support tiras, so it's always just the base 2 tickets
-  return 2
+export function calcDynamicTicketsUsed(quantities: DynamicQuantities, _tariffs: DynamicTariff[], strips: DynamicStrip[]): number {
+  let totalStripQty = 0
+  
+  for (const strip of strips) {
+    const key1 = buildDynamicKey(strip.id, 1)
+    const key2 = buildDynamicKey(strip.id, 2)
+    totalStripQty += (quantities[key1] ?? 0) + (quantities[key2] ?? 0)
+  }
+  
+  return totalStripQty + 2
 }
 
 // ─── Order Generation ─────────────────────────────────────────────────────────
@@ -285,6 +326,7 @@ export function generateOrderLines(
 /**
  * Generates OrderLine records from dynamic tariff quantities.
  * Creates one OrderLine per tariff/model combination with quantity > 0.
+ * For strips, creates orders that show the strip name in vendType.
  */
 export function generateDynamicOrderLines(
   config: AppConfig,
@@ -303,8 +345,8 @@ export function generateDynamicOrderLines(
   const lugar = evento?.nlugar ?? sello.lugar ?? ''
   const fecha = evento?.fecha ?? ''
 
-  const sellos1 = calcDynamicSellos1(quantities, tariffGroup.tariffs)
-  const sellos2 = calcDynamicSellos2(quantities, tariffGroup.tariffs)
+  const sellos1 = calcDynamicSellos1(quantities, tariffGroup.tariffs, tariffGroup.strips)
+  const sellos2 = calcDynamicSellos2(quantities, tariffGroup.tariffs, tariffGroup.strips)
 
   const base = {
     event: eventName,
@@ -326,6 +368,7 @@ export function generateDynamicOrderLines(
     documento: ''
   }
 
+  // Process individual tariffs
   for (const tariff of tariffGroup.tariffs) {
     // Model 1
     const qty1 = quantities[buildDynamicKey(tariff.id, 1)] ?? 0
@@ -352,6 +395,39 @@ export function generateDynamicOrderLines(
         quantitySet: 1,
         totalStamps: qty2,
         value: qty2 * tariff.price
+      })
+    }
+  }
+
+  // Process strips
+  for (const strip of tariffGroup.strips) {
+    const stripTariffCount = strip.tariff_ids.length
+    
+    // Model 1
+    const qty1 = quantities[buildDynamicKey(strip.id, 1)] ?? 0
+    if (qty1 > 0) {
+      orders.push({
+        ...base,
+        vendType: strip.name,
+        productName: 'Tira Modelo 1',
+        quantity: qty1,
+        quantitySet: stripTariffCount,
+        totalStamps: qty1 * stripTariffCount,
+        value: qty1 * strip.price
+      })
+    }
+
+    // Model 2
+    const qty2 = quantities[buildDynamicKey(strip.id, 2)] ?? 0
+    if (qty2 > 0) {
+      orders.push({
+        ...base,
+        vendType: strip.name,
+        productName: 'Tira Modelo 2',
+        quantity: qty2,
+        quantitySet: stripTariffCount,
+        totalStamps: qty2 * stripTariffCount,
+        value: qty2 * strip.price
       })
     }
   }
@@ -397,9 +473,9 @@ export function executeSale(
 
   if (isDynamic) {
     const dynQty = quantities as DynamicQuantities
-    sellos1 = calcDynamicSellos1(dynQty, tariffGroupCtx!.tariffs)
-    sellos2 = calcDynamicSellos2(dynQty, tariffGroupCtx!.tariffs)
-    ticketsUsed = calcDynamicTicketsUsed(dynQty, tariffGroupCtx!.tariffs)
+    sellos1 = calcDynamicSellos1(dynQty, tariffGroupCtx!.tariffs, tariffGroupCtx!.strips)
+    sellos2 = calcDynamicSellos2(dynQty, tariffGroupCtx!.tariffs, tariffGroupCtx!.strips)
+    ticketsUsed = calcDynamicTicketsUsed(dynQty, tariffGroupCtx!.tariffs, tariffGroupCtx!.strips)
   } else {
     const legacyQty = quantities as KioskoQuantities
     sellos1 = calcSellos1(legacyQty)

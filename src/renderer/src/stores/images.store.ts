@@ -25,6 +25,8 @@ export interface ImagesState {
   printFondo: boolean
   /** Checkbox: print stamp image — persisted in config */
   printSello: boolean
+  /** Checkbox: print logo PNG on the right of the stamp fields — volatile, default false */
+  printLogoPng: boolean
   /** Loading state */
   loading: boolean
   /** Error message */
@@ -40,6 +42,8 @@ export interface ImagesState {
   setPrintFondo: (value: boolean) => void
   /** Toggle printSello (persisted via IPC) */
   setPrintSello: (value: boolean) => Promise<void>
+  /** Toggle printLogoPng (volatile, not persisted) */
+  setPrintLogoPng: (value: boolean) => void
 }
 
 export const useImagesStore = create<ImagesState>((set, get) => ({
@@ -49,6 +53,7 @@ export const useImagesStore = create<ImagesState>((set, get) => ({
   selloImage: null,
   printFondo: false,
   printSello: false,
+  printLogoPng: false,
   loading: false,
   error: null,
 
@@ -125,5 +130,9 @@ export const useImagesStore = create<ImagesState>((set, get) => ({
     // Persist printSello to config via IPC
     const { activeFair } = get()
     await ipc.updateImagenesConfig({ printSello: value, activeFair })
+  },
+
+  setPrintLogoPng: (value: boolean) => {
+    set({ printLogoPng: value })
   }
 }))

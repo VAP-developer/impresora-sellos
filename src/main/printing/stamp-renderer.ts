@@ -12,11 +12,11 @@
  * Layout (genStampI/genStampD):
  *   - Background image: full 55×25mm
  *   - Nombre Tarifa: FranklinGothic 13pt at (2mm, 50mm from bottom)
- *   - Descripción Tarifa: FranklinGothic 9pt at (2mm, 46mm from bottom)
- *   - Fecha evento (mes+año): FranklinGothic 9pt at (2mm, 40mm from bottom)
- *   - Localidad evento: FranklinGothic 9pt at (2mm, 37mm from bottom)
- *   - Código L1: FranklinGothic 8pt at (2mm, 31mm from bottom)
- *   - Código L2: FranklinGothic 7pt at (2mm, 28mm from bottom)
+ *   - Descripción Tarifa: FranklinGothic 9pt at (2mm, 46.5mm from bottom)
+ *   - Fecha evento (mes+año): FranklinGothic 9pt at (2mm, 43mm from bottom)
+ *   - Localidad evento: FranklinGothic 9pt at (2mm, 39.5mm from bottom)
+ *   - Código L1: FranklinGothic 8pt at (2mm, 36mm from bottom)
+ *   - Código L2: FranklinGothic 7pt at (2mm, 32.5mm from bottom)
  */
 
 import PDFDocument from 'pdfkit'
@@ -194,6 +194,16 @@ export interface StampRenderParams {
    * Same format as backgroundImage (file path or data URI).
    */
   overlayImage?: string | null
+  /**
+   * When true, renders the logo PNG on the right side of the text fields.
+   * The logo is rendered as a small image next to the text content.
+   */
+  printLogoPng?: boolean
+  /**
+   * Logo PNG image to render on the right when printLogoPng is true.
+   * Same format as backgroundImage (file path or data URI).
+   */
+  logoPngImage?: string | null
 }
 
 /** Input parameters for rendering a special strip stamp (tira especial) */
@@ -326,6 +336,36 @@ function drawOverlay(doc: PDFKit.PDFDocument, imageSource: string | null | undef
 }
 
 /**
+ * Draws the logo PNG on the right side of the text fields (approximately at 30mm from left).
+ * The logo is rendered as a smaller image positioned to the right of the text content.
+ * Handles file paths and base64 data URIs.
+ */
+function drawLogoPng(doc: PDFKit.PDFDocument, imageSource: string | null | undefined): void {
+  if (!imageSource) return
+
+  // Position the logo at approximately 30mm from the left, centered vertically
+  // Logo size: approximately 20mm wide × 20mm tall
+  const logoX = 32 * MM_TO_PT  // 32mm from left (to the right of text fields)
+  const logoY = 2.5 * MM_TO_PT  // 2.5mm from top (centered vertically in the 25mm height)
+  const logoWidth = 20 * MM_TO_PT
+  const logoHeight = 20 * MM_TO_PT
+
+  try {
+    if (imageSource.startsWith('data:')) {
+      const base64Data = imageSource.split(',')[1]
+      if (base64Data) {
+        const buffer = Buffer.from(base64Data, 'base64')
+        doc.image(buffer, logoX, logoY, { width: logoWidth, height: logoHeight })
+      }
+    } else if (existsSync(imageSource)) {
+      doc.image(imageSource, logoX, logoY, { width: logoWidth, height: logoHeight })
+    }
+  } catch {
+    // Gracefully ignore image errors (matches legacy behavior)
+  }
+}
+
+/**
  * Resolves the default blank background image path.
  */
 export function getDefaultBackgroundPath(): string | null {
@@ -358,11 +398,11 @@ function collectPdf(doc: PDFKit.PDFDocument): Promise<Buffer> {
  *   1. Background image (full 55×25mm)
  *   2. Overlay image (right half 27.5–55mm × 25mm)
  *   3. Nombre Tarifa: FranklinGothic 13pt at (2mm, 50mm from bottom)
- *   4. Descripción Tarifa: FranklinGothic 9pt at (2mm, 46mm from bottom)
- *   5. Fecha evento (mes+año): FranklinGothic 9pt at (2mm, 40mm from bottom)
- *   6. Localidad evento: FranklinGothic 9pt at (2mm, 37mm from bottom)
- *   7. Código L1: FranklinGothic 8pt at (2mm, 31mm from bottom)
- *   8. Código L2: FranklinGothic 7pt at (2mm, 28mm from bottom)
+ *   4. Descripción Tarifa: FranklinGothic 9pt at (2mm, 46.5mm from bottom)
+ *   5. Fecha evento (mes+año): FranklinGothic 9pt at (2mm, 43mm from bottom)
+ *   6. Localidad evento: FranklinGothic 9pt at (2mm, 39.5mm from bottom)
+ *   7. Código L1: FranklinGothic 8pt at (2mm, 36mm from bottom)
+ *   8. Código L2: FranklinGothic 7pt at (2mm, 32.5mm from bottom)
  */
 export async function renderStamp(params: StampRenderParams): Promise<Buffer> {
   const doc = new PDFDocument({
@@ -378,26 +418,31 @@ export async function renderStamp(params: StampRenderParams): Promise<Buffer> {
 
   registerFonts(doc)
   drawBackground(doc, params.backgroundImage)
-  drawOverlay(doc, params.overlayImage)
+  
+  // If printLogoPng is true, draw the logo on the right side instead of using overlay
+  if (params.printLogoPng && params.logoPngImage) {
+    drawLogoPng(doc, params.logoPngImage)
+  } else {
+    // Otherwise, use the standard overlay behavior
+    drawOverlay(doc, params.overlayImage)
+  }
 
   // Layout vertical (yBottom_mm = distancia desde abajo):
   //   Nombre Tarifa:       50mm desde abajo (arriba del todo)
-  //   Descripción tarifa:  46mm (justo debajo de nombre)
-  //   --- 6mm hueco ---
-  //   Fecha evento:        40mm
-  //   Localidad evento:    37mm (justo debajo de fecha)
-  //   --- 6mm hueco ---
-  //   Código L1:           31mm
-  //   Código L2:           28mm (justo debajo de L1)
+  //   Descripción tarifa:  46.5mm (pegado debajo de nombre)
+  //   Fecha evento:        43mm (pegado debajo de descripción)
+  //   Localidad evento:    39.5mm (pegado debajo de fecha)
+  //   Código L1:           36mm (pegado debajo de localidad)
+  //   Código L2:           32.5mm (pegado debajo de L1)
   drawTextLeft(doc, params.tarifa, FONTS.regular, 13, 2, 50)
-  drawTextLeft(doc, params.tarifaDescripcion ?? '', FONTS.regular, 9, 2, 46)
-  drawTextLeft(doc, formatFechaMonthYear(params.fecha), FONTS.regular, 9, 2, 40)
-  drawTextLeft(doc, params.evento, FONTS.regular, 9, 2, 37)
+  drawTextLeft(doc, params.tarifaDescripcion ?? '', FONTS.regular, 9, 2, 46.5)
+  drawTextLeft(doc, formatFechaMonthYear(params.fecha), FONTS.regular, 9, 2, 43)
+  drawTextLeft(doc, params.evento, FONTS.regular, 9, 2, 39.5)
 
   // Código en 2 líneas: línea 1 = "P26-4ES", línea 2 = "0001-001"
   const { line1, line2 } = formatCodigoLines(params.codigo)
-  drawTextLeft(doc, line1, FONTS.regular, 8, 2, 31)
-  drawTextLeft(doc, line2, FONTS.regular, 7, 2, 28)
+  drawTextLeft(doc, line1, FONTS.regular, 8, 2, 36)
+  drawTextLeft(doc, line2, FONTS.regular, 7, 2, 32.5)
 
   // Como el "lienzo" ahora está rotado, para que el texto quede centrado
   // y vertical hay que pensar las coordenadas como si el alto y ancho
@@ -553,18 +598,25 @@ export async function renderStampMultiPage(stamps: StampRenderParams[]): Promise
     }
 
     drawBackground(doc, stamp.backgroundImage)
-    drawOverlay(doc, stamp.overlayImage)
+    
+    // If printLogoPng is true, draw the logo on the right side instead of using overlay
+    if (stamp.printLogoPng && stamp.logoPngImage) {
+      drawLogoPng(doc, stamp.logoPngImage)
+    } else {
+      // Otherwise, use the standard overlay behavior
+      drawOverlay(doc, stamp.overlayImage)
+    }
 
     // Layout vertical:
     //   Nombre Tarifa → Descripción → Fecha (mes+año) → Localidad → Código L1 → Código L2
     drawTextLeft(doc, stamp.tarifa, FONTS.regular, 13, 2, 50)
-    drawTextLeft(doc, stamp.tarifaDescripcion ?? '', FONTS.regular, 9, 2, 46)
-    drawTextLeft(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 2, 40)
-    drawTextLeft(doc, stamp.evento, FONTS.regular, 9, 2, 37)
+    drawTextLeft(doc, stamp.tarifaDescripcion ?? '', FONTS.regular, 9, 2, 46.5)
+    drawTextLeft(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 2, 43)
+    drawTextLeft(doc, stamp.evento, FONTS.regular, 9, 2, 39.5)
 
     const { line1, line2 } = formatCodigoLines(stamp.codigo)
-    drawTextLeft(doc, line1, FONTS.regular, 8, 2, 31)
-    drawTextLeft(doc, line2, FONTS.regular, 7, 2, 28)
+    drawTextLeft(doc, line1, FONTS.regular, 8, 2, 36)
+    drawTextLeft(doc, line2, FONTS.regular, 7, 2, 32.5)
   })
 
   doc.end()

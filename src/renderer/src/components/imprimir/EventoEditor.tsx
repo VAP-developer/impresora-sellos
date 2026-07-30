@@ -43,7 +43,9 @@ const EMPTY_FORM: EventoInput = {
   motivod: '',
   fecha: '',
   localidad: '',
-  tariff_group_id: null
+  tariff_group_id: null,
+  selected_tariff_ids: [],
+  selected_strip_ids: []
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -69,7 +71,13 @@ export default function EventoEditor({
   // Tariff group selector
   const { groups: tariffGroups, loadAll: loadAllTariffGroups } = useTariffGroupsStore()
   const [selectedTariffGroupId, setSelectedTariffGroupId] = useState<number | null>(null)
+  const [selectedTariffGroup, setSelectedTariffGroup] = useState<TariffGroup | null>(null)
   const [tariffGroupError, setTariffGroupError] = useState<string | null>(null)
+
+  // Tariff selection state
+  const [selectedTariffIds, setSelectedTariffIds] = useState<number[]>([])
+  const [selectedStripIds, setSelectedStripIds] = useState<number[]>([])
+  const [tariffSelectionError, setTariffSelectionError] = useState<string | null>(null)
 
   // Image previews
   const [motivoiUrl, setMotivoiUrl] = useState<string | null>(null)
@@ -97,6 +105,16 @@ export default function EventoEditor({
       loadAllTariffGroups()
     }
   }, [expanded, loadAllTariffGroups])
+
+  // Load selected tariff group details when tariff group ID changes
+  useEffect(() => {
+    if (!selectedTariffGroupId) {
+      setSelectedTariffGroup(null)
+      return
+    }
+    const group = tariffGroups.find((g) => g.id === selectedTariffGroupId)
+    setSelectedTariffGroup(group ?? null)
+  }, [selectedTariffGroupId, tariffGroups])
 
   useEffect(() => {
     if (expanded) {
@@ -186,8 +204,11 @@ export default function EventoEditor({
     setEditingId(null)
     setForm({ ...EMPTY_FORM, year: selectedYear })
     setSelectedTariffGroupId(null)
+    setSelectedTariffIds([])
+    setSelectedStripIds([])
     setMessage(null)
     setTariffGroupError(null)
+    setTariffSelectionError(null)
   }
 
   const handleSelectEvento = (evento: EventoRow): void => {
@@ -203,11 +224,16 @@ export default function EventoEditor({
       motivod: evento.motivod,
       fecha: evento.fecha,
       localidad: evento.localidad,
-      tariff_group_id: evento.tariff_group_id
+      tariff_group_id: evento.tariff_group_id,
+      selected_tariff_ids: evento.selected_tariff_ids ?? [],
+      selected_strip_ids: evento.selected_strip_ids ?? []
     })
     setSelectedTariffGroupId(evento.tariff_group_id ?? null)
+    setSelectedTariffIds(evento.selected_tariff_ids ?? [])
+    setSelectedStripIds(evento.selected_strip_ids ?? [])
     setMessage(null)
     setTariffGroupError(null)
+    setTariffSelectionError(null)
   }
 
   const handleCancel = (): void => {
@@ -215,6 +241,7 @@ export default function EventoEditor({
     setEditingId(null)
     setMessage(null)
     setTariffGroupError(null)
+    setTariffSelectionError(null)
   }
 
   const handleFieldChange = (field: keyof EventoInput, value: string | number): void => {
@@ -225,10 +252,46 @@ export default function EventoEditor({
     const value = e.target.value
     if (value === '') {
       setSelectedTariffGroupId(null)
+      setSelectedTariffIds([])
+      setSelectedStripIds([])
     } else {
       setSelectedTariffGroupId(parseInt(value, 10))
+      // Reset selections when changing group
+      setSelectedTariffIds([])
+      setSelectedStripIds([])
     }
     setTariffGroupError(null)
+    setTariffSelectionError(null)
+  }
+
+  const handleTariffToggle = (tariffId: number): void => {
+    setSelectedTariffIds((prev) => {
+      if (prev.includes(tariffId)) {
+        return prev.filter((id) => id !== tariffId)
+      } else {
+        if (prev.length >= 6) {
+          setTariffSelectionError('Máximo 6 tarifas individuales')
+          return prev
+        }
+        setTariffSelectionError(null)
+        return [...prev, tariffId]
+      }
+    })
+  }
+
+  const handleStripToggle = (stripId: number): void => {
+    setSelectedStripIds((prev) => {
+      if (prev.includes(stripId)) {
+        return prev.filter((id) => id !== stripId)
+      } else {
+        if (prev.length >= 2) {
+          setTariffSelectionError('Máximo 2 tiras')
+          return prev
+        }
+        setTariffSelectionError(null)
+        return [...prev, stripId]
+      }
+    })
   }
 
   const formatTariffGroupLabel = (group: TariffGroup): string => {
@@ -245,11 +308,14 @@ export default function EventoEditor({
     setSaving(true)
     setMessage(null)
     setTariffGroupError(null)
+    setTariffSelectionError(null)
 
     try {
       const formWithGroup: EventoInput = {
         ...form,
-        tariff_group_id: selectedTariffGroupId
+        tariff_group_id: selectedTariffGroupId,
+        selected_tariff_ids: selectedTariffIds,
+        selected_strip_ids: selectedStripIds
       }
 
       if (mode === 'creating') {
@@ -427,165 +493,264 @@ export default function EventoEditor({
                 {mode === 'creating' ? 'Crear nuevo evento' : 'Editar evento'}
               </h4>
 
-              <div className="grid gap-3 max-w-[500px]">
-                {/* Codigo */}
-                <div>
-                  <label htmlFor="ev-codigo" className="block text-sm text-gray-600">
-                    Código
-                  </label>
-                  <input
-                    id="ev-codigo"
-                    type="text"
-                    value={form.codigo}
-                    onChange={(e) => handleFieldChange('codigo', e.target.value)}
-                    className="w-full border border-gray-300 rounded p-2"
-                    placeholder="Ej: FER-MAD-2026"
-                  />
+              <div className="flex gap-6">
+                {/* Left column: Event fields */}
+                <div className="flex-1 min-w-[400px] max-w-[500px]">
+                  <div className="grid gap-3">
+                    {/* Codigo */}
+                    <div>
+                      <label htmlFor="ev-codigo" className="block text-sm text-gray-600">
+                        Código
+                      </label>
+                      <input
+                        id="ev-codigo"
+                        type="text"
+                        value={form.codigo}
+                        onChange={(e) => handleFieldChange('codigo', e.target.value)}
+                        className="w-full border border-gray-300 rounded p-2"
+                        placeholder="Ej: FER-MAD-2026"
+                      />
+                    </div>
+
+                    {/* Nombre evento */}
+                    <div>
+                      <label htmlFor="ev-nevento" className="block text-sm text-gray-600">
+                        Nombre del evento
+                      </label>
+                      <input
+                        id="ev-nevento"
+                        type="text"
+                        value={form.nevento}
+                        onChange={(e) => handleFieldChange('nevento', e.target.value)}
+                        className="w-full border border-gray-300 rounded p-2 text-red-600 font-bold"
+                        placeholder="Ej: Feria Madrid 2026"
+                      />
+                    </div>
+
+                    {/* Feria ticket */}
+                    <div>
+                      <label htmlFor="ev-nferia" className="block text-sm text-gray-600">
+                        Feria (para ticket)
+                      </label>
+                      <input
+                        id="ev-nferia"
+                        type="text"
+                        value={form.nferia}
+                        onChange={(e) => handleFieldChange('nferia', e.target.value)}
+                        className="w-full border border-gray-300 rounded p-2"
+                        placeholder="Ej: L Feria Nacional del Sello"
+                      />
+                    </div>
+
+                    {/* Lugar ticket */}
+                    <div>
+                      <label htmlFor="ev-nlugar" className="block text-sm text-gray-600">
+                        Lugar (para ticket)
+                      </label>
+                      <input
+                        id="ev-nlugar"
+                        type="text"
+                        value={form.nlugar}
+                        onChange={(e) => handleFieldChange('nlugar', e.target.value)}
+                        className="w-full border border-gray-300 rounded p-2"
+                        placeholder="Ej: Plaza Mayor - Madrid"
+                      />
+                    </div>
+
+                    {/* Fecha etiqueta */}
+                    <div>
+                      <label htmlFor="ev-fecha" className="block text-sm text-gray-600">
+                        Fechas (para etiqueta)
+                      </label>
+                      <input
+                        id="ev-fecha"
+                        type="text"
+                        value={form.fecha}
+                        onChange={(e) => handleFieldChange('fecha', e.target.value)}
+                        className="w-full border border-gray-300 rounded p-2"
+                        placeholder="Ej: 21-24 abril 2026"
+                      />
+                    </div>
+
+                    {/* Localidad etiqueta */}
+                    <div>
+                      <label htmlFor="ev-localidad" className="block text-sm text-gray-600">
+                        Localidad (para etiqueta)
+                      </label>
+                      <input
+                        id="ev-localidad"
+                        type="text"
+                        value={form.localidad}
+                        onChange={(e) => handleFieldChange('localidad', e.target.value)}
+                        className="w-full border border-gray-300 rounded p-2"
+                        placeholder="Ej: Madrid"
+                      />
+                    </div>
+
+                    {/* Tariff group selector */}
+                    <div>
+                      <label htmlFor="ev-tariff-group" className="block text-sm text-gray-600">
+                        Grupo de tarifas <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        id="ev-tariff-group"
+                        value={selectedTariffGroupId ?? ''}
+                        onChange={handleTariffGroupChange}
+                        className={`w-full border rounded p-2 ${
+                          tariffGroupError ? 'border-red-500' : 'border-gray-300'
+                        }`}
+                        aria-label="Seleccionar grupo de tarifas"
+                        aria-required="true"
+                      >
+                        <option value="">-- Seleccionar grupo de tarifas --</option>
+                        {tariffGroups.map((group) => (
+                          <option key={group.id} value={group.id}>
+                            {formatTariffGroupLabel(group)}
+                          </option>
+                        ))}
+                      </select>
+                      {tariffGroupError && (
+                        <p className="text-red-600 text-xs mt-1">{tariffGroupError}</p>
+                      )}
+                    </div>
+
+                    {/* Motif images */}
+                    <div className="flex gap-4 flex-wrap">
+                      <div className="flex-1 min-w-[150px]">
+                        <label htmlFor="ev-motivoi" className="block text-sm text-gray-600">
+                          Motivo izquierda
+                        </label>
+                        <input
+                          id="ev-motivoi"
+                          type="text"
+                          value={form.motivoi}
+                          onChange={(e) => handleFieldChange('motivoi', e.target.value)}
+                          className="w-full border border-gray-300 rounded p-2 mb-2"
+                        />
+                        <div className="w-full h-[100px] border border-gray-200 rounded overflow-hidden bg-white">
+                          {motivoiUrl ? (
+                            <img src={motivoiUrl} alt="Motivo izquierda" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">Sin imagen</div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex-1 min-w-[150px]">
+                        <label htmlFor="ev-motivod" className="block text-sm text-gray-600">
+                          Motivo derecha
+                        </label>
+                        <input
+                          id="ev-motivod"
+                          type="text"
+                          value={form.motivod}
+                          onChange={(e) => handleFieldChange('motivod', e.target.value)}
+                          className="w-full border border-gray-300 rounded p-2 mb-2"
+                        />
+                        <div className="w-full h-[100px] border border-gray-200 rounded overflow-hidden bg-white">
+                          {motivodUrl ? (
+                            <img src={motivodUrl} alt="Motivo derecha" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">Sin imagen</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Nombre evento */}
-                <div>
-                  <label htmlFor="ev-nevento" className="block text-sm text-gray-600">
-                    Nombre del evento
-                  </label>
-                  <input
-                    id="ev-nevento"
-                    type="text"
-                    value={form.nevento}
-                    onChange={(e) => handleFieldChange('nevento', e.target.value)}
-                    className="w-full border border-gray-300 rounded p-2 text-red-600 font-bold"
-                    placeholder="Ej: Feria Madrid 2026"
-                  />
-                </div>
-
-                {/* Feria ticket */}
-                <div>
-                  <label htmlFor="ev-nferia" className="block text-sm text-gray-600">
-                    Feria (para ticket)
-                  </label>
-                  <input
-                    id="ev-nferia"
-                    type="text"
-                    value={form.nferia}
-                    onChange={(e) => handleFieldChange('nferia', e.target.value)}
-                    className="w-full border border-gray-300 rounded p-2"
-                    placeholder="Ej: L Feria Nacional del Sello"
-                  />
-                </div>
-
-                {/* Lugar ticket */}
-                <div>
-                  <label htmlFor="ev-nlugar" className="block text-sm text-gray-600">
-                    Lugar (para ticket)
-                  </label>
-                  <input
-                    id="ev-nlugar"
-                    type="text"
-                    value={form.nlugar}
-                    onChange={(e) => handleFieldChange('nlugar', e.target.value)}
-                    className="w-full border border-gray-300 rounded p-2"
-                    placeholder="Ej: Plaza Mayor - Madrid"
-                  />
-                </div>
-
-                {/* Fecha etiqueta */}
-                <div>
-                  <label htmlFor="ev-fecha" className="block text-sm text-gray-600">
-                    Fechas (para etiqueta)
-                  </label>
-                  <input
-                    id="ev-fecha"
-                    type="text"
-                    value={form.fecha}
-                    onChange={(e) => handleFieldChange('fecha', e.target.value)}
-                    className="w-full border border-gray-300 rounded p-2"
-                    placeholder="Ej: 21-24 abril 2026"
-                  />
-                </div>
-
-                {/* Localidad etiqueta */}
-                <div>
-                  <label htmlFor="ev-localidad" className="block text-sm text-gray-600">
-                    Localidad (para etiqueta)
-                  </label>
-                  <input
-                    id="ev-localidad"
-                    type="text"
-                    value={form.localidad}
-                    onChange={(e) => handleFieldChange('localidad', e.target.value)}
-                    className="w-full border border-gray-300 rounded p-2"
-                    placeholder="Ej: Madrid"
-                  />
-                </div>
-
-                {/* Tariff group selector */}
-                <div>
-                  <label htmlFor="ev-tariff-group" className="block text-sm text-gray-600">
-                    Grupo de tarifas <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    id="ev-tariff-group"
-                    value={selectedTariffGroupId ?? ''}
-                    onChange={handleTariffGroupChange}
-                    className={`w-full border rounded p-2 ${
-                      tariffGroupError ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                    aria-label="Seleccionar grupo de tarifas"
-                    aria-required="true"
-                  >
-                    <option value="">-- Seleccionar grupo de tarifas --</option>
-                    {tariffGroups.map((group) => (
-                      <option key={group.id} value={group.id}>
-                        {formatTariffGroupLabel(group)}
-                      </option>
-                    ))}
-                  </select>
-                  {tariffGroupError && (
-                    <p className="text-red-600 text-xs mt-1">{tariffGroupError}</p>
+                {/* Right column: Tariff selection */}
+                <div className="flex-1 min-w-[300px] border-l border-gray-300 pl-6">
+                  <h5 className="font-bold text-gray-700 mb-3">Selección de Tarifas</h5>
+                  
+                  {!selectedTariffGroup && (
+                    <p className="text-gray-400 italic text-sm">
+                      Selecciona un grupo de tarifas para ver las opciones disponibles
+                    </p>
                   )}
-                </div>
 
-                {/* Motif images */}
-                <div className="flex gap-4 flex-wrap">
-                  <div className="flex-1 min-w-[200px]">
-                    <label htmlFor="ev-motivoi" className="block text-sm text-gray-600">
-                      Motivo izquierda
-                    </label>
-                    <input
-                      id="ev-motivoi"
-                      type="text"
-                      value={form.motivoi}
-                      onChange={(e) => handleFieldChange('motivoi', e.target.value)}
-                      className="w-full border border-gray-300 rounded p-2 mb-2"
-                    />
-                    <div className="w-full h-[100px] border border-gray-200 rounded overflow-hidden bg-white">
-                      {motivoiUrl ? (
-                        <img src={motivoiUrl} alt="Motivo izquierda" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">Sin imagen</div>
+                  {selectedTariffGroup && (
+                    <>
+                      {tariffSelectionError && (
+                        <p className="text-red-600 text-xs mb-2">{tariffSelectionError}</p>
                       )}
-                    </div>
-                  </div>
+                      
+                      {/* Individual tariffs */}
+                      <div className="mb-4">
+                        <h6 className="font-semibold text-sm text-gray-700 mb-2">
+                          Tarifas Individuales (máximo 6)
+                        </h6>
+                        <div className="space-y-1 max-h-[300px] overflow-y-auto">
+                          {selectedTariffGroup.tariffs.map((tariff) => (
+                            <label
+                              key={tariff.id}
+                              className={`flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-blue-50 ${
+                                selectedTariffIds.includes(tariff.id!) ? 'bg-blue-100' : ''
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedTariffIds.includes(tariff.id!)}
+                                onChange={() => handleTariffToggle(tariff.id!)}
+                                className="cursor-pointer"
+                              />
+                              <div className="flex-1">
+                                <span className="font-medium text-sm">{tariff.name}</span>
+                                {tariff.description && (
+                                  <span className="text-xs text-gray-500 ml-2">
+                                    ({tariff.description})
+                                  </span>
+                                )}
+                                <span className="block text-xs text-gray-600">
+                                  {tariff.local_price} {selectedTariffGroup.local_currency}
+                                  {tariff.secondary_price > 0 && ` / ${tariff.secondary_price} ${selectedTariffGroup.complementary_currency}`}
+                                </span>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Seleccionadas: {selectedTariffIds.length} de 6
+                        </p>
+                      </div>
 
-                  <div className="flex-1 min-w-[200px]">
-                    <label htmlFor="ev-motivod" className="block text-sm text-gray-600">
-                      Motivo derecha
-                    </label>
-                    <input
-                      id="ev-motivod"
-                      type="text"
-                      value={form.motivod}
-                      onChange={(e) => handleFieldChange('motivod', e.target.value)}
-                      className="w-full border border-gray-300 rounded p-2 mb-2"
-                    />
-                    <div className="w-full h-[100px] border border-gray-200 rounded overflow-hidden bg-white">
-                      {motivodUrl ? (
-                        <img src={motivodUrl} alt="Motivo derecha" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">Sin imagen</div>
+                      {/* Strips */}
+                      {selectedTariffGroup.strips.length > 0 && (
+                        <div>
+                          <h6 className="font-semibold text-sm text-gray-700 mb-2">
+                            Tiras (máximo 2)
+                          </h6>
+                          <div className="space-y-1">
+                            {selectedTariffGroup.strips.map((strip) => (
+                              <label
+                                key={strip.id}
+                                className={`flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-green-50 ${
+                                  selectedStripIds.includes(strip.id!) ? 'bg-green-100' : ''
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selectedStripIds.includes(strip.id!)}
+                                  onChange={() => handleStripToggle(strip.id!)}
+                                  className="cursor-pointer"
+                                />
+                                <div className="flex-1">
+                                  <span className="font-medium text-sm">{strip.name}</span>
+                                  <span className="block text-xs text-gray-600">
+                                    {strip.local_price} {selectedTariffGroup.local_currency}
+                                    {strip.secondary_price > 0 && ` / ${strip.secondary_price} ${selectedTariffGroup.complementary_currency}`}
+                                  </span>
+                                </div>
+                              </label>
+                            ))}
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Seleccionadas: {selectedStripIds.length} de 2
+                          </p>
+                        </div>
                       )}
-                    </div>
-                  </div>
+                    </>
+                  )}
                 </div>
               </div>
 
