@@ -211,7 +211,10 @@ describe('database/migrator', () => {
       const realMigrationsPath = join(__dirname, '..', 'migrations')
       const result = runMigrations(db, realMigrationsPath)
 
-      expect(result).toEqual([
+      // Compare against the migrations actually on disk so adding a new
+      // migration file doesn't require touching this assertion.
+      expect(result).toEqual(discoverMigrationFiles(realMigrationsPath))
+      expect(result.slice(0, 7)).toEqual([
         '001_initial.sql',
         '002_printer_assignments.sql',
         '003_image_sync.sql',

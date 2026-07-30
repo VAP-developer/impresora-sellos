@@ -155,7 +155,8 @@ describe('App Startup Integration: DB creation + migrations + config seeding', (
 
     // The migration should only be recorded once per migration file
     const history = getMigrationHistory(db)
-    expect(history).toHaveLength(7)
+    const names = history.map((h) => h.name)
+    expect(new Set(names).size).toBe(history.length)
     expect(history[0].name).toBe('001_initial.sql')
     expect(history[1].name).toBe('002_printer_assignments.sql')
     expect(history[2].name).toBe('003_image_sync.sql')

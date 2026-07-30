@@ -2125,7 +2125,7 @@ class TariffGroupsRepository {
    */
   _attachTariffs(groups) {
     const getStripTariffIds = this.db.prepare(
-      "SELECT tariff_id FROM strip_tariffs WHERE strip_id = ?"
+      "SELECT tariff_id, quantity FROM strip_tariffs WHERE strip_id = ? ORDER BY id ASC"
     );
     return groups.map((group) => {
       const rows = this.db.prepare(
@@ -2136,6 +2136,13 @@ class TariffGroupsRepository {
       for (const row of rows) {
         if (row.type === "strip") {
           const junctionRows = getStripTariffIds.all(row.id);
+          const tariffIds = [];
+          for (const junction of junctionRows) {
+            const times = Math.max(1, junction.quantity ?? 1);
+            for (let i = 0; i < times; i++) {
+              tariffIds.push(junction.tariff_id);
+            }
+          }
           strips.push({
             id: row.id,
             name: row.name,
@@ -2143,7 +2150,7 @@ class TariffGroupsRepository {
             secondary_price: row.secondary_price,
             position: row.position,
             type: "strip",
-            tariff_ids: junctionRows.map((r) => r.tariff_id)
+            tariff_ids: tariffIds
           });
         } else {
           tariffs.push({
@@ -2169,6 +2176,19 @@ class TariffGroupsRepository {
         updated_at: group.updated_at
       };
     });
+  }
+  /**
+   * Collapses a strip's tariff_ids array (which may repeat the same tariff) into
+   * [tariffId, quantity] pairs, preserving first-appearance order.
+   *
+   * e.g. [1, 1, 1, 1] → [[1, 4]] and [1, 2, 1] → [[1, 2], [2, 1]]
+   */
+  countTariffOccurrences(tariffIds) {
+    const counts = /* @__PURE__ */ new Map();
+    for (const tariffId of tariffIds) {
+      counts.set(tariffId, (counts.get(tariffId) ?? 0) + 1);
+    }
+    return [...counts.entries()];
   }
   /**
    * Returns all distinct years that have tariff groups, sorted descending.
@@ -2220,8 +2240,8 @@ class TariffGroupsRepository {
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
     const insertStripTariff = this.db.prepare(`
-      INSERT INTO strip_tariffs (strip_id, tariff_id)
-      VALUES (?, ?)
+      INSERT INTO strip_tariffs (strip_id, tariff_id, quantity)
+      VALUES (?, ?, ?)
     `);
     const createTransaction = this.db.transaction(() => {
       let result;
@@ -2265,11 +2285,10 @@ class TariffGroupsRepository {
           "strip"
         );
         const stripId = Number(stripResult.lastInsertRowid);
-        const uniqueTariffPositions = [...new Set(strip.tariff_ids)];
-        for (const tariffPosition of uniqueTariffPositions) {
+        for (const [tariffPosition, quantity] of this.countTariffOccurrences(strip.tariff_ids)) {
           const newTariffId = positionToNewId.get(tariffPosition);
           if (newTariffId != null) {
-            insertStripTariff.run(stripId, newTariffId);
+            insertStripTariff.run(stripId, newTariffId, quantity);
           }
         }
       }
@@ -2312,8 +2331,8 @@ class TariffGroupsRepository {
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
     const insertStripTariff = this.db.prepare(`
-      INSERT INTO strip_tariffs (strip_id, tariff_id)
-      VALUES (?, ?)
+      INSERT INTO strip_tariffs (strip_id, tariff_id, quantity)
+      VALUES (?, ?, ?)
     `);
     const updateTransaction = this.db.transaction(() => {
       const year = input.year ?? existing.year;
@@ -2351,11 +2370,10 @@ class TariffGroupsRepository {
           "strip"
         );
         const stripId = Number(stripResult.lastInsertRowid);
-        const uniqueTariffPositions = [...new Set(strip.tariff_ids)];
-        for (const tariffPosition of uniqueTariffPositions) {
+        for (const [tariffPosition, quantity] of this.countTariffOccurrences(strip.tariff_ids)) {
           const newTariffId = positionToNewId.get(tariffPosition);
           if (newTariffId != null) {
-            insertStripTariff.run(stripId, newTariffId);
+            insertStripTariff.run(stripId, newTariffId, quantity);
           }
         }
       }
@@ -2388,6 +2406,8 @@ class TariffGroupsRepository {
     return rows.map((r) => r.id);
   }
 }
+const MAX_EVENT_TARIFFS = 8;
+const MAX_EVENT_STRIPS = 4;
 class EventosRepository {
   db;
   constructor(db2) {
@@ -2439,11 +2459,11 @@ class EventosRepository {
   validateTariffSelection(input) {
     const tariffCount = input.selected_tariff_ids?.length ?? 0;
     const stripCount = input.selected_strip_ids?.length ?? 0;
-    if (tariffCount > 6) {
-      throw new Error("Máximo 6 tarifas individuales por evento");
+    if (tariffCount > MAX_EVENT_TARIFFS) {
+      throw new Error(`Máximo ${MAX_EVENT_TARIFFS} tarifas individuales por evento`);
     }
-    if (stripCount > 2) {
-      throw new Error("Máximo 2 tiras por evento");
+    if (stripCount > MAX_EVENT_STRIPS) {
+      throw new Error(`Máximo ${MAX_EVENT_STRIPS} tiras por evento`);
     }
   }
   /**
@@ -2917,6 +2937,12 @@ const FONTS = {
   bold: "FranklinGothicBold",
   condensed: "FranklinGothicCondensed"
 };
+const TEXT_LEFT_MM = 2;
+const TEXT_RIGHT_MARGIN_MM = 2;
+const FECHA_LOCALIDAD_FONT_SIZE = 9;
+const FECHA_Y_MM = 43;
+const LOCALIDAD_Y_MM = 39.5;
+const LOGO_TEXT_GAP_MM = 5;
 function getFontsPath() {
   if (utils.is.dev) {
     return path.join(__dirname, "../../resources/fonts");
@@ -3018,21 +3044,37 @@ function drawOverlay(doc, imageSource) {
   } catch {
   }
 }
-function drawLogoPng(doc, imageSource) {
+function computeLogoBox(doc, fecha, evento) {
+  doc.font(FONTS.regular).fontSize(FECHA_LOCALIDAD_FONT_SIZE);
+  const fechaWidth = doc.widthOfString(formatFechaMonthYear(fecha));
+  const eventoWidth = doc.widthOfString(evento);
+  const textBlockWidth = Math.max(fechaWidth, eventoWidth);
+  const x = TEXT_LEFT_MM * MM_TO_PT$1 + textBlockWidth + LOGO_TEXT_GAP_MM * MM_TO_PT$1;
+  const top = bottomToTop(FECHA_Y_MM, FECHA_LOCALIDAD_FONT_SIZE);
+  const bottom = bottomToTop(LOCALIDAD_Y_MM, FECHA_LOCALIDAD_FONT_SIZE) + FECHA_LOCALIDAD_FONT_SIZE;
+  const height = bottom - top;
+  const width = STAMP_WIDTH - TEXT_RIGHT_MARGIN_MM * MM_TO_PT$1 - x;
+  if (width <= 0 || height <= 0) return null;
+  return { x, y: top, width, height };
+}
+function drawLogoPng(doc, imageSource, fecha, evento) {
   if (!imageSource) return;
-  const logoX = 32 * MM_TO_PT$1;
-  const logoY = 2.5 * MM_TO_PT$1;
-  const logoWidth = 20 * MM_TO_PT$1;
-  const logoHeight = 20 * MM_TO_PT$1;
+  const box = computeLogoBox(doc, fecha, evento);
+  if (!box) return;
+  const options = {
+    fit: [box.width, box.height],
+    align: "left",
+    valign: "center"
+  };
   try {
     if (imageSource.startsWith("data:")) {
       const base64Data = imageSource.split(",")[1];
       if (base64Data) {
         const buffer = Buffer.from(base64Data, "base64");
-        doc.image(buffer, logoX, logoY, { width: logoWidth, height: logoHeight });
+        doc.image(buffer, box.x, box.y, options);
       }
     } else if (fs.existsSync(imageSource)) {
-      doc.image(imageSource, logoX, logoY, { width: logoWidth, height: logoHeight });
+      doc.image(imageSource, box.x, box.y, options);
     }
   } catch {
   }
@@ -3695,6 +3737,35 @@ function getModelBackground(modelName, imagesRepo, syncRepo) {
   }
   return null;
 }
+function getModelLogoPng(modelName, imagesRepo, syncRepo, fallbackLogo) {
+  const isPng = (record) => {
+    if (!record) return false;
+    if (record.type) return record.type.toLowerCase() === "image/png";
+    return record.data.startsWith("data:image/png");
+  };
+  if (modelName && syncRepo) {
+    try {
+      const fairs = syncRepo.getFairList();
+      const matchedFair = fairs.find(
+        (f) => f.fairName.toLowerCase() === modelName.toLowerCase()
+      );
+      if (matchedFair) {
+        const selloName = buildImageName(matchedFair.year, matchedFair.fairName, "sello");
+        const record = imagesRepo.getFullByName(selloName);
+        if (isPng(record)) return record.data;
+      }
+    } catch {
+    }
+  }
+  if (modelName) {
+    try {
+      const direct = imagesRepo.getFullByName(modelName);
+      if (isPng(direct)) return direct.data;
+    } catch {
+    }
+  }
+  return fallbackLogo;
+}
 function buildTicketData(quantities, precios) {
   const tarifaTA = precios.tarifaTA ?? precios.tarifaA * 4;
   const tarifaT4 = precios.tarifaT4 ?? precios.tarifaA + precios.tarifaA2 + precios.tarifaB + precios.tarifaC;
@@ -3779,7 +3850,8 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
   let bg2 = null;
   let overlay1 = null;
   let overlay2 = null;
-  let logoPng = null;
+  let logoPng1 = null;
+  let logoPng2 = null;
   let printLogoPng = false;
   if (imageLayerOptions) {
     const layerResult = resolveImageLayers(imageLayerOptions);
@@ -3790,7 +3862,13 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
     notifications.push(...layerResult.notifications);
     printLogoPng = imageLayerOptions.printLogoPng ?? false;
     if (printLogoPng) {
-      logoPng = imageLayerOptions.selloImage;
+      let syncRepo;
+      try {
+        syncRepo = new ImageSyncRepository();
+      } catch {
+      }
+      logoPng1 = getModelLogoPng(model1Name, repo, syncRepo, imageLayerOptions.selloImage);
+      logoPng2 = getModelLogoPng(model2Name, repo, syncRepo, imageLayerOptions.selloImage);
     }
   } else {
     let syncRepo;
@@ -3821,7 +3899,7 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
             backgroundImage: background,
             overlayImage: overlay,
             printLogoPng,
-            logoPngImage: logoPng
+            logoPngImage: logoPng1
           });
           productoCounter++;
         }
@@ -3852,7 +3930,7 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
             backgroundImage: background,
             overlayImage: overlay,
             printLogoPng,
-            logoPngImage: logoPng
+            logoPngImage: logoPng2
           });
           productoCounter++;
         }
@@ -3875,6 +3953,7 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
       if (qty <= 0) continue;
       const background = usesBlankBackground ? null : tariff.model === 1 ? bg1 : bg2;
       const overlay = usesBlankBackground ? null : tariff.model === 1 ? overlay1 : overlay2;
+      const logo = tariff.model === 1 ? logoPng1 : logoPng2;
       if (tariff.isTira) {
         for (let i = 0; i < qty; i++) {
           const stamps = [];
@@ -3889,7 +3968,7 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
                 backgroundImage: background,
                 overlayImage: overlay,
                 printLogoPng,
-                logoPngImage: logoPng
+                logoPngImage: logo
               });
               productoCounter++;
             }
@@ -3903,7 +3982,7 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
                 backgroundImage: background,
                 overlayImage: overlay,
                 printLogoPng,
-                logoPngImage: logoPng
+                logoPngImage: logo
               });
               productoCounter++;
             }
@@ -3927,7 +4006,7 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
             backgroundImage: background,
             overlayImage: overlay,
             printLogoPng,
-            logoPngImage: logoPng
+            logoPngImage: logo
           });
           productoCounter++;
         }

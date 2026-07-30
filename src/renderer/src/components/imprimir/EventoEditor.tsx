@@ -34,6 +34,14 @@ export interface EventoEditorProps {
 
 type EditorMode = 'idle' | 'creating' | 'editing'
 
+/**
+ * Selection limits per event. These must stay in sync with
+ * MAX_EVENT_TARIFFS / MAX_EVENT_STRIPS in eventos.repository.ts,
+ * which enforces them on save.
+ */
+const MAX_EVENT_TARIFFS = 8
+const MAX_EVENT_STRIPS = 4
+
 const EMPTY_FORM: EventoInput = {
   year: new Date().getFullYear(),
   codigo: '',
@@ -280,8 +288,8 @@ export default function EventoEditor({
       if (prev.includes(tariffId)) {
         return prev.filter((id) => id !== tariffId)
       } else {
-        if (prev.length >= 6) {
-          setTariffSelectionError('Máximo 6 tarifas individuales')
+        if (prev.length >= MAX_EVENT_TARIFFS) {
+          setTariffSelectionError(`Máximo ${MAX_EVENT_TARIFFS} tarifas individuales`)
           return prev
         }
         setTariffSelectionError(null)
@@ -295,8 +303,8 @@ export default function EventoEditor({
       if (prev.includes(stripId)) {
         return prev.filter((id) => id !== stripId)
       } else {
-        if (prev.length >= 4) {
-          setTariffSelectionError('Máximo 4 tiras')
+        if (prev.length >= MAX_EVENT_STRIPS) {
+          setTariffSelectionError(`Máximo ${MAX_EVENT_STRIPS} tiras`)
           return prev
         }
         setTariffSelectionError(null)
@@ -721,7 +729,7 @@ export default function EventoEditor({
                           ))}
                         </div>
                         <p className="text-xs text-gray-500 mt-1">
-                          Seleccionadas: {selectedTariffIds.length} de 6
+                          Seleccionadas: {selectedTariffIds.length} de {MAX_EVENT_TARIFFS}
                         </p>
                       </div>
 
@@ -756,7 +764,7 @@ export default function EventoEditor({
                             ))}
                           </div>
                           <p className="text-xs text-gray-500 mt-1">
-                            Seleccionadas: {selectedStripIds.length} de 4
+                            Seleccionadas: {selectedStripIds.length} de {MAX_EVENT_STRIPS}
                           </p>
                         </div>
                       )}

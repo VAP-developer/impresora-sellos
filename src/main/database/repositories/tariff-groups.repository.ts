@@ -227,7 +227,7 @@ export class TariffGroupsRepository {
    */
   private _attachTariffs(groups: TariffGroupRow[]): TariffGroup[] {
     const getStripTariffIds = this.db.prepare(
-      'SELECT tariff_id FROM strip_tariffs WHERE strip_id = ?'
+      'SELECT tariff_id, quantity FROM strip_tariffs WHERE strip_id = ? ORDER BY id ASC'
     )
 
     return groups.map((group) => {
@@ -242,7 +242,19 @@ export class TariffGroupsRepository {
 
       for (const row of rows) {
         if (row.type === 'strip') {
-          const junctionRows = getStripTariffIds.all(row.id) as Array<{ tariff_id: number }>
+          const junctionRows = getStripTariffIds.all(row.id) as Array<{
+            tariff_id: number
+            quantity: number | null
+          }>
+          // Expand quantity back into repeated entries so a strip like "4 x Tarifa A"
+          // is returned as [A, A, A, A] rather than [A].
+          const tariffIds: number[] = []
+          for (const junction of junctionRows) {
+            const times = Math.max(1, junction.quantity ?? 1)
+            for (let i = 0; i < times; i++) {
+              tariffIds.push(junction.tariff_id)
+            }
+          }
           strips.push({
             id: row.id,
             name: row.name,
@@ -250,7 +262,7 @@ export class TariffGroupsRepository {
             secondary_price: row.secondary_price,
             position: row.position,
             type: 'strip',
-            tariff_ids: junctionRows.map((r) => r.tariff_id)
+            tariff_ids: tariffIds
           })
         } else {
           tariffs.push({
@@ -277,6 +289,20 @@ export class TariffGroupsRepository {
         updated_at: group.updated_at
       }
     })
+  }
+
+  /**
+   * Collapses a strip's tariff_ids array (which may repeat the same tariff) into
+   * [tariffId, quantity] pairs, preserving first-appearance order.
+   *
+   * e.g. [1, 1, 1, 1] → [[1, 4]] and [1, 2, 1] → [[1, 2], [2, 1]]
+   */
+  private countTariffOccurrences(tariffIds: number[]): Array<[number, number]> {
+    const counts = new Map<number, number>()
+    for (const tariffId of tariffIds) {
+      counts.set(tariffId, (counts.get(tariffId) ?? 0) + 1)
+    }
+    return [...counts.entries()]
   }
 
   /**
@@ -346,8 +372,8 @@ export class TariffGroupsRepository {
     `)
 
     const insertStripTariff = this.db.prepare(`
-      INSERT INTO strip_tariffs (strip_id, tariff_id)
-      VALUES (?, ?)
+      INSERT INTO strip_tariffs (strip_id, tariff_id, quantity)
+      VALUES (?, ?, ?)
     `)
 
     const createTransaction = this.db.transaction(() => {
@@ -399,15 +425,13 @@ export class TariffGroupsRepository {
         )
         const stripId = Number(stripResult.lastInsertRowid)
 
-        // Get unique tariff positions (a strip can have multiple copies of the same tariff,
-        // but we only need one junction row per unique tariff)
-        const uniqueTariffPositions = [...new Set(strip.tariff_ids)]
-
-        for (const tariffPosition of uniqueTariffPositions) {
+        // A strip may repeat the same tariff (e.g. 4 x Tarifa A). Collapse the
+        // repeats into one junction row per tariff carrying its quantity.
+        for (const [tariffPosition, quantity] of this.countTariffOccurrences(strip.tariff_ids)) {
           // tariff_ids from the frontend are 1-indexed positions, not DB IDs
           const newTariffId = positionToNewId.get(tariffPosition)
           if (newTariffId != null) {
-            insertStripTariff.run(stripId, newTariffId)
+            insertStripTariff.run(stripId, newTariffId, quantity)
           }
         }
       }
@@ -460,8 +484,8 @@ export class TariffGroupsRepository {
     `)
 
     const insertStripTariff = this.db.prepare(`
-      INSERT INTO strip_tariffs (strip_id, tariff_id)
-      VALUES (?, ?)
+      INSERT INTO strip_tariffs (strip_id, tariff_id, quantity)
+      VALUES (?, ?, ?)
     `)
 
     const updateTransaction = this.db.transaction(() => {
@@ -512,15 +536,13 @@ export class TariffGroupsRepository {
         )
         const stripId = Number(stripResult.lastInsertRowid)
 
-        // Get unique tariff positions (a strip can have multiple copies of the same tariff,
-        // but we only need one junction row per unique tariff)
-        const uniqueTariffPositions = [...new Set(strip.tariff_ids)]
-
-        for (const tariffPosition of uniqueTariffPositions) {
+        // A strip may repeat the same tariff (e.g. 4 x Tarifa A). Collapse the
+        // repeats into one junction row per tariff carrying its quantity.
+        for (const [tariffPosition, quantity] of this.countTariffOccurrences(strip.tariff_ids)) {
           // tariff_ids from the frontend are 1-indexed positions, not DB IDs
           const newTariffId = positionToNewId.get(tariffPosition)
           if (newTariffId != null) {
-            insertStripTariff.run(stripId, newTariffId)
+            insertStripTariff.run(stripId, newTariffId, quantity)
           }
         }
       }

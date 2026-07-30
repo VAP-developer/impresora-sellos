@@ -21,6 +21,13 @@ export interface EventoRow {
   updated_at: string
 }
 
+// === Selection Limits ===
+
+/** Maximum number of individual tariffs that can be selected per event (inclusive) */
+export const MAX_EVENT_TARIFFS = 8
+/** Maximum number of strips that can be selected per event (inclusive) */
+export const MAX_EVENT_STRIPS = 4
+
 export interface EventoInput {
   year: number
   codigo: string
@@ -105,11 +112,11 @@ export class EventosRepository {
     const tariffCount = input.selected_tariff_ids?.length ?? 0
     const stripCount = input.selected_strip_ids?.length ?? 0
 
-    if (tariffCount > 6) {
-      throw new Error('Máximo 6 tarifas individuales por evento')
+    if (tariffCount > MAX_EVENT_TARIFFS) {
+      throw new Error(`Máximo ${MAX_EVENT_TARIFFS} tarifas individuales por evento`)
     }
-    if (stripCount > 2) {
-      throw new Error('Máximo 2 tiras por evento')
+    if (stripCount > MAX_EVENT_STRIPS) {
+      throw new Error(`Máximo ${MAX_EVENT_STRIPS} tiras por evento`)
     }
   }
 

@@ -48,6 +48,27 @@ export const FONTS = {
   condensed: 'FranklinGothicCondensed'
 } as const
 
+// ─────────────────────────────────────────────
+// Text Layout Constants
+// ─────────────────────────────────────────────
+// Vertical positions are yBottom_mm (distance from the bottom of the canvas).
+// The logo placement is derived from the fecha/localidad block, so these
+// constants must be used by both the text drawing and the logo positioning
+// to keep them in sync.
+
+/** Left margin shared by all text fields (mm) */
+export const TEXT_LEFT_MM = 2
+/** Right margin kept free at the label edge (mm) */
+export const TEXT_RIGHT_MARGIN_MM = 2
+/** Font size used for the fecha and localidad lines (pt) */
+export const FECHA_LOCALIDAD_FONT_SIZE = 9
+/** yBottom of the fecha line (mm) */
+export const FECHA_Y_MM = 43
+/** yBottom of the localidad line (mm) */
+export const LOCALIDAD_Y_MM = 39.5
+/** Horizontal gap between the fecha/localidad text and the logo PNG (mm) */
+export const LOGO_TEXT_GAP_MM = 5
+
 /**
  * Resolves the path to the resources/fonts directory.
  * Override via `setTestFontsPath()` for testing.
@@ -336,29 +357,79 @@ function drawOverlay(doc: PDFKit.PDFDocument, imageSource: string | null | undef
 }
 
 /**
- * Draws the logo PNG on the right side of the text fields (approximately at 30mm from left).
- * The logo is rendered as a smaller image positioned to the right of the text content.
- * Handles file paths and base64 data URIs.
+ * Computes the logo PNG placement box, anchored to the right of the
+ * fecha/localidad text block with a fixed gap.
+ *
+ * The X origin is the widest of the fecha/localidad lines plus the gap, so the
+ * logo never overlaps the text regardless of how long the event name or date is.
+ * The box spans vertically to cover the fecha and localidad lines, and the image
+ * is scaled to fit inside it while preserving its aspect ratio.
+ *
+ * Exported for testing.
  */
-function drawLogoPng(doc: PDFKit.PDFDocument, imageSource: string | null | undefined): void {
+export function computeLogoBox(
+  doc: PDFKit.PDFDocument,
+  fecha: string,
+  evento: string
+): { x: number; y: number; width: number; height: number } | null {
+  doc.font(FONTS.regular).fontSize(FECHA_LOCALIDAD_FONT_SIZE)
+
+  const fechaWidth = doc.widthOfString(formatFechaMonthYear(fecha))
+  const eventoWidth = doc.widthOfString(evento)
+  const textBlockWidth = Math.max(fechaWidth, eventoWidth)
+
+  // Right edge of the text block, then the required 5mm gap
+  const x = TEXT_LEFT_MM * MM_TO_PT + textBlockWidth + LOGO_TEXT_GAP_MM * MM_TO_PT
+
+  // Vertical span: from the top of the fecha line down to the bottom of the localidad line
+  const top = bottomToTop(FECHA_Y_MM, FECHA_LOCALIDAD_FONT_SIZE)
+  const bottom = bottomToTop(LOCALIDAD_Y_MM, FECHA_LOCALIDAD_FONT_SIZE) + FECHA_LOCALIDAD_FONT_SIZE
+  const height = bottom - top
+
+  // Remaining horizontal room up to the right margin of the label
+  const width = STAMP_WIDTH - TEXT_RIGHT_MARGIN_MM * MM_TO_PT - x
+
+  // No usable space left (e.g. extremely long texts) → skip the logo
+  if (width <= 0 || height <= 0) return null
+
+  return { x, y: top, width, height }
+}
+
+/**
+ * Draws the logo PNG immediately to the right of the fecha/localidad block,
+ * separated by LOGO_TEXT_GAP_MM (5mm).
+ *
+ * The image is fitted inside the available box preserving its aspect ratio and
+ * aligned to the left/vertical-center of that box, so it visually hangs right
+ * next to the text. Handles file paths and base64 data URIs.
+ */
+function drawLogoPng(
+  doc: PDFKit.PDFDocument,
+  imageSource: string | null | undefined,
+  fecha: string,
+  evento: string
+): void {
   if (!imageSource) return
 
-  // Position the logo at approximately 30mm from the left, centered vertically
-  // Logo size: approximately 20mm wide × 20mm tall
-  const logoX = 32 * MM_TO_PT  // 32mm from left (to the right of text fields)
-  const logoY = 2.5 * MM_TO_PT  // 2.5mm from top (centered vertically in the 25mm height)
-  const logoWidth = 20 * MM_TO_PT
-  const logoHeight = 20 * MM_TO_PT
+  const box = computeLogoBox(doc, fecha, evento)
+  if (!box) return
+
+  // `fit` scales the image down to fit the box while preserving aspect ratio.
+  const options: PDFKit.Mixins.ImageOption = {
+    fit: [box.width, box.height],
+    align: 'left',
+    valign: 'center'
+  }
 
   try {
     if (imageSource.startsWith('data:')) {
       const base64Data = imageSource.split(',')[1]
       if (base64Data) {
         const buffer = Buffer.from(base64Data, 'base64')
-        doc.image(buffer, logoX, logoY, { width: logoWidth, height: logoHeight })
+        doc.image(buffer, box.x, box.y, options)
       }
     } else if (existsSync(imageSource)) {
-      doc.image(imageSource, logoX, logoY, { width: logoWidth, height: logoHeight })
+      doc.image(imageSource, box.x, box.y, options)
     }
   } catch {
     // Gracefully ignore image errors (matches legacy behavior)
@@ -396,7 +467,9 @@ function collectPdf(doc: PDFKit.PDFDocument): Promise<Buffer> {
  *
  * Layout (in logical landscape coordinates after rotation):
  *   1. Background image (full 55×25mm)
- *   2. Overlay image (right half 27.5–55mm × 25mm)
+ *   2. Overlay image (right half 27.5–55mm × 25mm), or — when printLogoPng is
+ *      set — the model's logo PNG placed 5mm to the right of the
+ *      fecha/localidad text block instead of the overlay
  *   3. Nombre Tarifa: FranklinGothic 13pt at (2mm, 50mm from bottom)
  *   4. Descripción Tarifa: FranklinGothic 9pt at (2mm, 46.5mm from bottom)
  *   5. Fecha evento (mes+año): FranklinGothic 9pt at (2mm, 43mm from bottom)
@@ -419,9 +492,10 @@ export async function renderStamp(params: StampRenderParams): Promise<Buffer> {
   registerFonts(doc)
   drawBackground(doc, params.backgroundImage)
   
-  // If printLogoPng is true, draw the logo on the right side instead of using overlay
+  // If printLogoPng is true, draw the logo to the right of fecha/localidad
+  // instead of using the full right-half overlay
   if (params.printLogoPng && params.logoPngImage) {
-    drawLogoPng(doc, params.logoPngImage)
+    drawLogoPng(doc, params.logoPngImage, params.fecha, params.evento)
   } else {
     // Otherwise, use the standard overlay behavior
     drawOverlay(doc, params.overlayImage)
@@ -434,10 +508,24 @@ export async function renderStamp(params: StampRenderParams): Promise<Buffer> {
   //   Localidad evento:    39.5mm (pegado debajo de fecha)
   //   Código L1:           36mm (pegado debajo de localidad)
   //   Código L2:           32.5mm (pegado debajo de L1)
-  drawTextLeft(doc, params.tarifa, FONTS.regular, 13, 2, 50)
-  drawTextLeft(doc, params.tarifaDescripcion ?? '', FONTS.regular, 9, 2, 46.5)
-  drawTextLeft(doc, formatFechaMonthYear(params.fecha), FONTS.regular, 9, 2, 43)
-  drawTextLeft(doc, params.evento, FONTS.regular, 9, 2, 39.5)
+  drawTextLeft(doc, params.tarifa, FONTS.regular, 13, TEXT_LEFT_MM, 50)
+  drawTextLeft(doc, params.tarifaDescripcion ?? '', FONTS.regular, 9, TEXT_LEFT_MM, 46.5)
+  drawTextLeft(
+    doc,
+    formatFechaMonthYear(params.fecha),
+    FONTS.regular,
+    FECHA_LOCALIDAD_FONT_SIZE,
+    TEXT_LEFT_MM,
+    FECHA_Y_MM
+  )
+  drawTextLeft(
+    doc,
+    params.evento,
+    FONTS.regular,
+    FECHA_LOCALIDAD_FONT_SIZE,
+    TEXT_LEFT_MM,
+    LOCALIDAD_Y_MM
+  )
 
   // Código en 2 líneas: línea 1 = "P26-4ES", línea 2 = "0001-001"
   const { line1, line2 } = formatCodigoLines(params.codigo)

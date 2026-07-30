@@ -352,6 +352,58 @@ function getModelBackground(
 }
 
 /**
+ * Resolves the logo PNG image for a given model name.
+ *
+ * Each fair folder holds two images: a JPG background (`-fondo`) and a PNG
+ * stamp/logo (`-sello`). The logo PNG is the `-sello` one, so this resolves the
+ * model name to its fair and returns that image, verifying it really is a PNG.
+ *
+ * Falls back to `fallbackLogo` (the active fair's sello) when the model cannot
+ * be resolved, so enabling "Logo PNG" still prints something sensible.
+ */
+function getModelLogoPng(
+  modelName: string,
+  imagesRepo: ImagesRepository,
+  syncRepo: ImageSyncRepository | undefined,
+  fallbackLogo: string | null
+): string | null {
+  const isPng = (record: { type: string | null; data: string } | null): boolean => {
+    if (!record) return false
+    if (record.type) return record.type.toLowerCase() === 'image/png'
+    // No stored mime type — infer from the data URI prefix
+    return record.data.startsWith('data:image/png')
+  }
+
+  if (modelName && syncRepo) {
+    try {
+      const fairs = syncRepo.getFairList()
+      const matchedFair = fairs.find(
+        (f) => f.fairName.toLowerCase() === modelName.toLowerCase()
+      )
+      if (matchedFair) {
+        const selloName = buildImageName(matchedFair.year, matchedFair.fairName, 'sello')
+        const record = imagesRepo.getFullByName(selloName)
+        if (isPng(record)) return record!.data
+      }
+    } catch {
+      // image_sync unavailable — fall through to the fallback below
+    }
+  }
+
+  // Direct lookup: the model name may already point at a PNG image record
+  if (modelName) {
+    try {
+      const direct = imagesRepo.getFullByName(modelName)
+      if (isPng(direct)) return direct!.data
+    } catch {
+      // ignore and fall back
+    }
+  }
+
+  return fallbackLogo
+}
+
+/**
  * Builds the TicketItem array and TicketProduct array from quantities and prices.
  * Items follow the legacy convention where idProducto ends with "1" for model1, "2" for model2.
  */
@@ -504,7 +556,8 @@ export async function generateSalePdfs(
   let bg2: string | null = null
   let overlay1: string | null = null
   let overlay2: string | null = null
-  let logoPng: string | null = null
+  let logoPng1: string | null = null
+  let logoPng2: string | null = null
   let printLogoPng = false
 
   if (imageLayerOptions) {
@@ -515,11 +568,19 @@ export async function generateSalePdfs(
     overlay1 = layerResult.overlayImage
     overlay2 = layerResult.overlayImage
     notifications.push(...layerResult.notifications)
-    
-    // Handle printLogoPng flag: when true, use sello as logo PNG instead of overlay
+
+    // Handle printLogoPng flag: when true, draw the model's PNG logo to the
+    // right of the fecha/localidad text instead of the right-half overlay.
     printLogoPng = imageLayerOptions.printLogoPng ?? false
     if (printLogoPng) {
-      logoPng = imageLayerOptions.selloImage
+      let syncRepo: ImageSyncRepository | undefined
+      try {
+        syncRepo = new ImageSyncRepository()
+      } catch {
+        // DB not available (e.g. in unit tests) — fall back to the active fair sello
+      }
+      logoPng1 = getModelLogoPng(model1Name, repo, syncRepo, imageLayerOptions.selloImage)
+      logoPng2 = getModelLogoPng(model2Name, repo, syncRepo, imageLayerOptions.selloImage)
     }
   } else {
     // Legacy: load background from images repository by model name
@@ -562,7 +623,7 @@ export async function generateSalePdfs(
             backgroundImage: background,
             overlayImage: overlay,
             printLogoPng,
-            logoPngImage: logoPng
+            logoPngImage: logoPng1
           })
           productoCounter++
         }
@@ -596,7 +657,7 @@ export async function generateSalePdfs(
             backgroundImage: background,
             overlayImage: overlay,
             printLogoPng,
-            logoPngImage: logoPng
+            logoPngImage: logoPng2
           })
           productoCounter++
         }
@@ -633,6 +694,9 @@ export async function generateSalePdfs(
           ? overlay1
           : overlay2
 
+      // Logo PNG of the model this tariff prints on
+      const logo = tariff.model === 1 ? logoPng1 : logoPng2
+
       if (tariff.isTira) {
         // Tiras: each unit generates a 4-page PDF (4 stamps in one print job)
         for (let i = 0; i < qty; i++) {
@@ -649,8 +713,8 @@ export async function generateSalePdfs(
                 codigo: buildLabelCode(config, productoCounter),
                 backgroundImage: background,
                 overlayImage: overlay,
-            printLogoPng,
-            logoPngImage: logoPng
+                printLogoPng,
+                logoPngImage: logo
               })
               productoCounter++
             }
@@ -664,8 +728,8 @@ export async function generateSalePdfs(
                 codigo: buildLabelCode(config, productoCounter),
                 backgroundImage: background,
                 overlayImage: overlay,
-            printLogoPng,
-            logoPngImage: logoPng
+                printLogoPng,
+                logoPngImage: logo
               })
               productoCounter++
             }
@@ -692,7 +756,7 @@ export async function generateSalePdfs(
             backgroundImage: background,
             overlayImage: overlay,
             printLogoPng,
-            logoPngImage: logoPng
+            logoPngImage: logo
           })
           productoCounter++
         }
