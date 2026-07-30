@@ -415,9 +415,10 @@ function drawLogoPng(
   if (!box) return
 
   // `fit` scales the image down to fit the box while preserving aspect ratio.
+  // No horizontal align is needed: the box already starts exactly where the
+  // logo must begin (5mm after the text), so the default left placement is right.
   const options: PDFKit.Mixins.ImageOption = {
     fit: [box.width, box.height],
-    align: 'left',
     valign: 'center'
   }
 
@@ -687,9 +688,10 @@ export async function renderStampMultiPage(stamps: StampRenderParams[]): Promise
 
     drawBackground(doc, stamp.backgroundImage)
     
-    // If printLogoPng is true, draw the logo on the right side instead of using overlay
+    // If printLogoPng is true, draw the logo to the right of fecha/localidad
+    // instead of using the full right-half overlay
     if (stamp.printLogoPng && stamp.logoPngImage) {
-      drawLogoPng(doc, stamp.logoPngImage)
+      drawLogoPng(doc, stamp.logoPngImage, stamp.fecha, stamp.evento)
     } else {
       // Otherwise, use the standard overlay behavior
       drawOverlay(doc, stamp.overlayImage)

@@ -697,7 +697,7 @@ export default function EventoEditor({
                       {/* Individual tariffs */}
                       <div className="mb-4">
                         <h6 className="font-semibold text-sm text-gray-700 mb-2">
-                          Tarifas Individuales (máximo 6)
+                          Tarifas Individuales (máximo {MAX_EVENT_TARIFFS})
                         </h6>
                         <div className="space-y-1 max-h-[300px] overflow-y-auto">
                           {selectedTariffGroup.tariffs.map((tariff) => (
@@ -737,7 +737,7 @@ export default function EventoEditor({
                       {selectedTariffGroup.strips.length > 0 && (
                         <div>
                           <h6 className="font-semibold text-sm text-gray-700 mb-2">
-                            Tiras (máximo 4)
+                            Tiras (máximo {MAX_EVENT_STRIPS})
                           </h6>
                           <div className="space-y-1">
                             {selectedTariffGroup.strips.map((strip) => (

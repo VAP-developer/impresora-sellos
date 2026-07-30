@@ -3063,7 +3063,6 @@ function drawLogoPng(doc, imageSource, fecha, evento) {
   if (!box) return;
   const options = {
     fit: [box.width, box.height],
-    align: "left",
     valign: "center"
   };
   try {
@@ -3104,7 +3103,7 @@ async function renderStampMultiPage(stamps) {
     }
     drawBackground(doc, stamp.backgroundImage);
     if (stamp.printLogoPng && stamp.logoPngImage) {
-      drawLogoPng(doc, stamp.logoPngImage);
+      drawLogoPng(doc, stamp.logoPngImage, stamp.fecha, stamp.evento);
     } else {
       drawOverlay(doc, stamp.overlayImage);
     }

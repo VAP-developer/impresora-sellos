@@ -19,6 +19,7 @@ vi.mock('@electron-toolkit/utils', () => ({
 
 import {
   renderStamp,
+  renderStampMultiPage,
   setTestFontsPath,
   setTestImagesPath,
   formatFechaMonthYear,
@@ -151,6 +152,12 @@ describe('Logo PNG placement', () => {
       expect(imageCalls[0].options.valign).toBe('center')
     })
 
+    it('does not set a horizontal align (the box already starts at the logo x)', async () => {
+      await renderStamp({ ...baseParams, printLogoPng: true, logoPngImage: PNG_LOGO })
+
+      expect(imageCalls[0].options.align).toBeUndefined()
+    })
+
     it('shifts the logo right when the locality is longer, avoiding overlap', async () => {
       await renderStamp({ ...baseParams, printLogoPng: true, logoPngImage: PNG_LOGO })
       const shortX = imageCalls[0].x
@@ -206,6 +213,59 @@ describe('Logo PNG placement', () => {
   describe('when printLogoPng is disabled', () => {
     it('still draws the overlay on the right half (unchanged behaviour)', async () => {
       await renderStamp({ ...baseParams, overlayImage: PNG_LOGO, printLogoPng: false })
+
+      expect(imageCalls).toHaveLength(1)
+      expect(imageCalls[0].x).toBeCloseTo(27.5 * MM_TO_PT, 2)
+    })
+  })
+
+  // renderStampMultiPage is the function pdf-generator actually calls for sales,
+  // so the logo must be drawn there too — not just in the single-stamp renderStamp.
+  describe('renderStampMultiPage (the path used for real sales)', () => {
+    it('draws the logo on a single-stamp group', async () => {
+      await renderStampMultiPage([
+        { ...baseParams, printLogoPng: true, logoPngImage: PNG_LOGO }
+      ])
+
+      expect(imageCalls).toHaveLength(1)
+      expect(imageCalls[0].x).toBeCloseTo(expectedLogoX(baseParams.fecha, baseParams.evento), 2)
+    })
+
+    it('draws the logo on every page of a multi-stamp group', async () => {
+      const stamps = [
+        { ...baseParams, printLogoPng: true, logoPngImage: PNG_LOGO },
+        { ...baseParams, printLogoPng: true, logoPngImage: PNG_LOGO },
+        { ...baseParams, printLogoPng: true, logoPngImage: PNG_LOGO },
+        { ...baseParams, printLogoPng: true, logoPngImage: PNG_LOGO }
+      ]
+
+      await renderStampMultiPage(stamps)
+
+      expect(imageCalls).toHaveLength(4)
+      const expX = expectedLogoX(baseParams.fecha, baseParams.evento)
+      for (const call of imageCalls) {
+        expect(call.x).toBeCloseTo(expX, 2)
+        expect(Array.isArray(call.options.fit)).toBe(true)
+      }
+    })
+
+    it('positions the logo per page according to that page own texts', async () => {
+      const longEvento = 'Santiago de Compostela'
+      await renderStampMultiPage([
+        { ...baseParams, printLogoPng: true, logoPngImage: PNG_LOGO },
+        { ...baseParams, evento: longEvento, printLogoPng: true, logoPngImage: PNG_LOGO }
+      ])
+
+      expect(imageCalls).toHaveLength(2)
+      expect(imageCalls[0].x).toBeCloseTo(expectedLogoX(baseParams.fecha, baseParams.evento), 2)
+      expect(imageCalls[1].x).toBeCloseTo(expectedLogoX(baseParams.fecha, longEvento), 2)
+      expect(imageCalls[1].x).toBeGreaterThan(imageCalls[0].x)
+    })
+
+    it('keeps the overlay behaviour when printLogoPng is disabled', async () => {
+      await renderStampMultiPage([
+        { ...baseParams, overlayImage: PNG_LOGO, printLogoPng: false }
+      ])
 
       expect(imageCalls).toHaveLength(1)
       expect(imageCalls[0].x).toBeCloseTo(27.5 * MM_TO_PT, 2)

@@ -674,6 +674,57 @@ export async function generateSalePdfs(
         }
       }
     }
+
+    // ─── Dynamic strip (tira) stamp generation ───────────────────────────────
+    // A strip is a fixed sequence of individual tariffs printed as one job.
+    // Each unit sold produces one multi-page PDF with one page per tariff in
+    // the strip, in the order defined by `tariff_ids` (repetitions included).
+    for (const strip of dynamicTariffCtx.strips ?? []) {
+      // Resolve the tariff definitions referenced by the strip, preserving order
+      // and repetitions. Unknown ids are skipped (tariff may have been deleted).
+      const stripTariffs = strip.tariff_ids
+        .map((tid) => dynamicTariffCtx.tariffs.find((t) => t.id === tid))
+        .filter((t): t is DynamicTariffDef => t != null)
+
+      if (stripTariffs.length === 0) continue
+
+      for (const model of [1, 2] as const) {
+        const qty = dynQty[`tariff_${strip.id}_s${model}`] ?? 0
+        if (qty <= 0) continue
+
+        const background = usesBlankBackground ? null : model === 1 ? bg1 : bg2
+        const overlay = usesBlankBackground ? null : model === 1 ? overlay1 : overlay2
+        const logo = model === 1 ? logoPng1 : logoPng2
+        const target: PrinterTarget = model === 1 ? 'printer1' : 'printer2'
+
+        for (let i = 0; i < qty; i++) {
+          const stamps: StampRenderParams[] = []
+          for (const stripTariff of stripTariffs) {
+            stamps.push({
+              tarifa: stripTariff.name,
+              tarifaDescripcion: stripTariff.description,
+              fecha: stampFecha,
+              evento: stampEvento,
+              codigo: buildLabelCode(config, productoCounter),
+              backgroundImage: background,
+              overlayImage: overlay,
+              printLogoPng,
+              logoPngImage: logo
+            })
+            productoCounter++
+          }
+
+          // A strip is a single physical unit: it is never split by cutNumber.
+          const pdfBuffer = await renderStampMultiPage(stamps)
+          pdfs.push({
+            buffer: pdfBuffer,
+            target,
+            pdfType: 'stamp_tira',
+            description: `Tira ${strip.name} modelo${model} #${i + 1} x${stamps.length}`
+          })
+        }
+      }
+    }
   } else {
     // ─── Legacy static tariff stamp generation ───────────────────────────────
     const legacyQty = quantities as SaleQuantities
@@ -811,6 +862,21 @@ export async function generateSalePdfs(
       items.push({ idProducto: prodId2, cantidad: qty2 })
       productos.push({ idProducto: prodId2, modo: 'S', precio: tariff.price, nombre_ticket: tariff.name })
     }
+
+    // Strips (tiras) are billed as a single product line per model
+    for (const strip of dynamicTariffCtx.strips ?? []) {
+      const stripKey1 = `tariff_${strip.id}_s1`
+      const stripQty1 = dynQty[stripKey1] ?? 0
+      const stripProdId1 = `D${strip.id}S1`
+      items.push({ idProducto: stripProdId1, cantidad: stripQty1 })
+      productos.push({ idProducto: stripProdId1, modo: 'S', precio: strip.price, nombre_ticket: strip.name })
+
+      const stripKey2 = `tariff_${strip.id}_s2`
+      const stripQty2 = dynQty[stripKey2] ?? 0
+      const stripProdId2 = `D${strip.id}S2`
+      items.push({ idProducto: stripProdId2, cantidad: stripQty2 })
+      productos.push({ idProducto: stripProdId2, modo: 'S', precio: strip.price, nombre_ticket: strip.name })
+    }
   } else {
     // Legacy ticket data
     const result = buildTicketData(quantities as SaleQuantities, config.precios)
@@ -842,6 +908,12 @@ export async function generateSalePdfs(
         const matchingTariff = dynamicTariffCtx.tariffs.find((t) => t.id === tariffId)
         if (matchingTariff && matchingTariff.secondaryPrice != null) {
           producto.precio = matchingTariff.secondaryPrice
+          continue
+        }
+        // Strips share the same id space as tariffs, so resolve them too
+        const matchingStrip = dynamicTariffCtx.strips?.find((s) => s.id === tariffId)
+        if (matchingStrip && matchingStrip.secondaryPrice != null) {
+          producto.precio = matchingStrip.secondaryPrice
         }
       }
     }
