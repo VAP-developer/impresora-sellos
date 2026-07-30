@@ -20,7 +20,7 @@
 import type { AppConfig, PreciosConfig } from '../../renderer/src/types/config'
 import { renderStampMultiPage, renderStampEspecialStrip } from './stamp-renderer'
 import type { StampRenderParams } from './stamp-renderer'
-import { genTicket, genTicketCaja, genTicketMaster, calcTicketHeightMm, calcTicketCajaHeightMm, calcTicketMasterHeightMm, countActiveItems } from './ticket-renderer'
+import { genTicket, genTicketCaja, genTicketMaster, calcTicketHeightMm, calcTicketCajaHeightMm, calcTicketMasterHeightMm, calcActualTicketHeight, calcActualTicketCajaHeight, countActiveItems } from './ticket-renderer'
 import type { TicketItem, TicketProduct } from './ticket-renderer'
 import { ImagesRepository } from '../database/repositories/images.repository'
 import { ImageSyncRepository } from '../database/repositories/image-sync.repository'
@@ -374,18 +374,25 @@ function getModelLogoPng(
     return record.data.startsWith('data:image/png')
   }
 
+  console.log(`[getModelLogoPng] modelName="${modelName}", syncRepo=${!!syncRepo}, fallbackLogo length=${fallbackLogo?.length ?? 0}`)
+
   if (modelName && syncRepo) {
     try {
       const fairs = syncRepo.getFairList()
+      console.log(`[getModelLogoPng] Fair list: ${JSON.stringify(fairs.map(f => f.fairName))}`)
       const matchedFair = fairs.find(
         (f) => f.fairName.toLowerCase() === modelName.toLowerCase()
       )
       if (matchedFair) {
         const selloName = buildImageName(matchedFair.year, matchedFair.fairName, 'sello')
         const record = imagesRepo.getFullByName(selloName)
+        console.log(`[getModelLogoPng] Matched fair "${matchedFair.fairName}", selloName="${selloName}", record exists=${!!record}, isPng=${isPng(record)}`)
         if (isPng(record)) return record!.data
+      } else {
+        console.log(`[getModelLogoPng] No fair matched for modelName="${modelName}"`)
       }
-    } catch {
+    } catch (err) {
+      console.log(`[getModelLogoPng] syncRepo error: ${err}`)
       // image_sync unavailable — fall through to the fallback below
     }
   }
@@ -394,13 +401,38 @@ function getModelLogoPng(
   if (modelName) {
     try {
       const direct = imagesRepo.getFullByName(modelName)
+      console.log(`[getModelLogoPng] Direct lookup "${modelName}": found=${!!direct}, isPng=${isPng(direct)}`)
       if (isPng(direct)) return direct!.data
     } catch {
       // ignore and fall back
     }
   }
 
-  return fallbackLogo
+  // If fallback is available, use it
+  if (fallbackLogo) {
+    console.log(`[getModelLogoPng] Returning fallback (length=${fallbackLogo.length})`)
+    return fallbackLogo
+  }
+
+  // Last resort: if syncRepo is available, grab the sello from the first available fair
+  if (syncRepo) {
+    try {
+      const fairs = syncRepo.getFairList()
+      for (const fair of fairs) {
+        const selloName = buildImageName(fair.year, fair.fairName, 'sello')
+        const record = imagesRepo.getFullByName(selloName)
+        if (record) {
+          console.log(`[getModelLogoPng] Last resort: using sello from fair "${fair.fairName}" (${record.data.length} chars)`)
+          return record.data
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  console.log(`[getModelLogoPng] Returning null — no logo found`)
+  return null
 }
 
 /**
@@ -869,13 +901,13 @@ export async function generateSalePdfs(
       const stripQty1 = dynQty[stripKey1] ?? 0
       const stripProdId1 = `D${strip.id}S1`
       items.push({ idProducto: stripProdId1, cantidad: stripQty1 })
-      productos.push({ idProducto: stripProdId1, modo: 'S', precio: strip.price, nombre_ticket: strip.name })
+      productos.push({ idProducto: stripProdId1, modo: 'T', precio: strip.price, nombre_ticket: strip.name })
 
       const stripKey2 = `tariff_${strip.id}_s2`
       const stripQty2 = dynQty[stripKey2] ?? 0
       const stripProdId2 = `D${strip.id}S2`
       items.push({ idProducto: stripProdId2, cantidad: stripQty2 })
-      productos.push({ idProducto: stripProdId2, modo: 'S', precio: strip.price, nombre_ticket: strip.name })
+      productos.push({ idProducto: stripProdId2, modo: 'T', precio: strip.price, nombre_ticket: strip.name })
     }
   } else {
     // Legacy ticket data
@@ -888,13 +920,16 @@ export async function generateSalePdfs(
 
   if (hasAnyItems) {
     const fechaTicket = getTicketDateTime(config)
-    const modoTicket = buildTicketTitle(profile, config.ticket.titulo)
+    // Build ticket title: "Factura Simplificada CH17 - 0021" (titulo + machine - client)
+    const baseTitle = buildTicketTitle(profile, config.ticket.titulo)
+    const clienteCode = formatCliente(config.codigo.cliente)
+    const modoTicket = `${baseTitle} ${config.codigo.maquina} - ${clienteCode}`
     const modelo1Ticket = model1Name || 'Modelo 1'
     const modelo2Ticket = model2Name || 'Modelo 2'
 
-    // Determine ticket header: use event name/lugar when dynamic tariff is active
+    // Determine ticket header: use event name when dynamic tariff is active
     const ticketFeria = dynamicTariffCtx
-      ? (dynamicTariffCtx.title || config.ticket.feria)
+      ? (dynamicTariffCtx.eventName || dynamicTariffCtx.title || config.ticket.feria)
       : config.ticket.feria
     const ticketLugar = dynamicTariffCtx
       ? (config.sello.eventos?.[0]?.localidad || config.ticket.lugar)
@@ -918,14 +953,11 @@ export async function generateSalePdfs(
       }
     }
 
-    // Calculate actual ticket heights based on number of active items
-    const nitems = countActiveItems(items)
-    const ticketHeightMm = calcTicketHeightMm(nitems)
-    const ticketCajaHeightMm = calcTicketCajaHeightMm(nitems)
-    const ticketMasterHeightMm = calcTicketMasterHeightMm(nitems)
+    // Calculate actual ticket heights based on content
+    const ticketMasterHeightMm = calcTicketMasterHeightMm(countActiveItems(items))
 
     // Main ticket
-    const ticketBuffer = await genTicket({
+    const mainTicketParams = {
       fechaTicket,
       modoTicket,
       modelo1Ticket,
@@ -942,7 +974,9 @@ export async function generateSalePdfs(
       l1: config.ticket.l1,
       l2: config.ticket.l2,
       l3: config.ticket.l3
-    })
+    }
+    const ticketHeightMm = calcActualTicketHeight(mainTicketParams)
+    const ticketBuffer = await genTicket(mainTicketParams)
     pdfs.push({
       buffer: ticketBuffer,
       target: 'ticket',
@@ -953,7 +987,7 @@ export async function generateSalePdfs(
 
     // Copy ticket (ticket caja) — when configured
     if (config.ticket.ImprimeCopiaTicket === 'S') {
-      const ticketCajaBuffer = await genTicketCaja({
+      const ticketCajaParams = {
         items,
         idCliente: config.codigo.cliente,
         nombreMaquina: config.codigo.maquina,
@@ -962,7 +996,9 @@ export async function generateSalePdfs(
         modoTicket: config.ticket.tituloCopia || 'COPIA Factura Simplificada',
         modelo1Ticket,
         modelo2Ticket
-      })
+      }
+      const ticketCajaHeightMm = calcActualTicketCajaHeight(ticketCajaParams)
+      const ticketCajaBuffer = await genTicketCaja(ticketCajaParams)
       pdfs.push({
         buffer: ticketCajaBuffer,
         target: 'ticket',
@@ -1017,8 +1053,7 @@ export async function generateSalePdfs(
               cantidad: i === idx ? 1 : 0
             }))
 
-            const singleTiraHeightMm = calcTicketHeightMm(1)
-            const singleTiraBuffer = await genTicket({
+            const singleTiraParams = {
               fechaTicket,
               modoTicket,
               modelo1Ticket,
@@ -1035,7 +1070,9 @@ export async function generateSalePdfs(
               l1: config.ticket.l1,
               l2: config.ticket.l2,
               l3: config.ticket.l3
-            })
+            }
+            const singleTiraHeightMm = calcActualTicketHeight(singleTiraParams)
+            const singleTiraBuffer = await genTicket(singleTiraParams)
             pdfs.push({
               buffer: singleTiraBuffer,
               target: 'ticket',

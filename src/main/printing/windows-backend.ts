@@ -58,6 +58,83 @@ function escapePsName(name: string): string {
 // ─── SumatraPDF Path Resolution ──────────────────────────────────────────────
 
 /**
+ * Parses a media string like "Custom.78x177mm" into width and height in tenths of mm.
+ * Returns null if the media string doesn't match the expected format.
+ */
+function parseCustomMedia(media: string): { widthTenths: number; heightTenths: number } | null {
+  const match = media.match(/^Custom\.(\d+)x(\d+)mm$/)
+  if (!match) return null
+  return { widthTenths: parseInt(match[1], 10) * 10, heightTenths: parseInt(match[2], 10) * 10 }
+}
+
+/**
+ * Configures the Windows printer driver DEVMODE to set a custom paper size.
+ * This is required for Brother TD-4100N (and similar thermal printers) where
+ * SumatraPDF's paper= parameter doesn't work and the driver must be
+ * pre-configured with the correct paper dimensions before printing.
+ *
+ * Uses the Win32 API (OpenPrinter, DocumentProperties, SetPrinter) via
+ * an external PowerShell script (resources/set-paper-size.ps1).
+ */
+async function configurePrinterPaperSize(
+  printerName: string,
+  widthTenths: number,
+  heightTenths: number,
+  executor: WindowsCommandExecutor
+): Promise<void> {
+  // Resolve script path — works both in dev and packaged Electron app
+  let scriptPath = ''
+  const { join } = require('path')
+  const { existsSync } = require('fs')
+
+  // Packaged app: extraResources are in process.resourcesPath
+  if (process.resourcesPath) {
+    const packaged = join(process.resourcesPath, 'set-paper-size.ps1')
+    if (existsSync(packaged)) {
+      scriptPath = packaged
+    }
+  }
+
+  // Dev mode: resources folder relative to project root
+  if (!scriptPath) {
+    const devPath = join(__dirname, '..', '..', 'resources', 'set-paper-size.ps1')
+    if (existsSync(devPath)) {
+      scriptPath = devPath
+    }
+  }
+
+  // Fallback: scripts folder (test scripts)
+  if (!scriptPath) {
+    const testPath = join(__dirname, '..', '..', 'scripts', 'set-paper-size.ps1')
+    if (existsSync(testPath)) {
+      scriptPath = testPath
+    }
+  }
+
+  // Another dev fallback (deeper nesting)
+  if (!scriptPath) {
+    const deepPath = join(__dirname, '..', '..', '..', 'resources', 'set-paper-size.ps1')
+    if (existsSync(deepPath)) {
+      scriptPath = deepPath
+    }
+  }
+
+  if (!existsSync(scriptPath)) {
+    // Can't find the script — skip silently
+    return
+  }
+
+  const escapedPrinter = printerName.replace(/"/g, '`"')
+  const command = `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}" -PrinterName "${escapedPrinter}" -WidthTenthsMm ${widthTenths} -HeightTenthsMm ${heightTenths}`
+
+  try {
+    await executor.exec(command, { timeout: 10000 })
+  } catch {
+    // Non-fatal: if we can't configure the paper size, we still try to print
+  }
+}
+
+/**
  * Resolves the path to SumatraPDF executable bundled with pdf-to-printer.
  * In an Electron packaged app, the path needs to account for asar unpacking.
  */
@@ -111,8 +188,26 @@ export class WindowsBackend implements PrinterBackend {
     try {
       writeFileSync(tempFile, pdfBuffer)
 
+      // For custom media sizes (tickets), configure the printer driver's paper size
+      // before printing. This is required for Brother TD-4100N and similar thermal
+      // printers that don't respond to SumatraPDF's paper= parameter.
+      const customMedia = parseCustomMedia(options.media)
+      if (customMedia) {
+        await configurePrinterPaperSize(
+          printerName,
+          customMedia.widthTenths,
+          customMedia.heightTenths,
+          this.cmd
+        )
+        // Wait for the driver to apply the new paper size before sending the print job
+        await new Promise((resolve) => setTimeout(resolve, 500))
+      }
+
       // Invoke SumatraPDF directly
       const sumatraPath = getSumatraPdfPath()
+      
+      // Build print-settings: noscale prints at 100% original size.
+      // The printer driver's paper size must be pre-configured to match the PDF page.
       const args = [
         '-print-to', printerName,
         '-print-settings', 'noscale',
@@ -121,6 +216,12 @@ export class WindowsBackend implements PrinterBackend {
       ]
 
       await this.cmd.execFile(sumatraPath, args, { timeout: 30000 })
+
+      // Wait for the spooler to pick up the job with the correct paper size
+      // before allowing the next job to reconfigure the driver
+      if (customMedia) {
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+      }
 
       // Clean up after delay
       setTimeout(() => {

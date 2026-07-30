@@ -108,6 +108,39 @@ export function registerPrinterHandlers(): void {
   })
 
   /**
+   * Pauses a specific printer target — blocks printing to that target only.
+   */
+  handleIpc('printer:pauseTarget', async (target: unknown): Promise<{ success: boolean }> => {
+    const typedTarget = target as PrinterTarget
+    if (!['printer1', 'printer2', 'ticket'].includes(typedTarget)) {
+      return { success: false }
+    }
+    const printerManager = getPrinterManager()
+    await printerManager.pause(typedTarget)
+    console.log(`[Printer] Target "${typedTarget}" paused`)
+    return { success: true }
+  })
+
+  /**
+   * Resumes a specific printer target — unblocks printing to that target.
+   */
+  handleIpc('printer:resumeTarget', async (target: unknown): Promise<{ success: boolean }> => {
+    const typedTarget = target as PrinterTarget
+    if (!['printer1', 'printer2', 'ticket'].includes(typedTarget)) {
+      return { success: false }
+    }
+    const printerManager = getPrinterManager()
+    await printerManager.resume(typedTarget)
+
+    // Retry error jobs for this target
+    const queueService = getPrintQueueService()
+    queueService.retryErrorsByTarget(typedTarget)
+
+    console.log(`[Printer] Target "${typedTarget}" resumed`)
+    return { success: true }
+  })
+
+  /**
    * Returns the current print queue from the database.
    * Maps jobs to the PrintJobInfo interface for the renderer.
    */

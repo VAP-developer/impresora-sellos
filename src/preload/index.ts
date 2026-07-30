@@ -400,6 +400,8 @@ export interface ElectronAPI {
     print(config: AppConfig, quantities: KioskoQuantities, profile: string): Promise<void>
     pause(): Promise<void>
     resume(): Promise<void>
+    pauseTarget(target: string): Promise<{ success: boolean }>
+    resumeTarget(target: string): Promise<{ success: boolean }>
     getQueue(): Promise<PrintJob[]>
     discover(): Promise<DiscoveredPrinter[]>
     assign(target: 'printer1' | 'printer2' | 'ticket', uri: string): Promise<{ success: boolean; error?: string }>
@@ -487,6 +489,8 @@ const api: ElectronAPI = {
       ipcRenderer.invoke('printer:print', config, quantities, profile),
     pause: () => ipcRenderer.invoke('printer:pause'),
     resume: () => ipcRenderer.invoke('printer:resume'),
+    pauseTarget: (target: string) => ipcRenderer.invoke('printer:pauseTarget', target),
+    resumeTarget: (target: string) => ipcRenderer.invoke('printer:resumeTarget', target),
     getQueue: () => ipcRenderer.invoke('printer:getQueue'),
     discover: () => ipcRenderer.invoke('printer:discover'),
     assign: (target, uri) => ipcRenderer.invoke('printer:assign', target, uri),

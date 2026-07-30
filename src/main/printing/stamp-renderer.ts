@@ -357,13 +357,11 @@ function drawOverlay(doc: PDFKit.PDFDocument, imageSource: string | null | undef
 }
 
 /**
- * Computes the logo PNG placement box, anchored to the right of the
- * fecha/localidad text block with a fixed gap.
+ * Computes the logo PNG placement box.
  *
- * The X origin is the widest of the fecha/localidad lines plus the gap, so the
- * logo never overlaps the text regardless of how long the event name or date is.
- * The box spans vertically to cover the fecha and localidad lines, and the image
- * is scaled to fit inside it while preserving its aspect ratio.
+ * The logo is positioned relative to the text block but scaled 3× larger than
+ * the original text-height-based box, shifted 5mm down and 10mm to the left
+ * to give it more visual presence on the label.
  *
  * Exported for testing.
  */
@@ -378,21 +376,24 @@ export function computeLogoBox(
   const eventoWidth = doc.widthOfString(evento)
   const textBlockWidth = Math.max(fechaWidth, eventoWidth)
 
-  // Right edge of the text block, then the required 5mm gap
-  const x = TEXT_LEFT_MM * MM_TO_PT + textBlockWidth + LOGO_TEXT_GAP_MM * MM_TO_PT
+  // X position: right of the text block + gap, shifted left
+  const baseX = TEXT_LEFT_MM * MM_TO_PT + textBlockWidth + LOGO_TEXT_GAP_MM * MM_TO_PT
+  const x = baseX - 20 * MM_TO_PT
 
-  // Vertical span: from the top of the fecha line down to the bottom of the localidad line
+  // Vertical: use bottomToTop for the same coordinate system as text
   const top = bottomToTop(FECHA_Y_MM, FECHA_LOCALIDAD_FONT_SIZE)
   const bottom = bottomToTop(LOCALIDAD_Y_MM, FECHA_LOCALIDAD_FONT_SIZE) + FECHA_LOCALIDAD_FONT_SIZE
-  const height = bottom - top
+  const baseHeight = bottom - top
+  const height = baseHeight * 5
+  const y = top - 10 * MM_TO_PT
 
-  // Remaining horizontal room up to the right margin of the label
-  const width = STAMP_WIDTH - TEXT_RIGHT_MARGIN_MM * MM_TO_PT - x
+  // Width scaled proportionally, capped to available space
+  const maxWidth = STAMP_WIDTH - TEXT_RIGHT_MARGIN_MM * MM_TO_PT - x
+  const width = Math.min(baseHeight * 3 * 3, maxWidth)
 
-  // No usable space left (e.g. extremely long texts) → skip the logo
   if (width <= 0 || height <= 0) return null
 
-  return { x, y: top, width, height }
+  return { x, y, width, height }
 }
 
 /**
@@ -509,8 +510,8 @@ export async function renderStamp(params: StampRenderParams): Promise<Buffer> {
   //   Localidad evento:    39.5mm (pegado debajo de fecha)
   //   Código L1:           36mm (pegado debajo de localidad)
   //   Código L2:           32.5mm (pegado debajo de L1)
-  drawTextLeft(doc, params.tarifa, FONTS.regular, 13, TEXT_LEFT_MM, 50)
-  drawTextLeft(doc, params.tarifaDescripcion ?? '', FONTS.regular, 9, TEXT_LEFT_MM, 46.5)
+  drawTextLeft(doc, params.tarifa, FONTS.regular, 14, TEXT_LEFT_MM, 50)
+  drawTextLeft(doc, params.tarifaDescripcion ?? '', FONTS.regular, 7, TEXT_LEFT_MM, 47.5)
   drawTextLeft(
     doc,
     formatFechaMonthYear(params.fecha),
@@ -530,8 +531,8 @@ export async function renderStamp(params: StampRenderParams): Promise<Buffer> {
 
   // Código en 2 líneas: línea 1 = "P26-4ES", línea 2 = "0001-001"
   const { line1, line2 } = formatCodigoLines(params.codigo)
-  drawTextLeft(doc, line1, FONTS.regular, 8, 2, 36)
-  drawTextLeft(doc, line2, FONTS.regular, 7, 2, 32.5)
+  drawTextLeft(doc, line1, FONTS.regular, 5, 2, 35.5)
+  drawTextLeft(doc, line2, FONTS.regular, 5, 2, 33.5)
 
   // Como el "lienzo" ahora está rotado, para que el texto quede centrado
   // y vertical hay que pensar las coordenadas como si el alto y ancho
@@ -699,14 +700,14 @@ export async function renderStampMultiPage(stamps: StampRenderParams[]): Promise
 
     // Layout vertical:
     //   Nombre Tarifa → Descripción → Fecha (mes+año) → Localidad → Código L1 → Código L2
-    drawTextLeft(doc, stamp.tarifa, FONTS.regular, 13, 2, 50)
-    drawTextLeft(doc, stamp.tarifaDescripcion ?? '', FONTS.regular, 9, 2, 46.5)
+    drawTextLeft(doc, stamp.tarifa, FONTS.regular, 14, 2, 50)
+    drawTextLeft(doc, stamp.tarifaDescripcion ?? '', FONTS.regular, 7, 2, 47.5)
     drawTextLeft(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 2, 43)
     drawTextLeft(doc, stamp.evento, FONTS.regular, 9, 2, 39.5)
 
     const { line1, line2 } = formatCodigoLines(stamp.codigo)
-    drawTextLeft(doc, line1, FONTS.regular, 8, 2, 36)
-    drawTextLeft(doc, line2, FONTS.regular, 7, 2, 32.5)
+    drawTextLeft(doc, line1, FONTS.regular, 5, 2, 35.5)
+    drawTextLeft(doc, line2, FONTS.regular, 5, 2, 33.5)
   })
 
   doc.end()

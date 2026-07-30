@@ -195,6 +195,14 @@ export async function resumePrinter(): Promise<void> {
   return getAPI().printer.resume()
 }
 
+export async function pausePrinterTarget(target: 'printer1' | 'printer2' | 'ticket'): Promise<{ success: boolean }> {
+  return getAPI().printer.pauseTarget(target)
+}
+
+export async function resumePrinterTarget(target: 'printer1' | 'printer2' | 'ticket'): Promise<{ success: boolean }> {
+  return getAPI().printer.resumeTarget(target)
+}
+
 export async function getPrintQueue(): Promise<PrintJob[]> {
   return getAPI().printer.getQueue()
 }

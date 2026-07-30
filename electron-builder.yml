@@ -17,6 +17,8 @@ extraResources:
     to: images
     filter:
       - "**/*"
+  - from: resources/set-paper-size.ps1
+    to: set-paper-size.ps1
   - from: src/main/database/migrations
     to: migrations
     filter:

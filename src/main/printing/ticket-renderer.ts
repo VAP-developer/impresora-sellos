@@ -241,6 +241,26 @@ function drawCentered(
 }
 
 /**
+ * Draws centered text with word-wrap support.
+ * Uses a max width (with margins) and returns the actual height in points.
+ */
+function drawCenteredWrapped(
+  doc: PDFKit.PDFDocument,
+  text: string,
+  fontName: string,
+  fontSize: number,
+  y: number,
+  pageWidth: number,
+  marginX: number
+): number {
+  const maxWidth = pageWidth - 2 * marginX
+  doc.font(fontName).fontSize(fontSize)
+  const textHeight = doc.heightOfString(text, { width: maxWidth, align: 'center' })
+  doc.text(text, marginX, y, { width: maxWidth, align: 'center' })
+  return textHeight
+}
+
+/**
  * Draws left-aligned text.
  * @returns The actual height used by the text
  */
@@ -405,18 +425,27 @@ export function calcTicketHeightMm(numItems: number): number {
  * Calculates actual content height by measuring text in a temporary document.
  * This provides accurate height calculations before creating the final PDF.
  */
-function calcActualTicketHeight(params: GenTicketParams): number {
+export function calcActualTicketHeight(params: GenTicketParams): number {
   const tempDoc = new PDFDocument({ size: [TICKET_WIDTH, 1000 * MM_TO_PT], margin: 0 })
   registerFonts(tempDoc)
   
-  const { items, productos, modelo1Ticket, modelo2Ticket } = params
+  const { items, productos, modelo1Ticket, modelo2Ticket, feria } = params
   
   let totalHeight = 0
   
   // Fixed sections
   totalHeight += TICKET_MARGIN_TOP
   totalHeight += TICKET_LOGO_HEIGHT
-  totalHeight += TICKET_HEADER_HEIGHT
+  
+  // Measure title height dynamically (may wrap)
+  const titleMaxWidth = TICKET_WIDTH - 6 * MM_TO_PT
+  tempDoc.font(FONTS.bold).fontSize(12)
+  const titleHeightPt = tempDoc.heightOfString(feria, { width: titleMaxWidth, align: 'center' })
+  const titleHeightMm = titleHeightPt / MM_TO_PT
+  // Header = title height + remaining fixed fields (lugar, empresa, cif, cp, fecha, modo)
+  // Fixed part after title: 4+3+3+4+4+6 = 24mm
+  totalHeight += Math.max(5, titleHeightMm + 1) + 24
+  
   totalHeight += TICKET_COLUMNS_HEIGHT
   
   // Variable item rows - measure actual text height
@@ -452,11 +481,11 @@ function calcActualTicketHeight(params: GenTicketParams): number {
 // Section heights for genTicket (in mm)
 const TICKET_MARGIN_TOP = 5
 const TICKET_LOGO_HEIGHT = 24
-const TICKET_HEADER_HEIGHT = 32
+const TICKET_HEADER_HEIGHT = 29
 const TICKET_COLUMNS_HEIGHT = 5
 const TICKET_ITEM_ROW_HEIGHT = 3.5
 const TICKET_TOTAL_HEIGHT = 8
-const TICKET_FOOTER_HEIGHT = 20
+const TICKET_FOOTER_HEIGHT = 16
 const TICKET_MARGIN_BOTTOM = 5
 
 /**
@@ -583,8 +612,10 @@ export async function genTicket(params: GenTicketParams): Promise<Buffer> {
   // Background watermark (behind header content)
   drawImage(doc, 'fondoticketori.png', 5 * MM_TO_PT, y * MM_TO_PT, 20 * MM_TO_PT)
 
-  drawCentered(doc, feria, FONTS.bold, 12, y * MM_TO_PT, pageWidth)
-  y += 5
+  // Title (event name) — wraps if too long for the ticket width
+  const titleHeightPt = drawCenteredWrapped(doc, feria, FONTS.bold, 12, y * MM_TO_PT, pageWidth, 3 * MM_TO_PT)
+  const titleHeightMm = titleHeightPt / MM_TO_PT
+  y += Math.max(5, titleHeightMm + 1)
   drawCentered(doc, lugar, FONTS.bold, 10, y * MM_TO_PT, pageWidth)
   y += 4
   drawCentered(doc, empresa, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth)
@@ -593,9 +624,7 @@ export async function genTicket(params: GenTicketParams): Promise<Buffer> {
   y += 3
   drawCentered(doc, cp, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth)
   y += 4
-  drawCentered(doc, 'Fecha', FONTS.condensed, 8, y * MM_TO_PT, pageWidth)
-  y += 3
-  drawCentered(doc, fechaTicket, FONTS.condensed, 8, y * MM_TO_PT, pageWidth)
+  drawCentered(doc, `Fecha ${fechaTicket}`, FONTS.condensed, 8, y * MM_TO_PT, pageWidth)
   y += 4
   drawLeft(doc, modoTicket, FONTS.bold, 6.5, 5 * MM_TO_PT, y * MM_TO_PT)
   y += 6 // Remaining space to complete TICKET_HEADER_HEIGHT
@@ -655,10 +684,6 @@ export async function genTicket(params: GenTicketParams): Promise<Buffer> {
   // ─── Section 7: Footer ───
   drawLine(doc, 5 * MM_TO_PT, y * MM_TO_PT, pageWidth - 2 * 5 * MM_TO_PT)
   y += 4
-  const clienteStr = formatClientId(idCliente)
-  const sessionText = `${nombreMaquina} - Sesión: ${clienteStr}`
-  drawCentered(doc, sessionText, FONTS.condensed, 9, y * MM_TO_PT, pageWidth)
-  y += 4
   drawCentered(doc, l1, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth)
   y += 4
   drawCentered(doc, l2, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth)
@@ -675,7 +700,7 @@ export async function genTicket(params: GenTicketParams): Promise<Buffer> {
 /**
  * Calculates actual content height for genTicketCaja by measuring text in a temporary document.
  */
-function calcActualTicketCajaHeight(params: GenTicketCajaParams): number {
+export function calcActualTicketCajaHeight(params: GenTicketCajaParams): number {
   const tempDoc = new PDFDocument({ size: [TICKET_WIDTH, 1000 * MM_TO_PT], margin: 0 })
   registerFonts(tempDoc)
   

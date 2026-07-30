@@ -1113,6 +1113,49 @@ function getWindowsPrinterName(printerUri) {
 function escapePsName(name) {
   return name.replace(/'/g, "''");
 }
+function parseCustomMedia(media) {
+  const match = media.match(/^Custom\.(\d+)x(\d+)mm$/);
+  if (!match) return null;
+  return { widthTenths: parseInt(match[1], 10) * 10, heightTenths: parseInt(match[2], 10) * 10 };
+}
+async function configurePrinterPaperSize(printerName, widthTenths, heightTenths, executor) {
+  let scriptPath = "";
+  const { join } = require("path");
+  const { existsSync } = require("fs");
+  if (process.resourcesPath) {
+    const packaged = join(process.resourcesPath, "set-paper-size.ps1");
+    if (existsSync(packaged)) {
+      scriptPath = packaged;
+    }
+  }
+  if (!scriptPath) {
+    const devPath = join(__dirname, "..", "..", "resources", "set-paper-size.ps1");
+    if (existsSync(devPath)) {
+      scriptPath = devPath;
+    }
+  }
+  if (!scriptPath) {
+    const testPath = join(__dirname, "..", "..", "scripts", "set-paper-size.ps1");
+    if (existsSync(testPath)) {
+      scriptPath = testPath;
+    }
+  }
+  if (!scriptPath) {
+    const deepPath = join(__dirname, "..", "..", "..", "resources", "set-paper-size.ps1");
+    if (existsSync(deepPath)) {
+      scriptPath = deepPath;
+    }
+  }
+  if (!existsSync(scriptPath)) {
+    return;
+  }
+  const escapedPrinter = printerName.replace(/"/g, '`"');
+  const command = `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}" -PrinterName "${escapedPrinter}" -WidthTenthsMm ${widthTenths} -HeightTenthsMm ${heightTenths}`;
+  try {
+    await executor.exec(command, { timeout: 1e4 });
+  } catch {
+  }
+}
 function getSumatraPdfPath() {
   const { join } = require("path");
   let sumatraPath = join(
@@ -1151,6 +1194,16 @@ class WindowsBackend {
     const tempFile = join(tempDir, `${jobName}_${Date.now()}.pdf`);
     try {
       writeFileSync(tempFile, pdfBuffer);
+      const customMedia = parseCustomMedia(options.media);
+      if (customMedia) {
+        await configurePrinterPaperSize(
+          printerName,
+          customMedia.widthTenths,
+          customMedia.heightTenths,
+          this.cmd
+        );
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
       const sumatraPath = getSumatraPdfPath();
       const args = [
         "-print-to",
@@ -1161,6 +1214,9 @@ class WindowsBackend {
         tempFile
       ];
       await this.cmd.execFile(sumatraPath, args, { timeout: 3e4 });
+      if (customMedia) {
+        await new Promise((resolve) => setTimeout(resolve, 1e3));
+      }
       setTimeout(() => {
         try {
           unlinkSync(tempFile);
@@ -1782,7 +1838,7 @@ class PrintQueueService {
       };
     }
     return {
-      media: buildTicketMedia,
+      media: STAMP_MEDIA,
       orientation: STAMP_ORIENTATION,
       jobName: `${job.pdfType}_${job.id}`
     };
@@ -1998,6 +2054,28 @@ function registerPrinterHandlers() {
       queueService.retryErrorsByTarget(target);
     }
     console.log("[Printer] All printers resumed, error jobs retried");
+  });
+  handleIpc("printer:pauseTarget", async (target) => {
+    const typedTarget = target;
+    if (!["printer1", "printer2", "ticket"].includes(typedTarget)) {
+      return { success: false };
+    }
+    const printerManager2 = getPrinterManager();
+    await printerManager2.pause(typedTarget);
+    console.log(`[Printer] Target "${typedTarget}" paused`);
+    return { success: true };
+  });
+  handleIpc("printer:resumeTarget", async (target) => {
+    const typedTarget = target;
+    if (!["printer1", "printer2", "ticket"].includes(typedTarget)) {
+      return { success: false };
+    }
+    const printerManager2 = getPrinterManager();
+    await printerManager2.resume(typedTarget);
+    const queueService = getPrintQueueService();
+    queueService.retryErrorsByTarget(typedTarget);
+    console.log(`[Printer] Target "${typedTarget}" resumed`);
+    return { success: true };
   });
   handleIpc("printer:getQueue", () => {
     const jobs = queueRepo.getAll();
@@ -2406,8 +2484,6 @@ class TariffGroupsRepository {
     return rows.map((r) => r.id);
   }
 }
-const MAX_EVENT_TARIFFS = 8;
-const MAX_EVENT_STRIPS = 4;
 class EventosRepository {
   db;
   constructor(db2) {
@@ -2454,23 +2530,9 @@ class EventosRepository {
     return row ? this.parseEventoRow(row) : null;
   }
   /**
-   * Validates tariff selection constraints.
-   */
-  validateTariffSelection(input) {
-    const tariffCount = input.selected_tariff_ids?.length ?? 0;
-    const stripCount = input.selected_strip_ids?.length ?? 0;
-    if (tariffCount > MAX_EVENT_TARIFFS) {
-      throw new Error(`Máximo ${MAX_EVENT_TARIFFS} tarifas individuales por evento`);
-    }
-    if (stripCount > MAX_EVENT_STRIPS) {
-      throw new Error(`Máximo ${MAX_EVENT_STRIPS} tiras por evento`);
-    }
-  }
-  /**
    * Creates a new event. Returns the created event with its ID.
    */
   create(input) {
-    this.validateTariffSelection(input);
     const selectedTariffIds = JSON.stringify(input.selected_tariff_ids ?? []);
     const selectedStripIds = JSON.stringify(input.selected_strip_ids ?? []);
     const stmt = this.db.prepare(`
@@ -2499,7 +2561,6 @@ class EventosRepository {
   update(id, input) {
     const existing = this.getById(id);
     if (!existing) return null;
-    this.validateTariffSelection(input);
     const updated = {
       year: input.year ?? existing.year,
       codigo: input.codigo ?? existing.codigo,
@@ -3049,13 +3110,17 @@ function computeLogoBox(doc, fecha, evento) {
   const fechaWidth = doc.widthOfString(formatFechaMonthYear(fecha));
   const eventoWidth = doc.widthOfString(evento);
   const textBlockWidth = Math.max(fechaWidth, eventoWidth);
-  const x = TEXT_LEFT_MM * MM_TO_PT$1 + textBlockWidth + LOGO_TEXT_GAP_MM * MM_TO_PT$1;
+  const baseX = TEXT_LEFT_MM * MM_TO_PT$1 + textBlockWidth + LOGO_TEXT_GAP_MM * MM_TO_PT$1;
+  const x = baseX - 20 * MM_TO_PT$1;
   const top = bottomToTop(FECHA_Y_MM, FECHA_LOCALIDAD_FONT_SIZE);
   const bottom = bottomToTop(LOCALIDAD_Y_MM, FECHA_LOCALIDAD_FONT_SIZE) + FECHA_LOCALIDAD_FONT_SIZE;
-  const height = bottom - top;
-  const width = STAMP_WIDTH - TEXT_RIGHT_MARGIN_MM * MM_TO_PT$1 - x;
+  const baseHeight = bottom - top;
+  const height = baseHeight * 5;
+  const y = top - 10 * MM_TO_PT$1;
+  const maxWidth = STAMP_WIDTH - TEXT_RIGHT_MARGIN_MM * MM_TO_PT$1 - x;
+  const width = Math.min(baseHeight * 3 * 3, maxWidth);
   if (width <= 0 || height <= 0) return null;
-  return { x, y: top, width, height };
+  return { x, y, width, height };
 }
 function drawLogoPng(doc, imageSource, fecha, evento) {
   if (!imageSource) return;
@@ -3107,13 +3172,13 @@ async function renderStampMultiPage(stamps) {
     } else {
       drawOverlay(doc, stamp.overlayImage);
     }
-    drawTextLeft(doc, stamp.tarifa, FONTS.regular, 13, 2, 50);
-    drawTextLeft(doc, stamp.tarifaDescripcion ?? "", FONTS.regular, 9, 2, 46.5);
+    drawTextLeft(doc, stamp.tarifa, FONTS.regular, 14, 2, 50);
+    drawTextLeft(doc, stamp.tarifaDescripcion ?? "", FONTS.regular, 7, 2, 47.5);
     drawTextLeft(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 2, 43);
     drawTextLeft(doc, stamp.evento, FONTS.regular, 9, 2, 39.5);
     const { line1, line2 } = formatCodigoLines(stamp.codigo);
-    drawTextLeft(doc, line1, FONTS.regular, 8, 2, 36);
-    drawTextLeft(doc, line2, FONTS.regular, 7, 2, 32.5);
+    drawTextLeft(doc, line1, FONTS.regular, 5, 2, 35.5);
+    drawTextLeft(doc, line2, FONTS.regular, 5, 2, 33.5);
   });
   doc.end();
   return result;
@@ -3192,6 +3257,13 @@ function drawCentered(doc, text, fontName, fontSize, y, pageWidth) {
   const x = (pageWidth - textWidth) / 2;
   doc.text(text, x, y, { lineBreak: false });
 }
+function drawCenteredWrapped(doc, text, fontName, fontSize, y, pageWidth, marginX) {
+  const maxWidth = pageWidth - 2 * marginX;
+  doc.font(fontName).fontSize(fontSize);
+  const textHeight = doc.heightOfString(text, { width: maxWidth, align: "center" });
+  doc.text(text, marginX, y, { width: maxWidth, align: "center" });
+  return textHeight;
+}
 function drawLeft(doc, text, fontName, fontSize, x, y, maxWidth) {
   doc.font(fontName).fontSize(fontSize);
   const options = maxWidth ? { width: maxWidth, lineBreak: true } : { lineBreak: false };
@@ -3241,17 +3313,18 @@ function collectPdf(doc) {
     doc.on("error", reject);
   });
 }
-function calcTicketHeightMm(numItems) {
-  return TICKET_MARGIN_TOP + TICKET_LOGO_HEIGHT + TICKET_HEADER_HEIGHT + TICKET_COLUMNS_HEIGHT + numItems * TICKET_ITEM_ROW_HEIGHT + TICKET_TOTAL_HEIGHT + TICKET_FOOTER_HEIGHT + TICKET_MARGIN_BOTTOM;
-}
 function calcActualTicketHeight(params) {
   const tempDoc = new PDFDocument({ size: [TICKET_WIDTH, 1e3 * MM_TO_PT], margin: 0 });
   registerFonts(tempDoc);
-  const { items, productos, modelo1Ticket, modelo2Ticket } = params;
+  const { items, productos, modelo1Ticket, modelo2Ticket, feria } = params;
   let totalHeight = 0;
   totalHeight += TICKET_MARGIN_TOP;
   totalHeight += TICKET_LOGO_HEIGHT;
-  totalHeight += TICKET_HEADER_HEIGHT;
+  const titleMaxWidth = TICKET_WIDTH - 6 * MM_TO_PT;
+  tempDoc.font(FONTS.bold).fontSize(12);
+  const titleHeightPt = tempDoc.heightOfString(feria, { width: titleMaxWidth, align: "center" });
+  const titleHeightMm = titleHeightPt / MM_TO_PT;
+  totalHeight += Math.max(5, titleHeightMm + 1) + 24;
   totalHeight += TICKET_COLUMNS_HEIGHT;
   const itemNameMaxWidth = 40 * MM_TO_PT;
   for (let index = 0; index < items.length; index++) {
@@ -3274,15 +3347,11 @@ function calcActualTicketHeight(params) {
 }
 const TICKET_MARGIN_TOP = 5;
 const TICKET_LOGO_HEIGHT = 24;
-const TICKET_HEADER_HEIGHT = 32;
 const TICKET_COLUMNS_HEIGHT = 5;
 const TICKET_ITEM_ROW_HEIGHT = 3.5;
 const TICKET_TOTAL_HEIGHT = 8;
-const TICKET_FOOTER_HEIGHT = 20;
+const TICKET_FOOTER_HEIGHT = 16;
 const TICKET_MARGIN_BOTTOM = 5;
-function calcTicketCajaHeightMm(numItems) {
-  return 5 + 14 + 38 + 5 + numItems * 3.5 + 8 + 16 + 5;
-}
 const MASTER_MARGIN_TOP = 5;
 const MASTER_LOGO_HEIGHT = 14;
 const MASTER_HEADER_HEIGHT = 36;
@@ -3330,8 +3399,9 @@ async function genTicket(params) {
   drawImageConstrained(doc, "image2.jpg", y * MM_TO_PT, logoWidth, logoHeight, pageWidth);
   y += TICKET_LOGO_HEIGHT;
   drawImage(doc, "fondoticketori.png", 5 * MM_TO_PT, y * MM_TO_PT, 20 * MM_TO_PT);
-  drawCentered(doc, feria, FONTS.bold, 12, y * MM_TO_PT, pageWidth);
-  y += 5;
+  const titleHeightPt = drawCenteredWrapped(doc, feria, FONTS.bold, 12, y * MM_TO_PT, pageWidth, 3 * MM_TO_PT);
+  const titleHeightMm = titleHeightPt / MM_TO_PT;
+  y += Math.max(5, titleHeightMm + 1);
   drawCentered(doc, lugar, FONTS.bold, 10, y * MM_TO_PT, pageWidth);
   y += 4;
   drawCentered(doc, empresa, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
@@ -3340,9 +3410,7 @@ async function genTicket(params) {
   y += 3;
   drawCentered(doc, cp, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
   y += 4;
-  drawCentered(doc, "Fecha", FONTS.condensed, 8, y * MM_TO_PT, pageWidth);
-  y += 3;
-  drawCentered(doc, fechaTicket, FONTS.condensed, 8, y * MM_TO_PT, pageWidth);
+  drawCentered(doc, `Fecha ${fechaTicket}`, FONTS.condensed, 8, y * MM_TO_PT, pageWidth);
   y += 4;
   drawLeft(doc, modoTicket, FONTS.bold, 6.5, 5 * MM_TO_PT, y * MM_TO_PT);
   y += 6;
@@ -3383,10 +3451,6 @@ async function genTicket(params) {
   drawRight(doc, formatPrice(totalImporte, currencySymbol), FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT);
   y += 4;
   drawLine(doc, 5 * MM_TO_PT, y * MM_TO_PT, pageWidth - 2 * 5 * MM_TO_PT);
-  y += 4;
-  const clienteStr = formatClientId(idCliente);
-  const sessionText = `${nombreMaquina} - Sesión: ${clienteStr}`;
-  drawCentered(doc, sessionText, FONTS.condensed, 9, y * MM_TO_PT, pageWidth);
   y += 4;
   drawCentered(doc, l1, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
   y += 4;
@@ -3742,28 +3806,54 @@ function getModelLogoPng(modelName, imagesRepo, syncRepo, fallbackLogo) {
     if (record.type) return record.type.toLowerCase() === "image/png";
     return record.data.startsWith("data:image/png");
   };
+  console.log(`[getModelLogoPng] modelName="${modelName}", syncRepo=${!!syncRepo}, fallbackLogo length=${fallbackLogo?.length ?? 0}`);
   if (modelName && syncRepo) {
     try {
       const fairs = syncRepo.getFairList();
+      console.log(`[getModelLogoPng] Fair list: ${JSON.stringify(fairs.map((f) => f.fairName))}`);
       const matchedFair = fairs.find(
         (f) => f.fairName.toLowerCase() === modelName.toLowerCase()
       );
       if (matchedFair) {
         const selloName = buildImageName(matchedFair.year, matchedFair.fairName, "sello");
         const record = imagesRepo.getFullByName(selloName);
+        console.log(`[getModelLogoPng] Matched fair "${matchedFair.fairName}", selloName="${selloName}", record exists=${!!record}, isPng=${isPng(record)}`);
         if (isPng(record)) return record.data;
+      } else {
+        console.log(`[getModelLogoPng] No fair matched for modelName="${modelName}"`);
       }
-    } catch {
+    } catch (err) {
+      console.log(`[getModelLogoPng] syncRepo error: ${err}`);
     }
   }
   if (modelName) {
     try {
       const direct = imagesRepo.getFullByName(modelName);
+      console.log(`[getModelLogoPng] Direct lookup "${modelName}": found=${!!direct}, isPng=${isPng(direct)}`);
       if (isPng(direct)) return direct.data;
     } catch {
     }
   }
-  return fallbackLogo;
+  if (fallbackLogo) {
+    console.log(`[getModelLogoPng] Returning fallback (length=${fallbackLogo.length})`);
+    return fallbackLogo;
+  }
+  if (syncRepo) {
+    try {
+      const fairs = syncRepo.getFairList();
+      for (const fair of fairs) {
+        const selloName = buildImageName(fair.year, fair.fairName, "sello");
+        const record = imagesRepo.getFullByName(selloName);
+        if (record) {
+          console.log(`[getModelLogoPng] Last resort: using sello from fair "${fair.fairName}" (${record.data.length} chars)`);
+          return record.data;
+        }
+      }
+    } catch {
+    }
+  }
+  console.log(`[getModelLogoPng] Returning null — no logo found`);
+  return null;
 }
 function buildTicketData(quantities, precios) {
   const tarifaTA = precios.tarifaTA ?? precios.tarifaA * 4;
@@ -3945,6 +4035,42 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
         }
       }
     }
+    for (const strip of dynamicTariffCtx.strips ?? []) {
+      const stripTariffs = strip.tariff_ids.map((tid) => dynamicTariffCtx.tariffs.find((t) => t.id === tid)).filter((t) => t != null);
+      if (stripTariffs.length === 0) continue;
+      for (const model of [1, 2]) {
+        const qty = dynQty[`tariff_${strip.id}_s${model}`] ?? 0;
+        if (qty <= 0) continue;
+        const background = usesBlankBackground ? null : model === 1 ? bg1 : bg2;
+        const overlay = usesBlankBackground ? null : model === 1 ? overlay1 : overlay2;
+        const logo = model === 1 ? logoPng1 : logoPng2;
+        const target = model === 1 ? "printer1" : "printer2";
+        for (let i = 0; i < qty; i++) {
+          const stamps = [];
+          for (const stripTariff of stripTariffs) {
+            stamps.push({
+              tarifa: stripTariff.name,
+              tarifaDescripcion: stripTariff.description,
+              fecha: stampFecha,
+              evento: stampEvento,
+              codigo: buildLabelCode(config, productoCounter),
+              backgroundImage: background,
+              overlayImage: overlay,
+              printLogoPng,
+              logoPngImage: logo
+            });
+            productoCounter++;
+          }
+          const pdfBuffer = await renderStampMultiPage(stamps);
+          pdfs.push({
+            buffer: pdfBuffer,
+            target,
+            pdfType: "stamp_tira",
+            description: `Tira ${strip.name} modelo${model} #${i + 1} x${stamps.length}`
+          });
+        }
+      }
+    }
   } else {
     const legacyQty = quantities;
     for (const tariff of TARIFF_DEFS) {
@@ -4045,6 +4171,18 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
       items.push({ idProducto: prodId2, cantidad: qty2 });
       productos.push({ idProducto: prodId2, modo: "S", precio: tariff.price, nombre_ticket: tariff.name });
     }
+    for (const strip of dynamicTariffCtx.strips ?? []) {
+      const stripKey1 = `tariff_${strip.id}_s1`;
+      const stripQty1 = dynQty[stripKey1] ?? 0;
+      const stripProdId1 = `D${strip.id}S1`;
+      items.push({ idProducto: stripProdId1, cantidad: stripQty1 });
+      productos.push({ idProducto: stripProdId1, modo: "T", precio: strip.price, nombre_ticket: strip.name });
+      const stripKey2 = `tariff_${strip.id}_s2`;
+      const stripQty2 = dynQty[stripKey2] ?? 0;
+      const stripProdId2 = `D${strip.id}S2`;
+      items.push({ idProducto: stripProdId2, cantidad: stripQty2 });
+      productos.push({ idProducto: stripProdId2, modo: "T", precio: strip.price, nombre_ticket: strip.name });
+    }
   } else {
     const result = buildTicketData(quantities, config.precios);
     items = result.items;
@@ -4053,10 +4191,12 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
   const hasAnyItems = items.some((item) => item.cantidad > 0);
   if (hasAnyItems) {
     const fechaTicket = getTicketDateTime(config);
-    const modoTicket = buildTicketTitle(profile, config.ticket.titulo);
+    const baseTitle = buildTicketTitle(profile, config.ticket.titulo);
+    const clienteCode = formatCliente(config.codigo.cliente);
+    const modoTicket = `${baseTitle} ${config.codigo.maquina} - ${clienteCode}`;
     const modelo1Ticket = model1Name || "Modelo 1";
     const modelo2Ticket = model2Name || "Modelo 2";
-    const ticketFeria = dynamicTariffCtx ? dynamicTariffCtx.title || config.ticket.feria : config.ticket.feria;
+    const ticketFeria = dynamicTariffCtx ? dynamicTariffCtx.eventName || dynamicTariffCtx.title || config.ticket.feria : config.ticket.feria;
     const ticketLugar = dynamicTariffCtx ? config.sello.eventos?.[0]?.localidad || config.ticket.lugar : config.ticket.lugar;
     if (imageLayerOptions?.useSecondaryPrice && dynamicTariffCtx) {
       for (const producto of productos) {
@@ -4064,14 +4204,16 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
         const matchingTariff = dynamicTariffCtx.tariffs.find((t) => t.id === tariffId);
         if (matchingTariff && matchingTariff.secondaryPrice != null) {
           producto.precio = matchingTariff.secondaryPrice;
+          continue;
+        }
+        const matchingStrip = dynamicTariffCtx.strips?.find((s) => s.id === tariffId);
+        if (matchingStrip && matchingStrip.secondaryPrice != null) {
+          producto.precio = matchingStrip.secondaryPrice;
         }
       }
     }
-    const nitems = countActiveItems(items);
-    const ticketHeightMm = calcTicketHeightMm(nitems);
-    const ticketCajaHeightMm = calcTicketCajaHeightMm(nitems);
-    const ticketMasterHeightMm = calcTicketMasterHeightMm(nitems);
-    const ticketBuffer = await genTicket({
+    const ticketMasterHeightMm = calcTicketMasterHeightMm(countActiveItems(items));
+    const mainTicketParams = {
       fechaTicket,
       modoTicket,
       modelo1Ticket,
@@ -4088,7 +4230,9 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
       l1: config.ticket.l1,
       l2: config.ticket.l2,
       l3: config.ticket.l3
-    });
+    };
+    const ticketHeightMm = calcActualTicketHeight(mainTicketParams);
+    const ticketBuffer = await genTicket(mainTicketParams);
     pdfs.push({
       buffer: ticketBuffer,
       target: "ticket",
@@ -4097,7 +4241,7 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
       ticketHeightMm
     });
     if (config.ticket.ImprimeCopiaTicket === "S") {
-      const ticketCajaBuffer = await genTicketCaja({
+      const ticketCajaParams = {
         items,
         idCliente: config.codigo.cliente,
         nombreMaquina: config.codigo.maquina,
@@ -4106,7 +4250,9 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
         modoTicket: config.ticket.tituloCopia || "COPIA Factura Simplificada",
         modelo1Ticket,
         modelo2Ticket
-      });
+      };
+      const ticketCajaHeightMm = calcActualTicketCajaHeight(ticketCajaParams);
+      const ticketCajaBuffer = await genTicketCaja(ticketCajaParams);
       pdfs.push({
         buffer: ticketCajaBuffer,
         target: "ticket",
@@ -4150,8 +4296,7 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
               idProducto: item.idProducto,
               cantidad: i === idx ? 1 : 0
             }));
-            const singleTiraHeightMm = calcTicketHeightMm(1);
-            const singleTiraBuffer = await genTicket({
+            const singleTiraParams = {
               fechaTicket,
               modoTicket,
               modelo1Ticket,
@@ -4168,7 +4313,9 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
               l1: config.ticket.l1,
               l2: config.ticket.l2,
               l3: config.ticket.l3
-            });
+            };
+            const singleTiraHeightMm = calcActualTicketHeight(singleTiraParams);
+            const singleTiraBuffer = await genTicket(singleTiraParams);
             pdfs.push({
               buffer: singleTiraBuffer,
               target: "ticket",
@@ -4360,7 +4507,26 @@ function registerSaleHandlers() {
           const selloRecord = imagesRepo.getByName(selloName);
           fondoImage = fondoRecord?.url ?? null;
           selloImage = selloRecord?.url ?? null;
+          console.log(`[Sale:LogoPng] activeFair: ${year}/${fairName}, selloName: ${selloName}, selloRecord exists: ${!!selloRecord}, selloImage length: ${selloImage?.length ?? 0}`);
+        } else {
+          console.log("[Sale:LogoPng] WARNING: No activeFair configured — attempting to load sello from first synced fair");
+          if (typedImageFlags.printLogoPng) {
+            try {
+              const syncRepo = new ImageSyncRepository();
+              const fairs = syncRepo.getFairList();
+              if (fairs.length > 0) {
+                const { year, fairName } = fairs[0];
+                const selloName = buildImageName(year, fairName, "sello");
+                const selloRecord = imagesRepo.getByName(selloName);
+                selloImage = selloRecord?.url ?? null;
+                console.log(`[Sale:LogoPng] Loaded sello from first fair: ${year}/${fairName}, selloImage length: ${selloImage?.length ?? 0}`);
+              }
+            } catch (err) {
+              console.log(`[Sale:LogoPng] Could not load from sync: ${err}`);
+            }
+          }
         }
+        console.log(`[Sale:LogoPng] imageFlags: printLogoPng=${typedImageFlags.printLogoPng}, printSello=${typedImageFlags.printSello}, printFondo=${typedImageFlags.printFondo}`);
         imageLayerOptions = {
           printFondo: typedImageFlags.printFondo,
           printSello: typedImageFlags.printSello,

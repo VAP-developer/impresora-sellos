@@ -15,6 +15,7 @@
 import { handleIpc, notifyConfigChanged } from './handlers'
 import { ConfigRepository } from '../database/repositories/config.repository'
 import { ImagesRepository } from '../database/repositories/images.repository'
+import { ImageSyncRepository } from '../database/repositories/image-sync.repository'
 import { TariffGroupsRepository } from '../database/repositories/tariff-groups.repository'
 import { EventosRepository } from '../database/repositories/eventos.repository'
 import { executeSale, cancelSale } from '../sales/sale.service'
@@ -220,7 +221,29 @@ export function registerSaleHandlers(): void {
 
           fondoImage = fondoRecord?.url ?? null
           selloImage = selloRecord?.url ?? null
+
+          console.log(`[Sale:LogoPng] activeFair: ${year}/${fairName}, selloName: ${selloName}, selloRecord exists: ${!!selloRecord}, selloImage length: ${selloImage?.length ?? 0}`)
+        } else {
+          console.log('[Sale:LogoPng] WARNING: No activeFair configured — attempting to load sello from first synced fair')
+          // Attempt to load sello from the first available synced fair
+          if (typedImageFlags.printLogoPng) {
+            try {
+              const syncRepo = new ImageSyncRepository()
+              const fairs = syncRepo.getFairList()
+              if (fairs.length > 0) {
+                const { year, fairName } = fairs[0]
+                const selloName = buildImageName(year, fairName, 'sello')
+                const selloRecord = imagesRepo.getByName(selloName)
+                selloImage = selloRecord?.url ?? null
+                console.log(`[Sale:LogoPng] Loaded sello from first fair: ${year}/${fairName}, selloImage length: ${selloImage?.length ?? 0}`)
+              }
+            } catch (err) {
+              console.log(`[Sale:LogoPng] Could not load from sync: ${err}`)
+            }
+          }
         }
+
+        console.log(`[Sale:LogoPng] imageFlags: printLogoPng=${typedImageFlags.printLogoPng}, printSello=${typedImageFlags.printSello}, printFondo=${typedImageFlags.printFondo}`)
 
         imageLayerOptions = {
           printFondo: typedImageFlags.printFondo,
