@@ -109,6 +109,10 @@ export interface GenTicketParams {
   l3: string
   /** Currency symbol (default: '€') */
   currencySymbol?: string
+  /** Fair code part 1 (e.g. "JC26") — displayed in ticket header */
+  codigoFeria1?: string
+  /** Fair code part 2 (e.g. "VAP") — displayed in ticket header */
+  codigoFeria2?: string
 }
 
 /** Parameters for genTicketCaja (cash register copy) */
@@ -626,7 +630,10 @@ export async function genTicket(params: GenTicketParams): Promise<Buffer> {
   y += 4
   drawCentered(doc, `Fecha ${fechaTicket}`, FONTS.condensed, 8, y * MM_TO_PT, pageWidth)
   y += 4
-  drawLeft(doc, modoTicket, FONTS.bold, 6.5, 5 * MM_TO_PT, y * MM_TO_PT)
+  // Draw modoTicket with feria code appended if available
+  const codigoFeriaDisplay = [params.codigoFeria1, params.codigoFeria2].filter(Boolean).join('-')
+  const modoLine = codigoFeriaDisplay ? `${modoTicket}: ${codigoFeriaDisplay}` : modoTicket
+  drawLeft(doc, modoLine, FONTS.bold, 6.5, 5 * MM_TO_PT, y * MM_TO_PT)
   y += 6 // Remaining space to complete TICKET_HEADER_HEIGHT
 
   // ─── Section 4: Column headers + separator ───

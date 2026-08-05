@@ -19,6 +19,7 @@ import PrinterSection from '@renderer/components/imprimir/PrinterSection'
 import { TariffGroupSection } from '@renderer/components/settings/TariffGroupSection'
 import { CutNumberSection } from '@renderer/components/settings/CutNumberSection'
 import { LanguageSection } from '@renderer/components/settings/LanguageSection'
+import { CodigoEspecialSection } from '@renderer/components/settings/CodigoEspecialSection'
 
 export default function SettingsView(): JSX.Element {
   const { t } = useTranslation()
@@ -27,6 +28,7 @@ export default function SettingsView(): JSX.Element {
   const [tariffOpen, setTariffOpen] = useState(false)
   const [cutOpen, setCutOpen] = useState(false)
   const [langOpen, setLangOpen] = useState(false)
+  const [codigoOpen, setCodigoOpen] = useState(true)
 
   useEffect(() => {
     loadSettings()
@@ -46,6 +48,40 @@ export default function SettingsView(): JSX.Element {
 
           {/* Section: Printer Management */}
           <PrinterSection />
+
+          {/* Section: Código Especial (Oficina) */}
+          <div>
+            <button
+              type="button"
+              className="w-full bg-[rgb(255,192,0)] p-2 rounded cursor-pointer flex items-center gap-2
+                         text-left focus:outline-none focus:ring-2 focus:ring-yellow-500"
+              onClick={() => setCodigoOpen(!codigoOpen)}
+              aria-expanded={codigoOpen}
+              aria-controls="settings-codigo-especial-content"
+            >
+              <input
+                type="checkbox"
+                checked={codigoOpen}
+                readOnly
+                className="cursor-pointer"
+                tabIndex={-1}
+                aria-hidden="true"
+              />
+              <h3 className="text-lg font-bold m-0">
+                CÓDIGO ESPECIAL (OFICINA)
+              </h3>
+            </button>
+            {codigoOpen && (
+              <div
+                id="settings-codigo-especial-content"
+                className="border border-gray-200 rounded-b p-4 bg-white"
+                role="region"
+                aria-label="Código Especial"
+              >
+                <CodigoEspecialSection />
+              </div>
+            )}
+          </div>
 
           {/* Section 1: Tariff Groups */}
           <div>

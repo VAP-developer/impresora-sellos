@@ -251,19 +251,36 @@ export default function CartControls({
       role="region"
       aria-label="Controles de cesta"
     >
-      {/* Left column: Filatelia button */}
+      {/* Left column: Oficina button (cart with strikethrough = special sale) */}
       <div className="flex flex-col items-center gap-2 mr-6">
         <button
           type="button"
-          className="w-[80px] h-[65px] bg-[rgb(24,62,117)] hover:bg-[rgb(31, 73, 133)] text-white rounded
-                     flex items-center justify-center text-xs font-bold cursor-pointer
-                     transition-colors focus:outline-none focus:ring-2 focus:ring-[rgb(24,62,117)]
+          className="w-[65px] h-[65px] bg-transparent border-none cursor-pointer p-0
+                     hover:opacity-80 transition-opacity
+                     focus:outline-none focus:ring-2 focus:ring-red-500 rounded
                      disabled:opacity-50 disabled:cursor-not-allowed"
-          aria-label="Imprimir Filatelia"
+          aria-label="Venta Oficina - código especial"
           disabled={printing}
           onClick={handlePrintFilatelia}
         >
-          Oficina
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="rgb(200,30,30)"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="w-16 h-16"
+            aria-hidden="true"
+          >
+            {/* Cart */}
+            <circle cx="9" cy="21" r="1" />
+            <circle cx="20" cy="21" r="1" />
+            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+            {/* Diagonal strikethrough */}
+            <line x1="2" y1="2" x2="22" y2="22" stroke="rgb(200,30,30)" strokeWidth="2.5" />
+          </svg>
         </button>
       </div>
 

@@ -132,60 +132,29 @@ export function formatFechaMonthYear(fecha: string): string {
 }
 
 /**
- * Transforms a stamp code from original format to two-line display format. ------------- AQUI CÓDIGO -------
+ * Transforms a stamp code into two-line display format.
  *
- * Input:  "P4ES26 CH17-0001-001"                                           LINEA 1 /  LINEA
- * Output: { line1: "P26-4ES", line2: "0001-001" }
+ * New format:
+ *   Input:  "J26-8GI 0001-001"
+ *   Output: { line1: "J26-8GI", line2: "0001-001" }
  *
- * Format breakdown:
- *   Original: P{mes}{pais}{año} {maquina}-{serie}-{num}
- *   Line 1:   P{año}-{mes}{pais}
- *   Line 2:   {serie}-{num}  (stamp code, mocked for now)
+ * Legacy format (backwards compat):
+ *   Input:  "P4ES26 CH17-0001-001"
+ *   Output: { line1: "CH17-4ES", line2: "0001-001" }
+ *
+ * The code is always split on the space character:
+ * - Line 1: everything before the space (the fair code identifier)
+ * - Line 2: everything after the space (the serial numbers)
  */
 export function formatCodigoLines(codigo: string): { line1: string; line2: string } {
-  // Expected format: "P4ES26 CH17-0001-001"
-  // Parts[0] = "P4ES26", Parts[1] = "CH17-0001-001"
   const spaceIdx = codigo.indexOf(' ')
   if (spaceIdx === -1) {
     // Fallback: can't parse, return as-is on one line
     return { line1: codigo, line2: '' }
   }
 
-  const prefix = codigo.substring(0, spaceIdx) // e.g. "P4ES26"
-  const suffix = codigo.substring(spaceIdx + 1) // e.g. "CH17-0001-001"
-
-
-  // Parse prefix: P{mes}{pais2}{año2} → "P4ES26"
-  // P = prefix[0]
-  // mes = prefix[1] (single digit/char: 1-9, O, N, D)
-  // pais = prefix[2..3] (2 chars, e.g. "ES")
-  // año = prefix[4..5] (2 chars, e.g. "26")
-  if (prefix.length < 6 || prefix[0] !== 'P') {
-    return { line1: codigo, line2: '' }
-  }
-
-  const mes = prefix[1]
-  const pais = prefix.substring(2, 4)
-  const anio = prefix.substring(4, 6)
-  const codigoFeria = suffix.substring(0, 4)
-
-
-  // Line 1: P{año}-{mes}{pais}
-  //const line1 = `P${anio}-${mes}${pais}`
-  const line1 = `${codigoFeria}-${mes}${pais}`
-
-  // Line 2: extract serie-num from suffix (last two dash-separated parts)
-  // suffix = "CH17-0001-001" → we want "0001-001"
-  const dashParts = suffix.split('-')
-  let line2: string
-  if (dashParts.length >= 3) {
-    // Take last two parts: "0001" and "001"
-    line2 = `${dashParts[dashParts.length - 2]}-${dashParts[dashParts.length - 1]}`
-  } else if (dashParts.length === 2) {
-    line2 = `${dashParts[0]}-${dashParts[1]}`
-  } else {
-    line2 = suffix
-  }
+  const line1 = codigo.substring(0, spaceIdx)
+  const line2 = codigo.substring(spaceIdx + 1)
 
   return { line1, line2 }
 }
@@ -193,6 +162,15 @@ export function formatCodigoLines(codigo: string): { line1: string; line2: strin
 // ─────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────
+
+/**
+ * Layout options for stamp text positioning relative to the image.
+ * - 'derecha': Image on the right, text on the left (default)
+ * - 'izquierda': Image on the left, text on the right
+ * - 'inferior': Image on the bottom, text split top left/right
+ * - 'superior': Image on the top, text split bottom left/right
+ */
+export type StampLayout = 'derecha' | 'izquierda' | 'inferior' | 'superior'
 
 /** Input parameters for rendering a standard stamp (with background image) */
 export interface StampRenderParams {
@@ -229,6 +207,10 @@ export interface StampRenderParams {
    * Same format as backgroundImage (file path or data URI).
    */
   logoPngImage?: string | null
+  /**
+   * Layout template for text positioning. Defaults to 'derecha' if not specified.
+   */
+  layout?: StampLayout
 }
 
 /** Input parameters for rendering a special strip stamp (tira especial) */
@@ -706,47 +688,42 @@ export async function renderStampMultiPage(stamps: StampRenderParams[]): Promise
 
       // Layout vertical: DISEÑO 1 imagen DERECHA Post & Go + MOT 1 DIS 1 + MOT 2 DIS 2 --------------- IMG DCHA
       //   Nombre Tarifa → Descripción → Fecha (mes+año) → Localidad → Código L1 → Código L2
-    drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12.2, 2, 50)
-    drawTextLeft(doc, stamp.tarifaDescripcion ?? '', FONTS.regular, 9, 2, 47.2)
-    drawTextLeft(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 2, 43)
-    drawTextLeft(doc, stamp.evento, FONTS.regular, 9, 2, 39.5)
-
     const { line1, line2 } = formatCodigoLines(stamp.codigo)
-    drawTextLeft(doc, line1, FONTS.regular, 5.7, 2, 35.2)
-    drawTextLeft(doc, line2, FONTS.regular, 5.7, 2, 33)
+    const layout = stamp.layout ?? 'derecha'
 
-      // Layout vertical: DISEÑO 2 imagen IZQUIERDA --------------- IMG IZDA
-      //   Nombre Tarifa → Descripción → Fecha (mes+año) → Localidad → Código L1 → Código L2
-    //drawTextRight(doc, stamp.tarifa, FONTS.regular, 12.2, 53, 50)
-    //drawTextRight(doc, stamp.tarifaDescripcion ?? '', FONTS.regular, 9, 53, 47.2)
-    //drawTextRight(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 53, 43)
-    //drawTextRight(doc, stamp.evento, FONTS.regular, 9, 53, 39.5)
-
-    //const { line1, line2 } = formatCodigoLines(stamp.codigo)
-    //drawTextRight(doc, line1, FONTS.regular, 5.7, 53, 35.2)
-    //drawTextRight(doc, line2, FONTS.regular, 5.7, 53, 33)
-
-          // Layout horizontal: DISEÑO 4 imagen INFERIOR ------------------------------------- IMG INF
-      //   Nombre Tarifa → Descripción → Fecha (mes+año) → Localidad → Código L1 → Código L2
-    //drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12.2, 2, 50)
-    //drawTextLeft(doc, stamp.tarifaDescripcion ?? '', FONTS.regular, 9, 2, 47.2)
-    //drawTextRight(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 53, 50)
-    //drawTextRight(doc, stamp.evento, FONTS.regular, 9, 53, 47.2)
-
-    //const { line1, line2 } = formatCodigoLines(stamp.codigo)
-    //drawTextLeft(doc, line1, FONTS.regular, 5.7, 22, 46)
-    //drawTextLeft(doc, line2, FONTS.regular, 5.7, 22, 44.4)
-
-              // Layout horizontal: DISEÑO 5 imagen SUPERIOR ------------------------------------- IMG SUP
-      //   Nombre Tarifa → Descripción → Fecha (mes+año) → Localidad → Código L1 → Código L2
-    //drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12.2, 2, 36.8)
-    //drawTextLeft(doc, stamp.tarifaDescripcion ?? '', FONTS.regular, 9, 2, 34)
-    //drawTextRight(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 53, 36.8)
-    //drawTextRight(doc, stamp.evento, FONTS.regular, 9, 53, 34)
-
-    //const { line1, line2 } = formatCodigoLines(stamp.codigo)
-    //drawTextLeft(doc, line1, FONTS.regular, 5.7, 22, 35.2)
-    //drawTextLeft(doc, line2, FONTS.regular, 5.7, 22, 33)
+    if (layout === 'derecha') {
+      // Text on left, image on right
+      drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12.2, 2, 50)
+      drawTextLeft(doc, stamp.tarifaDescripcion ?? '', FONTS.regular, 9, 2, 47.2)
+      drawTextLeft(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 2, 43)
+      drawTextLeft(doc, stamp.evento, FONTS.regular, 9, 2, 39.5)
+      drawTextLeft(doc, line1, FONTS.regular, 5.7, 2, 35.2)
+      drawTextLeft(doc, line2, FONTS.regular, 5.7, 2, 33)
+    } else if (layout === 'izquierda') {
+      // Text on right, image on left
+      drawTextRight(doc, stamp.tarifa, FONTS.regular, 12.2, 53, 50)
+      drawTextRight(doc, stamp.tarifaDescripcion ?? '', FONTS.regular, 9, 53, 47.2)
+      drawTextRight(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 53, 43)
+      drawTextRight(doc, stamp.evento, FONTS.regular, 9, 53, 39.5)
+      drawTextRight(doc, line1, FONTS.regular, 5.7, 53, 35.2)
+      drawTextRight(doc, line2, FONTS.regular, 5.7, 53, 33)
+    } else if (layout === 'inferior') {
+      // Image on bottom, text on top split left/right
+      drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12.2, 2, 50)
+      drawTextLeft(doc, stamp.tarifaDescripcion ?? '', FONTS.regular, 9, 2, 47.2)
+      drawTextRight(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 53, 50)
+      drawTextRight(doc, stamp.evento, FONTS.regular, 9, 53, 47.2)
+      drawTextLeft(doc, line1, FONTS.regular, 5.7, 22, 46)
+      drawTextLeft(doc, line2, FONTS.regular, 5.7, 22, 44.4)
+    } else if (layout === 'superior') {
+      // Image on top, text on bottom split left/right
+      drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12.2, 2, 36.8)
+      drawTextLeft(doc, stamp.tarifaDescripcion ?? '', FONTS.regular, 9, 2, 34)
+      drawTextRight(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 53, 36.8)
+      drawTextRight(doc, stamp.evento, FONTS.regular, 9, 53, 34)
+      drawTextLeft(doc, line1, FONTS.regular, 5.7, 22, 35.2)
+      drawTextLeft(doc, line2, FONTS.regular, 5.7, 22, 33)
+    }
   })
 
   doc.end()

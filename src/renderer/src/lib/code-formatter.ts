@@ -106,12 +106,21 @@ export function formatLabelCode(codigo: CodigoConfig, now?: Date): string | null
   const clienteStr = formatCliente(codigo.cliente)
   if (clienteStr === 'HACER RESET') return null
 
+  const producto = formatProducto(codigo.producto)
+  const feria1 = codigo.codigo_feria_1 ?? ''
+  const feria2 = codigo.codigo_feria_2 ?? ''
+
+  // New format when feria codes are configured
+  if (feria1 || feria2) {
+    return `${feria1}-${feria2} ${clienteStr}-${producto}`
+  }
+
+  // Legacy fallback
   const modo = codigo.modo
   const mes = formatMes(codigo.mes, now)
   const pais = codigo.pais
   const annio = formatAnnio(codigo.annio, now)
   const maquina = codigo.maquina
-  const producto = formatProducto(codigo.producto)
 
   return `${modo}${mes}${pais}${annio} ${maquina}-${clienteStr}-${producto}`
 }

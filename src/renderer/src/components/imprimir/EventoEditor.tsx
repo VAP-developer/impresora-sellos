@@ -42,11 +42,15 @@ type EditorMode = 'idle' | 'creating' | 'editing'
 const EMPTY_FORM: EventoInput = {
   year: new Date().getFullYear(),
   codigo: '',
+  codigo_feria_1: '',
+  codigo_feria_2: '',
   nevento: '',
   nferia: '',
   nlugar: '',
   motivoi: '',
   motivod: '',
+  layout_modelo1: 'derecha',
+  layout_modelo2: 'derecha',
   fecha: '',
   localidad: '',
   tariff_group_id: null,
@@ -233,11 +237,15 @@ export default function EventoEditor({
     setForm({
       year: evento.year,
       codigo: evento.codigo,
+      codigo_feria_1: evento.codigo_feria_1,
+      codigo_feria_2: evento.codigo_feria_2,
       nevento: evento.nevento,
       nferia: evento.nferia,
       nlugar: evento.nlugar,
       motivoi: evento.motivoi,
       motivod: evento.motivod,
+      layout_modelo1: evento.layout_modelo1 ?? 'derecha',
+      layout_modelo2: evento.layout_modelo2 ?? 'derecha',
       fecha: evento.fecha,
       localidad: evento.localidad,
       tariff_group_id: evento.tariff_group_id,
@@ -486,8 +494,8 @@ export default function EventoEditor({
                       className="text-left w-full border border-gray-200 rounded p-3 hover:bg-blue-50 hover:border-blue-300 transition-colors"
                     >
                       <span className="font-bold text-blue-700">{ev.nevento || '(sin nombre)'}</span>
-                      {ev.codigo && (
-                        <span className="ml-2 text-xs font-mono bg-gray-100 px-1 rounded">{ev.codigo}</span>
+                      {(ev.codigo_feria_1 || ev.codigo_feria_2) && (
+                        <span className="ml-2 text-xs font-mono bg-gray-100 px-1 rounded">{ev.codigo_feria_1}-{ev.codigo_feria_2}</span>
                       )}
                       <span className="block text-sm text-gray-500">
                         {ev.nferia} — {ev.nlugar} — {ev.fecha}
@@ -517,19 +525,36 @@ export default function EventoEditor({
                 {/* Left column: Event fields */}
                 <div className="flex-1 min-w-[400px] max-w-[500px]">
                   <div className="grid gap-3">
-                    {/* Codigo */}
-                    <div>
-                      <label htmlFor="ev-codigo" className="block text-sm text-gray-600">
-                        Código
-                      </label>
-                      <input
-                        id="ev-codigo"
-                        type="text"
-                        value={form.codigo}
-                        onChange={(e) => handleFieldChange('codigo', e.target.value)}
-                        className="w-full border border-gray-300 rounded p-2"
-                        placeholder="Ej: FER-MAD-2026"
-                      />
+                    {/* Código Feria (para sello) */}
+                    <div className="flex gap-3">
+                      <div className="flex-1">
+                        <label htmlFor="ev-codigo-feria-1" className="block text-sm text-gray-600">
+                          Código Feria 1 (max 4 chars)
+                        </label>
+                        <input
+                          id="ev-codigo-feria-1"
+                          type="text"
+                          value={form.codigo_feria_1}
+                          onChange={(e) => handleFieldChange('codigo_feria_1', e.target.value.slice(0, 4).toUpperCase())}
+                          maxLength={4}
+                          className="w-full border border-gray-300 rounded p-2 font-mono"
+                          placeholder="Ej: JC26"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <label htmlFor="ev-codigo-feria-2" className="block text-sm text-gray-600">
+                          Código Feria 2 (max 3 chars)
+                        </label>
+                        <input
+                          id="ev-codigo-feria-2"
+                          type="text"
+                          value={form.codigo_feria_2}
+                          onChange={(e) => handleFieldChange('codigo_feria_2', e.target.value.slice(0, 3).toUpperCase())}
+                          maxLength={3}
+                          className="w-full border border-gray-300 rounded p-2 font-mono"
+                          placeholder="Ej: VAP"
+                        />
+                      </div>
                     </div>
 
                     {/* Nombre evento */}
@@ -654,6 +679,20 @@ export default function EventoEditor({
                             <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">Sin imagen</div>
                           )}
                         </div>
+                        <label htmlFor="ev-layout-modelo1" className="block text-xs text-gray-500 mt-2">
+                          Plantilla
+                        </label>
+                        <select
+                          id="ev-layout-modelo1"
+                          value={form.layout_modelo1}
+                          onChange={(e) => handleFieldChange('layout_modelo1', e.target.value)}
+                          className="w-full border border-gray-300 rounded p-1 text-sm"
+                        >
+                          <option value="derecha">Imagen derecha</option>
+                          <option value="izquierda">Imagen izquierda</option>
+                          <option value="inferior">Imagen inferior</option>
+                          <option value="superior">Imagen superior</option>
+                        </select>
                       </div>
 
                       <div className="flex-1 min-w-[150px]">
@@ -674,6 +713,20 @@ export default function EventoEditor({
                             <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">Sin imagen</div>
                           )}
                         </div>
+                        <label htmlFor="ev-layout-modelo2" className="block text-xs text-gray-500 mt-2">
+                          Plantilla
+                        </label>
+                        <select
+                          id="ev-layout-modelo2"
+                          value={form.layout_modelo2}
+                          onChange={(e) => handleFieldChange('layout_modelo2', e.target.value)}
+                          className="w-full border border-gray-300 rounded p-1 text-sm"
+                        >
+                          <option value="derecha">Imagen derecha</option>
+                          <option value="izquierda">Imagen izquierda</option>
+                          <option value="inferior">Imagen inferior</option>
+                          <option value="superior">Imagen superior</option>
+                        </select>
                       </div>
                     </div>
                   </div>

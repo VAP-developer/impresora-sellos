@@ -82,7 +82,13 @@ function ModelPreview({
         <p className="text-black text-xs font-bold leading-tight">{fecha}</p>
         <p className="text-black text-xs font-bold leading-tight">{localidad}</p>
         {codePreview && (
-          <p className="text-black text-[10px] font-bold mt-0.5">{codePreview}</p>
+          <p className="text-black text-[10px] font-bold mt-0.5">
+            {(() => {
+              const spaceIdx = codePreview.indexOf(' ')
+              if (spaceIdx === -1) return codePreview
+              return <>{codePreview.substring(0, spaceIdx)}<br />{codePreview.substring(spaceIdx + 1)}</>
+            })()}
+          </p>
         )}
       </div>
       <p className="text-[10px] text-gray-500 mt-0.5">{modelName || '—'}</p>

@@ -7,11 +7,15 @@ export interface EventoRow {
   id: number
   year: number
   codigo: string
+  codigo_feria_1: string
+  codigo_feria_2: string
   nevento: string
   nferia: string
   nlugar: string
   motivoi: string
   motivod: string
+  layout_modelo1: string
+  layout_modelo2: string
   fecha: string
   localidad: string
   tariff_group_id: number | null
@@ -30,11 +34,15 @@ export interface EventoRow {
 export interface EventoInput {
   year: number
   codigo: string
+  codigo_feria_1: string
+  codigo_feria_2: string
   nevento: string
   nferia: string
   nlugar: string
   motivoi: string
   motivod: string
+  layout_modelo1: string
+  layout_modelo2: string
   fecha: string
   localidad: string
   tariff_group_id?: number | null
@@ -112,17 +120,21 @@ export class EventosRepository {
     const selectedStripIds = JSON.stringify(input.selected_strip_ids ?? [])
 
     const stmt = this.db.prepare(`
-      INSERT INTO eventos (year, codigo, nevento, nferia, nlugar, motivoi, motivod, fecha, localidad, tariff_group_id, selected_tariff_ids, selected_strip_ids)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO eventos (year, codigo, codigo_feria_1, codigo_feria_2, nevento, nferia, nlugar, motivoi, motivod, layout_modelo1, layout_modelo2, fecha, localidad, tariff_group_id, selected_tariff_ids, selected_strip_ids)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     const result = stmt.run(
       input.year,
       input.codigo,
+      input.codigo_feria_1,
+      input.codigo_feria_2,
       input.nevento,
       input.nferia,
       input.nlugar,
       input.motivoi,
       input.motivod,
+      input.layout_modelo1,
+      input.layout_modelo2,
       input.fecha,
       input.localidad,
       input.tariff_group_id ?? null,
@@ -142,11 +154,15 @@ export class EventosRepository {
     const updated = {
       year: input.year ?? existing.year,
       codigo: input.codigo ?? existing.codigo,
+      codigo_feria_1: input.codigo_feria_1 ?? existing.codigo_feria_1,
+      codigo_feria_2: input.codigo_feria_2 ?? existing.codigo_feria_2,
       nevento: input.nevento ?? existing.nevento,
       nferia: input.nferia ?? existing.nferia,
       nlugar: input.nlugar ?? existing.nlugar,
       motivoi: input.motivoi ?? existing.motivoi,
       motivod: input.motivod ?? existing.motivod,
+      layout_modelo1: input.layout_modelo1 ?? existing.layout_modelo1,
+      layout_modelo2: input.layout_modelo2 ?? existing.layout_modelo2,
       fecha: input.fecha ?? existing.fecha,
       localidad: input.localidad ?? existing.localidad,
       tariff_group_id: input.tariff_group_id !== undefined ? input.tariff_group_id : existing.tariff_group_id,
@@ -159,8 +175,10 @@ export class EventosRepository {
 
     this.db.prepare(`
       UPDATE eventos SET
-        year = ?, codigo = ?, nevento = ?, nferia = ?, nlugar = ?,
-        motivoi = ?, motivod = ?, fecha = ?, localidad = ?,
+        year = ?, codigo = ?, codigo_feria_1 = ?, codigo_feria_2 = ?,
+        nevento = ?, nferia = ?, nlugar = ?,
+        motivoi = ?, motivod = ?, layout_modelo1 = ?, layout_modelo2 = ?,
+        fecha = ?, localidad = ?,
         tariff_group_id = ?,
         selected_tariff_ids = ?,
         selected_strip_ids = ?,
@@ -169,11 +187,15 @@ export class EventosRepository {
     `).run(
       updated.year,
       updated.codigo,
+      updated.codigo_feria_1,
+      updated.codigo_feria_2,
       updated.nevento,
       updated.nferia,
       updated.nlugar,
       updated.motivoi,
       updated.motivod,
+      updated.layout_modelo1,
+      updated.layout_modelo2,
       updated.fecha,
       updated.localidad,
       updated.tariff_group_id ?? null,

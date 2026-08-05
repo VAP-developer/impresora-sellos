@@ -58,6 +58,8 @@ export interface CodigoConfig {
   maquina: string // "CH17", "FI01", etc.
   cliente: number // Auto-incrementing session ID
   producto: number
+  codigo_feria_1: string // Código feria parte 1 (max 4 chars, ej: "J26") - usado por perfil Filatelia/Oficina
+  codigo_feria_2: string // Código feria parte 2 (max 3 chars, ej: "8GI") - usado por perfil Filatelia/Oficina
 }
 
 export interface EventoData {
@@ -151,7 +153,9 @@ const DEFAULT_CONFIG: AppConfig = {
     pais: 'ES',
     maquina: 'CH17',
     cliente: 1,
-    producto: 1
+    producto: 1,
+    codigo_feria_1: '',
+    codigo_feria_2: ''
   },
   sello: {
     elperfil: 6,
@@ -215,7 +219,17 @@ export class ConfigRepository {
       return null
     }
 
-    return JSON.parse(row.data) as AppConfig
+    const config = JSON.parse(row.data) as AppConfig
+
+    // Ensure backwards compatibility: add new fields with defaults if missing
+    if (config.codigo && config.codigo.codigo_feria_1 === undefined) {
+      config.codigo.codigo_feria_1 = ''
+    }
+    if (config.codigo && config.codigo.codigo_feria_2 === undefined) {
+      config.codigo.codigo_feria_2 = ''
+    }
+
+    return config
   }
 
   /**

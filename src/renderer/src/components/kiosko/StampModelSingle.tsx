@@ -28,31 +28,15 @@ function formatFechaMonthYear(fecha: string): string {
 }
 
 /**
- * Transforms code to two-line display: "P4ES26 CH17-0001-001" → { line1: "P26-4ES", line2: "0001-001" }
+ * Transforms code to two-line display by splitting on space.
+ * "JC26-VAP 0001-001" → { line1: "JC26-VAP", line2: "0001-001" }
  */
 function formatCodigoLines(codigo: string): { line1: string; line2: string } {
   const spaceIdx = codigo.indexOf(' ')
   if (spaceIdx === -1) return { line1: codigo, line2: '' }
 
-  const prefix = codigo.substring(0, spaceIdx)
-  const suffix = codigo.substring(spaceIdx + 1)
-
-  if (prefix.length < 6 || prefix[0] !== 'P') return { line1: codigo, line2: '' }
-
-  const mes = prefix[1]
-  const pais = prefix.substring(2, 4)
-  const anio = prefix.substring(4, 6)
-  const line1 = `P${anio}-${mes}${pais}`
-
-  const dashParts = suffix.split('-')
-  let line2: string
-  if (dashParts.length >= 3) {
-    line2 = `${dashParts[dashParts.length - 2]}-${dashParts[dashParts.length - 1]}`
-  } else if (dashParts.length === 2) {
-    line2 = `${dashParts[0]}-${dashParts[1]}`
-  } else {
-    line2 = suffix
-  }
+  const line1 = codigo.substring(0, spaceIdx)
+  const line2 = codigo.substring(spaceIdx + 1)
 
   return { line1, line2 }
 }

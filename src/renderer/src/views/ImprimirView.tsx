@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useConfigStore } from '@renderer/stores/config.store'
 import type { PreciosConfig, SelloConfig } from '@renderer/types/config'
@@ -11,7 +10,6 @@ import EventoEditor from '@renderer/components/imprimir/EventoEditor'
 export default function ImprimirView(): JSX.Element {
   const config = useConfigStore((s) => s.config)
   const updateImprimir = useConfigStore((s) => s.updateImprimir)
-  const navigate = useNavigate()
   const { t } = useTranslation()
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -145,9 +143,6 @@ export default function ImprimirView(): JSX.Element {
       }
 
       await updateImprimir({ sello: selloUpdate, precios: preciosUpdate })
-
-      // Navigate to Kiosko (main working view) after successful save
-      navigate('/kiosko')
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al guardar configuración'
       setSaveError(message)
@@ -155,7 +150,7 @@ export default function ImprimirView(): JSX.Element {
     } finally {
       setSaving(false)
     }
-  }, [config, selectedPerfil, selectedEvento, localProfileNames, updateImprimir, navigate])
+  }, [config, selectedPerfil, selectedEvento, localProfileNames, updateImprimir])
 
   if (!config) {
     return (
@@ -166,24 +161,28 @@ export default function ImprimirView(): JSX.Element {
   }
 
   return (
-    <div className="p-4 min-h-screen">
-      {/* Header */}
-      <div className="flex flex-col items-center gap-2 mb-4">
-        <p className="text-black text-2xl font-bold text-center">{t('views.print').toUpperCase()}</p>
+    <div className="p-4 bg-gray-100 min-h-screen">
+      {/* Header - same format as MaquinaView */}
+      <div className="flex items-center justify-between px-4 py-2">
+        <h1 className="text-black text-[25px] font-bold text-center m-0">{t('views.print').toUpperCase()}</h1>
         <button
           onClick={handleSave}
           disabled={saving}
-          className="bg-gray-400 hover:bg-gray-500 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded"
+          className="bg-gray-400 text-white px-4 py-2 rounded font-semibold hover:bg-gray-500
+                     focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50"
         >
-          {saving ? 'Guardando...' : 'GUARDAR e ir al KIOSKO'}
+          {saving ? 'Guardando...' : 'Guardar'}
         </button>
-        {saveError && (
-          <p className="text-red-600 text-sm">{saveError}</p>
-        )}
-        <p className="text-gray-500 text-2xl font-bold text-center">
-          EVENTOS
+        <p className="text-gray-500 text-[25px] font-bold text-center m-0">
+          Creación de eventos
         </p>
       </div>
+
+      {saveError && (
+        <div className="mx-4 mb-2 p-2 bg-red-100 text-red-800 rounded text-center" role="alert">
+          {saveError}
+        </div>
+      )}
 
       {/* Event section - select active event by year */}
       <EventoSection
@@ -197,23 +196,6 @@ export default function ImprimirView(): JSX.Element {
       <EventoEditor
         onEventosChanged={handleEventosChanged}
       />
-
-      {/* Footer buttons */}
-      <div className="flex justify-center gap-4 p-4">
-        <button
-          onClick={() => navigate('/home')}
-          className="bg-gray-300 hover:bg-gray-400 text-black font-bold py-2 px-4 rounded"
-        >
-          Cancelar
-        </button>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded"
-        >
-          {saving ? 'Guardando...' : 'GUARDAR + ACTIVAR'}
-        </button>
-      </div>
     </div>
   )
 }

@@ -19,7 +19,7 @@
 
 import type { AppConfig, PreciosConfig } from '../../renderer/src/types/config'
 import { renderStampMultiPage, renderStampEspecialStrip } from './stamp-renderer'
-import type { StampRenderParams } from './stamp-renderer'
+import type { StampRenderParams, StampLayout } from './stamp-renderer'
 import { genTicket, genTicketCaja, genTicketMaster, calcTicketHeightMm, calcTicketCajaHeightMm, calcTicketMasterHeightMm, calcActualTicketHeight, calcActualTicketCajaHeight, countActiveItems } from './ticket-renderer'
 import type { TicketItem, TicketProduct } from './ticket-renderer'
 import { ImagesRepository } from '../database/repositories/images.repository'
@@ -178,6 +178,14 @@ export interface DynamicTariffContext {
   eventFecha?: string
   /** Event locality for stamp labels (e.g., "Madrid") */
   eventLocalidad?: string
+  /** Event fair code part 1 (max 4 chars, e.g., "J26") */
+  eventCodigoFeria1?: string
+  /** Event fair code part 2 (max 3 chars, e.g., "8GI") */
+  eventCodigoFeria2?: string
+  /** Layout template for modelo1 stamps */
+  eventLayoutModelo1?: string
+  /** Layout template for modelo2 stamps */
+  eventLayoutModelo2?: string
   /** Currency code */
   currency: string
   /** Currency symbol (e.g., '€', '$') */
@@ -266,20 +274,37 @@ function formatProducto(producto: number): string {
 
 /**
  * Builds the complete label code string.
- * Pattern: {modo}{mes}{pais}{año} {maquina}-{cliente4dígitos}-{producto3dígitos}
+ *
+ * New pattern: {codigoFeria1}-{codigoFeria2} {cliente4dígitos}-{producto3dígitos}
+ * Example:     "J26-8GI 0001-001"
+ *
+ * When codigoFeria1/codigoFeria2 are empty, falls back to legacy pattern using maquina.
  *
  * @param config - App configuration
  * @param productoId - The product/stamp counter value to encode (increments per stamp)
+ * @param codigoFeria1Override - Optional override for codigo_feria_1 (from event)
+ * @param codigoFeria2Override - Optional override for codigo_feria_2 (from event)
  */
-function buildLabelCode(config: AppConfig, productoId: number): string {
+function buildLabelCode(config: AppConfig, productoId: number, codigoFeria1Override?: string, codigoFeria2Override?: string): string {
   const { codigo } = config
+  const cliente = formatCliente(codigo.cliente)
+  const producto = formatProducto(productoId)
+
+  // Use overrides if provided, otherwise use config values
+  const feria1 = codigoFeria1Override ?? codigo.codigo_feria_1 ?? ''
+  const feria2 = codigoFeria2Override ?? codigo.codigo_feria_2 ?? ''
+
+  // New format: {codigoFeria1}-{codigoFeria2} {cliente}-{producto}
+  if (feria1 || feria2) {
+    return `${feria1}-${feria2} ${cliente}-${producto}`
+  }
+
+  // Legacy fallback when no feria codes configured
   const modo = codigo.modo
   const mes = formatMes(codigo.mes)
   const pais = codigo.pais
   const annio = formatAnnio(codigo.annio)
   const maquina = codigo.maquina
-  const cliente = formatCliente(codigo.cliente)
-  const producto = formatProducto(productoId)
   return `${modo}${mes}${pais}${annio} ${maquina}-${cliente}-${producto}`
 }
 
@@ -582,6 +607,32 @@ export async function generateSalePdfs(
     model2Name = evento?.motivod ?? config.sello.modelo2 ?? ''
   }
 
+  // Determine which feria codes to use for the stamp label code (line 1).
+  // - Profile 'filatelia' (Oficina button): uses codes from general config (config.codigo)
+  // - Profile 'normal' (cart button): uses codes from the active event (dynamicTariffCtx)
+  // - Fallback: if no event codes available, uses config codes
+  let codigoFeria1: string | undefined
+  let codigoFeria2: string | undefined
+
+  const profileLower = profile.toLowerCase()
+  if (profileLower === 'filatelia') {
+    // Oficina button: use general configuration codes
+    codigoFeria1 = config.codigo.codigo_feria_1 ?? ''
+    codigoFeria2 = config.codigo.codigo_feria_2 ?? ''
+  } else if (dynamicTariffCtx) {
+    // Normal sale with dynamic event: use event-specific codes
+    codigoFeria1 = dynamicTariffCtx.eventCodigoFeria1 ?? ''
+    codigoFeria2 = dynamicTariffCtx.eventCodigoFeria2 ?? ''
+  } else {
+    // Legacy fallback: no override, buildLabelCode will use config codes or legacy format
+    codigoFeria1 = undefined
+    codigoFeria2 = undefined
+  }
+
+  // Determine layout templates for each model from the event
+  const layoutModelo1 = dynamicTariffCtx?.eventLayoutModelo1 ?? 'derecha'
+  const layoutModelo2 = dynamicTariffCtx?.eventLayoutModelo2 ?? 'derecha'
+
   // Resolve image layers: when ImageLayerOptions is provided, use the layer
   // composition logic; otherwise fall back to legacy model-based background.
   let bg1: string | null = null
@@ -651,11 +702,12 @@ export async function generateSalePdfs(
             tarifaDescripcion: tariff.description,
             fecha: stampFecha,
             evento: stampEvento,
-            codigo: buildLabelCode(config, productoCounter),
+            codigo: buildLabelCode(config, productoCounter, codigoFeria1, codigoFeria2),
             backgroundImage: background,
             overlayImage: overlay,
             printLogoPng,
-            logoPngImage: logoPng1
+            logoPngImage: logoPng1,
+            layout: layoutModelo1 as StampLayout
           })
           productoCounter++
         }
@@ -685,11 +737,12 @@ export async function generateSalePdfs(
             tarifaDescripcion: tariff.description,
             fecha: stampFecha,
             evento: stampEvento,
-            codigo: buildLabelCode(config, productoCounter),
+            codigo: buildLabelCode(config, productoCounter, codigoFeria1, codigoFeria2),
             backgroundImage: background,
             overlayImage: overlay,
             printLogoPng,
-            logoPngImage: logoPng2
+            logoPngImage: logoPng2,
+            layout: layoutModelo2 as StampLayout
           })
           productoCounter++
         }
@@ -737,11 +790,12 @@ export async function generateSalePdfs(
               tarifaDescripcion: stripTariff.description,
               fecha: stampFecha,
               evento: stampEvento,
-              codigo: buildLabelCode(config, productoCounter),
+              codigo: buildLabelCode(config, productoCounter, codigoFeria1, codigoFeria2),
               backgroundImage: background,
               overlayImage: overlay,
               printLogoPng,
-              logoPngImage: logo
+              logoPngImage: logo,
+              layout: (model === 1 ? layoutModelo1 : layoutModelo2) as StampLayout
             })
             productoCounter++
           }
@@ -793,11 +847,12 @@ export async function generateSalePdfs(
                 tarifa: tLabel,
                 fecha: stampFecha,
                 evento: stampEvento,
-                codigo: buildLabelCode(config, productoCounter),
+                codigo: buildLabelCode(config, productoCounter, codigoFeria1, codigoFeria2),
                 backgroundImage: background,
                 overlayImage: overlay,
                 printLogoPng,
-                logoPngImage: logo
+                logoPngImage: logo,
+                layout: (tariff.model === 1 ? layoutModelo1 : layoutModelo2) as StampLayout
               })
               productoCounter++
             }
@@ -808,11 +863,12 @@ export async function generateSalePdfs(
                 tarifa: tariff.label,
                 fecha: stampFecha,
                 evento: stampEvento,
-                codigo: buildLabelCode(config, productoCounter),
+                codigo: buildLabelCode(config, productoCounter, codigoFeria1, codigoFeria2),
                 backgroundImage: background,
                 overlayImage: overlay,
                 printLogoPng,
-                logoPngImage: logo
+                logoPngImage: logo,
+                layout: (tariff.model === 1 ? layoutModelo1 : layoutModelo2) as StampLayout
               })
               productoCounter++
             }
@@ -835,11 +891,12 @@ export async function generateSalePdfs(
             tarifa: tariff.label,
             fecha: stampFecha,
             evento: stampEvento,
-            codigo: buildLabelCode(config, productoCounter),
+            codigo: buildLabelCode(config, productoCounter, codigoFeria1, codigoFeria2),
             backgroundImage: background,
             overlayImage: overlay,
             printLogoPng,
-            logoPngImage: logo
+            logoPngImage: logo,
+            layout: (tariff.model === 1 ? layoutModelo1 : layoutModelo2) as StampLayout
           })
           productoCounter++
         }
@@ -920,10 +977,10 @@ export async function generateSalePdfs(
 
   if (hasAnyItems) {
     const fechaTicket = getTicketDateTime(config)
-    // Build ticket title: "Factura Simplificada CH17 - 0021" (titulo + machine - client)
+    // Build ticket title: just the base title (e.g. "Factura Simplificada")
+    // The feria code is appended by the ticket-renderer when codigoFeria1/2 are provided
     const baseTitle = buildTicketTitle(profile, config.ticket.titulo)
-    const clienteCode = formatCliente(config.codigo.cliente)
-    const modoTicket = `${baseTitle} ${config.codigo.maquina} - ${clienteCode}`
+    const modoTicket = baseTitle
     const modelo1Ticket = model1Name || 'Modelo 1'
     const modelo2Ticket = model2Name || 'Modelo 2'
 
@@ -973,7 +1030,9 @@ export async function generateSalePdfs(
       cp: config.ticket.cp,
       l1: config.ticket.l1,
       l2: config.ticket.l2,
-      l3: config.ticket.l3
+      l3: config.ticket.l3,
+      codigoFeria1: codigoFeria1 ?? '',
+      codigoFeria2: codigoFeria2 ?? ''
     }
     const ticketHeightMm = calcActualTicketHeight(mainTicketParams)
     const ticketBuffer = await genTicket(mainTicketParams)
@@ -1069,7 +1128,9 @@ export async function generateSalePdfs(
               cp: config.ticket.cp,
               l1: config.ticket.l1,
               l2: config.ticket.l2,
-              l3: config.ticket.l3
+              l3: config.ticket.l3,
+              codigoFeria1: codigoFeria1 ?? '',
+              codigoFeria2: codigoFeria2 ?? ''
             }
             const singleTiraHeightMm = calcActualTicketHeight(singleTiraParams)
             const singleTiraBuffer = await genTicket(singleTiraParams)

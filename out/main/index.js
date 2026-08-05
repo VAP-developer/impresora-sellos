@@ -155,7 +155,9 @@ const DEFAULT_CONFIG = {
     pais: "ES",
     maquina: "CH17",
     cliente: 1,
-    producto: 1
+    producto: 1,
+    codigo_feria_1: "",
+    codigo_feria_2: ""
   },
   sello: {
     elperfil: 6,
@@ -207,7 +209,14 @@ class ConfigRepository {
     if (!row) {
       return null;
     }
-    return JSON.parse(row.data);
+    const config = JSON.parse(row.data);
+    if (config.codigo && config.codigo.codigo_feria_1 === void 0) {
+      config.codigo.codigo_feria_1 = "";
+    }
+    if (config.codigo && config.codigo.codigo_feria_2 === void 0) {
+      config.codigo.codigo_feria_2 = "";
+    }
+    return config;
   }
   /**
    * Replaces the entire configuration with the given data.
@@ -2536,17 +2545,21 @@ class EventosRepository {
     const selectedTariffIds = JSON.stringify(input.selected_tariff_ids ?? []);
     const selectedStripIds = JSON.stringify(input.selected_strip_ids ?? []);
     const stmt = this.db.prepare(`
-      INSERT INTO eventos (year, codigo, nevento, nferia, nlugar, motivoi, motivod, fecha, localidad, tariff_group_id, selected_tariff_ids, selected_strip_ids)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO eventos (year, codigo, codigo_feria_1, codigo_feria_2, nevento, nferia, nlugar, motivoi, motivod, layout_modelo1, layout_modelo2, fecha, localidad, tariff_group_id, selected_tariff_ids, selected_strip_ids)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const result = stmt.run(
       input.year,
       input.codigo,
+      input.codigo_feria_1,
+      input.codigo_feria_2,
       input.nevento,
       input.nferia,
       input.nlugar,
       input.motivoi,
       input.motivod,
+      input.layout_modelo1,
+      input.layout_modelo2,
       input.fecha,
       input.localidad,
       input.tariff_group_id ?? null,
@@ -2564,11 +2577,15 @@ class EventosRepository {
     const updated = {
       year: input.year ?? existing.year,
       codigo: input.codigo ?? existing.codigo,
+      codigo_feria_1: input.codigo_feria_1 ?? existing.codigo_feria_1,
+      codigo_feria_2: input.codigo_feria_2 ?? existing.codigo_feria_2,
       nevento: input.nevento ?? existing.nevento,
       nferia: input.nferia ?? existing.nferia,
       nlugar: input.nlugar ?? existing.nlugar,
       motivoi: input.motivoi ?? existing.motivoi,
       motivod: input.motivod ?? existing.motivod,
+      layout_modelo1: input.layout_modelo1 ?? existing.layout_modelo1,
+      layout_modelo2: input.layout_modelo2 ?? existing.layout_modelo2,
       fecha: input.fecha ?? existing.fecha,
       localidad: input.localidad ?? existing.localidad,
       tariff_group_id: input.tariff_group_id !== void 0 ? input.tariff_group_id : existing.tariff_group_id,
@@ -2579,8 +2596,10 @@ class EventosRepository {
     const selectedStripIds = JSON.stringify(updated.selected_strip_ids);
     this.db.prepare(`
       UPDATE eventos SET
-        year = ?, codigo = ?, nevento = ?, nferia = ?, nlugar = ?,
-        motivoi = ?, motivod = ?, fecha = ?, localidad = ?,
+        year = ?, codigo = ?, codigo_feria_1 = ?, codigo_feria_2 = ?,
+        nevento = ?, nferia = ?, nlugar = ?,
+        motivoi = ?, motivod = ?, layout_modelo1 = ?, layout_modelo2 = ?,
+        fecha = ?, localidad = ?,
         tariff_group_id = ?,
         selected_tariff_ids = ?,
         selected_strip_ids = ?,
@@ -2589,11 +2608,15 @@ class EventosRepository {
     `).run(
       updated.year,
       updated.codigo,
+      updated.codigo_feria_1,
+      updated.codigo_feria_2,
       updated.nevento,
       updated.nferia,
       updated.nlugar,
       updated.motivoi,
       updated.motivod,
+      updated.layout_modelo1,
+      updated.layout_modelo2,
       updated.fecha,
       updated.localidad,
       updated.tariff_group_id ?? null,
@@ -3024,25 +3047,8 @@ function formatCodigoLines(codigo) {
   if (spaceIdx === -1) {
     return { line1: codigo, line2: "" };
   }
-  const prefix = codigo.substring(0, spaceIdx);
-  const suffix = codigo.substring(spaceIdx + 1);
-  if (prefix.length < 6 || prefix[0] !== "P") {
-    return { line1: codigo, line2: "" };
-  }
-  const mes = prefix[1];
-  const pais = prefix.substring(2, 4);
-  prefix.substring(4, 6);
-  const codigoFeria = suffix.substring(0, 4);
-  const line1 = `${codigoFeria}-${mes}${pais}`;
-  const dashParts = suffix.split("-");
-  let line2;
-  if (dashParts.length >= 3) {
-    line2 = `${dashParts[dashParts.length - 2]}-${dashParts[dashParts.length - 1]}`;
-  } else if (dashParts.length === 2) {
-    line2 = `${dashParts[0]}-${dashParts[1]}`;
-  } else {
-    line2 = suffix;
-  }
+  const line1 = codigo.substring(0, spaceIdx);
+  const line2 = codigo.substring(spaceIdx + 1);
   return { line1, line2 };
 }
 function registerFonts$1(doc) {
@@ -3063,6 +3069,13 @@ function registerFonts$1(doc) {
 function bottomToTop(bottomY_mm, fontSizePt) {
   const bottomYPt = bottomY_mm * MM_TO_PT$1;
   return STAMP_HEIGHT - bottomYPt - fontSizePt;
+}
+function drawTextRight(doc, text, fontName, fontSize, xRight_mm, yBottom_mm) {
+  doc.font(fontName).fontSize(fontSize);
+  const textWidth = doc.widthOfString(text);
+  const x = xRight_mm * MM_TO_PT$1 - textWidth;
+  const y = bottomToTop(yBottom_mm, fontSize);
+  doc.text(text, x, y, { lineBreak: false });
 }
 function drawTextLeft(doc, text, fontName, fontSize, x_mm, yBottom_mm) {
   doc.font(fontName).fontSize(fontSize);
@@ -3164,13 +3177,37 @@ async function renderStampMultiPage(stamps) {
     } else {
       drawOverlay(doc, stamp.overlayImage);
     }
-    drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12.2, 2, 50);
-    drawTextLeft(doc, stamp.tarifaDescripcion ?? "", FONTS.regular, 9, 2, 47.2);
-    drawTextLeft(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 2, 43);
-    drawTextLeft(doc, stamp.evento, FONTS.regular, 9, 2, 39.5);
     const { line1, line2 } = formatCodigoLines(stamp.codigo);
-    drawTextLeft(doc, line1, FONTS.regular, 5.7, 2, 35.2);
-    drawTextLeft(doc, line2, FONTS.regular, 5.7, 2, 33);
+    const layout = stamp.layout ?? "derecha";
+    if (layout === "derecha") {
+      drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12.2, 2, 50);
+      drawTextLeft(doc, stamp.tarifaDescripcion ?? "", FONTS.regular, 9, 2, 47.2);
+      drawTextLeft(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 2, 43);
+      drawTextLeft(doc, stamp.evento, FONTS.regular, 9, 2, 39.5);
+      drawTextLeft(doc, line1, FONTS.regular, 5.7, 2, 35.2);
+      drawTextLeft(doc, line2, FONTS.regular, 5.7, 2, 33);
+    } else if (layout === "izquierda") {
+      drawTextRight(doc, stamp.tarifa, FONTS.regular, 12.2, 53, 50);
+      drawTextRight(doc, stamp.tarifaDescripcion ?? "", FONTS.regular, 9, 53, 47.2);
+      drawTextRight(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 53, 43);
+      drawTextRight(doc, stamp.evento, FONTS.regular, 9, 53, 39.5);
+      drawTextRight(doc, line1, FONTS.regular, 5.7, 53, 35.2);
+      drawTextRight(doc, line2, FONTS.regular, 5.7, 53, 33);
+    } else if (layout === "inferior") {
+      drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12.2, 2, 50);
+      drawTextLeft(doc, stamp.tarifaDescripcion ?? "", FONTS.regular, 9, 2, 47.2);
+      drawTextRight(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 53, 50);
+      drawTextRight(doc, stamp.evento, FONTS.regular, 9, 53, 47.2);
+      drawTextLeft(doc, line1, FONTS.regular, 5.7, 22, 46);
+      drawTextLeft(doc, line2, FONTS.regular, 5.7, 22, 44.4);
+    } else if (layout === "superior") {
+      drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12.2, 2, 36.8);
+      drawTextLeft(doc, stamp.tarifaDescripcion ?? "", FONTS.regular, 9, 2, 34);
+      drawTextRight(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 53, 36.8);
+      drawTextRight(doc, stamp.evento, FONTS.regular, 9, 53, 34);
+      drawTextLeft(doc, line1, FONTS.regular, 5.7, 22, 35.2);
+      drawTextLeft(doc, line2, FONTS.regular, 5.7, 22, 33);
+    }
   });
   doc.end();
   return result;
@@ -3404,7 +3441,9 @@ async function genTicket(params) {
   y += 4;
   drawCentered(doc, `Fecha ${fechaTicket}`, FONTS.condensed, 8, y * MM_TO_PT, pageWidth);
   y += 4;
-  drawLeft(doc, modoTicket, FONTS.bold, 6.5, 5 * MM_TO_PT, y * MM_TO_PT);
+  const codigoFeriaDisplay = [params.codigoFeria1, params.codigoFeria2].filter(Boolean).join("-");
+  const modoLine = codigoFeriaDisplay ? `${modoTicket}: ${codigoFeriaDisplay}` : modoTicket;
+  drawLeft(doc, modoLine, FONTS.bold, 6.5, 5 * MM_TO_PT, y * MM_TO_PT);
   y += 6;
   drawLeft(doc, "Producto", FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT);
   drawLeft(doc, "Cant.", FONTS.condensed, 8, 45 * MM_TO_PT, y * MM_TO_PT);
@@ -3750,15 +3789,20 @@ function formatCliente(cliente) {
 function formatProducto(producto) {
   return producto.toString().padStart(3, "0");
 }
-function buildLabelCode(config, productoId) {
+function buildLabelCode(config, productoId, codigoFeria1Override, codigoFeria2Override) {
   const { codigo } = config;
+  const cliente = formatCliente(codigo.cliente);
+  const producto = formatProducto(productoId);
+  const feria1 = codigoFeria1Override ?? codigo.codigo_feria_1 ?? "";
+  const feria2 = codigoFeria2Override ?? codigo.codigo_feria_2 ?? "";
+  if (feria1 || feria2) {
+    return `${feria1}-${feria2} ${cliente}-${producto}`;
+  }
   const modo = codigo.modo;
   const mes = formatMes(codigo.mes);
   const pais = codigo.pais;
   const annio = formatAnnio(codigo.annio);
   const maquina = codigo.maquina;
-  const cliente = formatCliente(codigo.cliente);
-  const producto = formatProducto(productoId);
   return `${modo}${mes}${pais}${annio} ${maquina}-${cliente}-${producto}`;
 }
 function buildTicketTitle(profile, baseTitle) {
@@ -3927,6 +3971,21 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
     model1Name = evento?.motivoi ?? config.sello.modelo1 ?? "";
     model2Name = evento?.motivod ?? config.sello.modelo2 ?? "";
   }
+  let codigoFeria1;
+  let codigoFeria2;
+  const profileLower = profile.toLowerCase();
+  if (profileLower === "filatelia") {
+    codigoFeria1 = config.codigo.codigo_feria_1 ?? "";
+    codigoFeria2 = config.codigo.codigo_feria_2 ?? "";
+  } else if (dynamicTariffCtx) {
+    codigoFeria1 = dynamicTariffCtx.eventCodigoFeria1 ?? "";
+    codigoFeria2 = dynamicTariffCtx.eventCodigoFeria2 ?? "";
+  } else {
+    codigoFeria1 = void 0;
+    codigoFeria2 = void 0;
+  }
+  const layoutModelo1 = dynamicTariffCtx?.eventLayoutModelo1 ?? "derecha";
+  const layoutModelo2 = dynamicTariffCtx?.eventLayoutModelo2 ?? "derecha";
   let bg1 = null;
   let bg2 = null;
   let overlay1 = null;
@@ -3976,11 +4035,12 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
             tarifaDescripcion: tariff.description,
             fecha: stampFecha,
             evento: stampEvento,
-            codigo: buildLabelCode(config, productoCounter),
+            codigo: buildLabelCode(config, productoCounter, codigoFeria1, codigoFeria2),
             backgroundImage: background,
             overlayImage: overlay,
             printLogoPng,
-            logoPngImage: logoPng1
+            logoPngImage: logoPng1,
+            layout: layoutModelo1
           });
           productoCounter++;
         }
@@ -4007,11 +4067,12 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
             tarifaDescripcion: tariff.description,
             fecha: stampFecha,
             evento: stampEvento,
-            codigo: buildLabelCode(config, productoCounter),
+            codigo: buildLabelCode(config, productoCounter, codigoFeria1, codigoFeria2),
             backgroundImage: background,
             overlayImage: overlay,
             printLogoPng,
-            logoPngImage: logoPng2
+            logoPngImage: logoPng2,
+            layout: layoutModelo2
           });
           productoCounter++;
         }
@@ -4045,11 +4106,12 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
               tarifaDescripcion: stripTariff.description,
               fecha: stampFecha,
               evento: stampEvento,
-              codigo: buildLabelCode(config, productoCounter),
+              codigo: buildLabelCode(config, productoCounter, codigoFeria1, codigoFeria2),
               backgroundImage: background,
               overlayImage: overlay,
               printLogoPng,
-              logoPngImage: logo
+              logoPngImage: logo,
+              layout: model === 1 ? layoutModelo1 : layoutModelo2
             });
             productoCounter++;
           }
@@ -4081,11 +4143,12 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
                 tarifa: tLabel,
                 fecha: stampFecha,
                 evento: stampEvento,
-                codigo: buildLabelCode(config, productoCounter),
+                codigo: buildLabelCode(config, productoCounter, codigoFeria1, codigoFeria2),
                 backgroundImage: background,
                 overlayImage: overlay,
                 printLogoPng,
-                logoPngImage: logo
+                logoPngImage: logo,
+                layout: tariff.model === 1 ? layoutModelo1 : layoutModelo2
               });
               productoCounter++;
             }
@@ -4095,11 +4158,12 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
                 tarifa: tariff.label,
                 fecha: stampFecha,
                 evento: stampEvento,
-                codigo: buildLabelCode(config, productoCounter),
+                codigo: buildLabelCode(config, productoCounter, codigoFeria1, codigoFeria2),
                 backgroundImage: background,
                 overlayImage: overlay,
                 printLogoPng,
-                logoPngImage: logo
+                logoPngImage: logo,
+                layout: tariff.model === 1 ? layoutModelo1 : layoutModelo2
               });
               productoCounter++;
             }
@@ -4119,11 +4183,12 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
             tarifa: tariff.label,
             fecha: stampFecha,
             evento: stampEvento,
-            codigo: buildLabelCode(config, productoCounter),
+            codigo: buildLabelCode(config, productoCounter, codigoFeria1, codigoFeria2),
             backgroundImage: background,
             overlayImage: overlay,
             printLogoPng,
-            logoPngImage: logo
+            logoPngImage: logo,
+            layout: tariff.model === 1 ? layoutModelo1 : layoutModelo2
           });
           productoCounter++;
         }
@@ -4184,8 +4249,7 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
   if (hasAnyItems) {
     const fechaTicket = getTicketDateTime(config);
     const baseTitle = buildTicketTitle(profile, config.ticket.titulo);
-    const clienteCode = formatCliente(config.codigo.cliente);
-    const modoTicket = `${baseTitle} ${config.codigo.maquina} - ${clienteCode}`;
+    const modoTicket = baseTitle;
     const modelo1Ticket = model1Name || "Modelo 1";
     const modelo2Ticket = model2Name || "Modelo 2";
     const ticketFeria = dynamicTariffCtx ? dynamicTariffCtx.eventName || dynamicTariffCtx.title || config.ticket.feria : config.ticket.feria;
@@ -4221,7 +4285,9 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
       cp: config.ticket.cp,
       l1: config.ticket.l1,
       l2: config.ticket.l2,
-      l3: config.ticket.l3
+      l3: config.ticket.l3,
+      codigoFeria1: codigoFeria1 ?? "",
+      codigoFeria2: codigoFeria2 ?? ""
     };
     const ticketHeightMm = calcActualTicketHeight(mainTicketParams);
     const ticketBuffer = await genTicket(mainTicketParams);
@@ -4304,7 +4370,9 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
               cp: config.ticket.cp,
               l1: config.ticket.l1,
               l2: config.ticket.l2,
-              l3: config.ticket.l3
+              l3: config.ticket.l3,
+              codigoFeria1: codigoFeria1 ?? "",
+              codigoFeria2: codigoFeria2 ?? ""
             };
             const singleTiraHeightMm = calcActualTicketHeight(singleTiraParams);
             const singleTiraBuffer = await genTicket(singleTiraParams);
@@ -4443,6 +4511,14 @@ function registerSaleHandlers() {
                 // Add event date for stamp labels
                 eventLocalidad: evento?.localidad,
                 // Add event locality for stamp labels
+                eventCodigoFeria1: evento?.codigo_feria_1,
+                // Fair code part 1 for stamp labels
+                eventCodigoFeria2: evento?.codigo_feria_2,
+                // Fair code part 2 for stamp labels
+                eventLayoutModelo1: evento?.layout_modelo1,
+                // Layout template for modelo1
+                eventLayoutModelo2: evento?.layout_modelo2,
+                // Layout template for modelo2
                 currency: group.local_currency,
                 currencySymbol: getCurrencySymbol(group.local_currency),
                 // Add currency symbol

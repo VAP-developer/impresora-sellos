@@ -281,11 +281,15 @@ export interface EventoRow {
   id: number
   year: number
   codigo: string
+  codigo_feria_1: string
+  codigo_feria_2: string
   nevento: string
   nferia: string
   nlugar: string
   motivoi: string
   motivod: string
+  layout_modelo1: string
+  layout_modelo2: string
   fecha: string
   localidad: string
   tariff_group_id: number | null
@@ -298,11 +302,15 @@ export interface EventoRow {
 export interface EventoInput {
   year: number
   codigo: string
+  codigo_feria_1: string
+  codigo_feria_2: string
   nevento: string
   nferia: string
   nlugar: string
   motivoi: string
   motivod: string
+  layout_modelo1: string
+  layout_modelo2: string
   fecha: string
   localidad: string
   tariff_group_id?: number | null

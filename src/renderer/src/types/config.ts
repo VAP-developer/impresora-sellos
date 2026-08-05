@@ -57,6 +57,8 @@ export interface CodigoConfig {
   maquina: string // "CH17", "FI01", etc.
   cliente: number // Auto-incrementing session ID (0-9999)
   producto: number
+  codigo_feria_1: string // Código feria línea 1 parte 1 (max 4 chars, ej: "J26")
+  codigo_feria_2: string // Código feria línea 1 parte 2 (max 3 chars, ej: "8GI")
 }
 
 /** Configuración de perfil activo, evento activo y modelos de sello */
