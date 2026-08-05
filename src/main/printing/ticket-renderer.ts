@@ -545,7 +545,7 @@ export function calcTicketMasterHeightMm(numItems: number): number {
 // ─────────────────────────────────────────────
 
 /**
- * Generates the main ticket PDF (Factura Simplificada).
+ * Generates the main ticket PDF (Factura Simplificada). ------------------- AQUI TICKET PRINCIAL ----------------
  *
  * The layout is divided into clearly defined vertical sections:
  *   1. Top margin (TICKET_MARGIN_TOP)
@@ -733,7 +733,7 @@ export function calcActualTicketCajaHeight(params: GenTicketCajaParams): number 
 }
 
 /**
- * Generates the cash register copy ticket (COPIA / ticket caja).
+ * Generates the cash register copy ticket (COPIA / ticket caja). --------------- AQUI TICKET CAJA / COPIA
  *
  * Layout (top-down):
  *   - Logo (image2.jpg) centered at top
@@ -929,7 +929,7 @@ function calcActualTicketMasterHeight(params: GenTicketMasterParams): number {
 }
 
 /**
- * Generates the Master Set ticket.
+ * Generates the Master Set ticket. -------------------------- AQUI MASTER SET
  *
  * Layout (top-down):
  *   - Logo (image2.jpg) centered at top

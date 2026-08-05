@@ -163,7 +163,7 @@ import('../src/main/printing/stamp-renderer').then(async ({ renderStamp, renderS
   console.log('')
   console.log('📋 PASOS PARA DIAGNOSTICAR:')
   console.log('1. Abre cada PDF en un visor para verificar que se ven bien')
-  console.log('2. Imprime cada uno manualmente en la Brother TD-4100N')
+  console.log('2. Imprime cada uno manualmente en la Brother Brother TD-4100N ETI 1')
   console.log('3. Si C imprime pero B no → el problema es la TRANSPARENCIA (alpha channel)')
   console.log('4. Si C tampoco imprime → el problema es el TAMAÑO del PDF (37KB vs 8KB)')
   console.log('')
@@ -212,7 +212,7 @@ import('../src/main/printing/stamp-renderer').then(async ({ renderStamp, renderS
     printPdf('B (logo PNG + alpha + fondo)', pathB)
   } else {
     console.log('💡 Para enviar directamente a la impresora:')
-    console.log('   npx tsx scripts/test-print-logo.ts --print "Brother TD-4100N"')
+    console.log('   npx tsx scripts/test-print-logo.ts --print "Brother TD-4100N ETI 1"')
   }
 
   cleanup()

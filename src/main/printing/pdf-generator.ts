@@ -514,7 +514,7 @@ const TARIFF_DEFS: TariffDef[] = [
   { qtyKey: 'tarifa4T2', label: 'Tira 4 Tarifas', isTira: true, model: 2, target: 'printer2' }
 ]
 
-// ─── Main orchestration ───────────────────────────────────────────────────────
+// ─── Main orchestration ─────────────────────────────────────────────────────── AQUI TODOS LOS PDF ------------
 
 /**
  * Generates all PDFs for a sale.
@@ -659,7 +659,7 @@ export async function generateSalePdfs(
           })
           productoCounter++
         }
-        // Group stamps by cutNumber — each group becomes a separate PDF with cut marks between groups
+        // Group stamps by cutNumber — each group becomes a separate PDF with cut marks between groups - AQUI VER INDIVIDUAL ------
         const groups = groupLabels(stamps, cutNumber)
         for (const group of groups) {
           const pdfBuffer = await renderStampMultiPage(group)
@@ -707,7 +707,7 @@ export async function generateSalePdfs(
       }
     }
 
-    // ─── Dynamic strip (tira) stamp generation ───────────────────────────────
+    // ─── Dynamic strip (tira) stamp generation ─────────────────────────────── AQUI TIRA DINÁMICA ----------------
     // A strip is a fixed sequence of individual tariffs printed as one job.
     // Each unit sold produces one multi-page PDF with one page per tariff in
     // the strip, in the order defined by `tariff_ids` (repetitions included).
@@ -844,14 +844,14 @@ export async function generateSalePdfs(
           productoCounter++
         }
 
-        // Group stamps by cutNumber — each group becomes a separate PDF
+        // Group stamps by cutNumber — each group becomes a separate PDF --------------NO --------- AQUI INDIVIDUAL ---CORTE------
         const groups = groupLabels(stamps, cutNumber)
         for (const group of groups) {
           const pdfBuffer = await renderStampMultiPage(group)
           pdfs.push({
             buffer: pdfBuffer,
             target: tariff.target,
-            pdfType: 'stamp_simple',
+            pdfType: 'SELLO_simple',
             description: `${tariff.label} modelo${tariff.model} x${group.length}`
           })
         }
@@ -1086,7 +1086,7 @@ export async function generateSalePdfs(
     }
   }
 
-  // ─── Count results ─────────────────────────────────────────────────────────
+  // ─── Count results ───────────────────────────────────────────────────────── AQUI NOMBRE PDF
 
   const stampCount = pdfs.filter(
     (p) => p.pdfType === 'stamp_simple' || p.pdfType === 'stamp_tira' || p.pdfType === 'stamp_especial'

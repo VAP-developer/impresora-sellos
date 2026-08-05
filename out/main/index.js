@@ -2998,12 +2998,8 @@ const FONTS = {
   bold: "FranklinGothicBold",
   condensed: "FranklinGothicCondensed"
 };
-const TEXT_LEFT_MM = 2;
-const TEXT_RIGHT_MARGIN_MM = 2;
 const FECHA_LOCALIDAD_FONT_SIZE = 9;
 const FECHA_Y_MM = 43;
-const LOCALIDAD_Y_MM = 39.5;
-const LOGO_TEXT_GAP_MM = 5;
 function getFontsPath() {
   if (utils.is.dev) {
     return path.join(__dirname, "../../resources/fonts");
@@ -3035,8 +3031,9 @@ function formatCodigoLines(codigo) {
   }
   const mes = prefix[1];
   const pais = prefix.substring(2, 4);
-  const anio = prefix.substring(4, 6);
-  const line1 = `P${anio}-${mes}${pais}`;
+  prefix.substring(4, 6);
+  const codigoFeria = suffix.substring(0, 4);
+  const line1 = `${codigoFeria}-${mes}${pais}`;
   const dashParts = suffix.split("-");
   let line2;
   if (dashParts.length >= 3) {
@@ -3107,19 +3104,14 @@ function drawOverlay(doc, imageSource) {
 }
 function computeLogoBox(doc, fecha, evento) {
   doc.font(FONTS.regular).fontSize(FECHA_LOCALIDAD_FONT_SIZE);
-  const fechaWidth = doc.widthOfString(formatFechaMonthYear(fecha));
-  const eventoWidth = doc.widthOfString(evento);
-  const textBlockWidth = Math.max(fechaWidth, eventoWidth);
-  const baseX = TEXT_LEFT_MM * MM_TO_PT$1 + textBlockWidth + LOGO_TEXT_GAP_MM * MM_TO_PT$1;
-  const x = baseX - 20 * MM_TO_PT$1;
+  doc.widthOfString(formatFechaMonthYear(fecha));
+  doc.widthOfString(evento);
+  const baseX = 88;
+  const x = baseX - 31 * MM_TO_PT$1;
   const top = bottomToTop(FECHA_Y_MM, FECHA_LOCALIDAD_FONT_SIZE);
-  const bottom = bottomToTop(LOCALIDAD_Y_MM, FECHA_LOCALIDAD_FONT_SIZE) + FECHA_LOCALIDAD_FONT_SIZE;
-  const baseHeight = bottom - top;
-  const height = baseHeight * 5;
-  const y = top - 10 * MM_TO_PT$1;
-  const maxWidth = STAMP_WIDTH - TEXT_RIGHT_MARGIN_MM * MM_TO_PT$1 - x;
-  const width = Math.min(baseHeight * 3 * 3, maxWidth);
-  if (width <= 0 || height <= 0) return null;
+  const height = 160;
+  const y = top - 25 * MM_TO_PT$1;
+  const width = 155;
   return { x, y, width, height };
 }
 function drawLogoPng(doc, imageSource, fecha, evento) {
@@ -3172,13 +3164,13 @@ async function renderStampMultiPage(stamps) {
     } else {
       drawOverlay(doc, stamp.overlayImage);
     }
-    drawTextLeft(doc, stamp.tarifa, FONTS.regular, 14, 2, 50);
-    drawTextLeft(doc, stamp.tarifaDescripcion ?? "", FONTS.regular, 7, 2, 47.5);
+    drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12.2, 2, 50);
+    drawTextLeft(doc, stamp.tarifaDescripcion ?? "", FONTS.regular, 9, 2, 47.2);
     drawTextLeft(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 2, 43);
     drawTextLeft(doc, stamp.evento, FONTS.regular, 9, 2, 39.5);
     const { line1, line2 } = formatCodigoLines(stamp.codigo);
-    drawTextLeft(doc, line1, FONTS.regular, 5, 2, 35.5);
-    drawTextLeft(doc, line2, FONTS.regular, 5, 2, 33.5);
+    drawTextLeft(doc, line1, FONTS.regular, 5.7, 2, 35.2);
+    drawTextLeft(doc, line2, FONTS.regular, 5.7, 2, 33);
   });
   doc.end();
   return result;
@@ -4141,7 +4133,7 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
           pdfs.push({
             buffer: pdfBuffer,
             target: tariff.target,
-            pdfType: "stamp_simple",
+            pdfType: "SELLO_simple",
             description: `${tariff.label} modelo${tariff.model} x${group.length}`
           });
         }

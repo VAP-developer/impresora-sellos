@@ -255,15 +255,15 @@ export default function CartControls({
       <div className="flex flex-col items-center gap-2 mr-6">
         <button
           type="button"
-          className="w-[80px] h-[65px] bg-purple-700 hover:bg-purple-800 text-white rounded
+          className="w-[80px] h-[65px] bg-[rgb(24,62,117)] hover:bg-[rgb(31, 73, 133)] text-white rounded
                      flex items-center justify-center text-xs font-bold cursor-pointer
-                     transition-colors focus:outline-none focus:ring-2 focus:ring-purple-400
+                     transition-colors focus:outline-none focus:ring-2 focus:ring-[rgb(24,62,117)]
                      disabled:opacity-50 disabled:cursor-not-allowed"
           aria-label="Imprimir Filatelia"
           disabled={printing}
           onClick={handlePrintFilatelia}
         >
-          Filatelia
+          Oficina
         </button>
       </div>
 
@@ -360,7 +360,7 @@ export default function CartControls({
             className="w-4 h-4 cursor-pointer"
             aria-label="Imprimir logo PNG a la derecha"
           />
-          <span className="text-gray-700 font-medium">Logo PNG</span>
+          <span className="text-gray-700 font-medium">FERIA/LOGO</span>
         </label>
       </div>
     </div>

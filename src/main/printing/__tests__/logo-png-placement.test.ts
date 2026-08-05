@@ -48,7 +48,7 @@ const baseParams: StampRenderParams = {
   tarifaDescripcion: 'Acceso General',
   fecha: '21-24 abril 2026',
   evento: 'Madrid',
-  codigo: 'P26-4ES 0001-001',
+  codigo: 'Pj26-4ES 0001-001',
   backgroundImage: null
 }
 

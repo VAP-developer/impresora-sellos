@@ -23,7 +23,7 @@ export default function NavComponent(): JSX.Element {
   return (
     <>
       <div className="w-full h-px bg-black" />
-      <nav className="h-[100px] bg-[rgb(255,192,0)] flex items-center px-4 shrink-0">
+      <nav className="h-[60px] bg-[rgb(255,192,0)] flex items-center px-4 shrink-0">
         {/* 1. Home */}
         <Link
           to="/home"
@@ -34,7 +34,7 @@ export default function NavComponent(): JSX.Element {
           aria-label={t('nav.home')}
         >
           <HomeIcon />
-          <span className="text-sm font-semibold text-gray-800 hidden sm:inline">{t('nav.home')}</span>
+          <span className="text-[13] font-semibold text-gray-800 hidden sm:inline">{t('nav.home')}</span>
         </Link>
 
         <div className="flex-1" />
@@ -49,7 +49,7 @@ export default function NavComponent(): JSX.Element {
           aria-label={t('nav.reports')}
         >
           <ReportsIcon />
-          <span className="text-sm font-semibold text-gray-800 hidden sm:inline">
+          <span className="text-[13] font-semibold text-gray-800 hidden sm:inline">
             {t('nav.reports')}
           </span>
         </Link>
@@ -66,7 +66,7 @@ export default function NavComponent(): JSX.Element {
           aria-label={t('nav.settings')}
         >
           <SettingsIcon />
-          <span className="text-sm font-semibold text-gray-800 hidden sm:inline">
+          <span className="text-[13] font-semibold text-gray-800 hidden sm:inline">
             {t('nav.settings')}
           </span>
         </Link>
@@ -83,7 +83,7 @@ export default function NavComponent(): JSX.Element {
           aria-label={t('nav.machine')}
         >
           <MachineIcon />
-          <span className="text-sm font-semibold text-gray-800 hidden sm:inline">{t('nav.machine')}</span>
+          <span className="text-[13] font-semibold text-gray-800 hidden sm:inline">{t('nav.machine')}</span>
         </Link>
 
         <div className="flex-1" />
@@ -98,7 +98,7 @@ export default function NavComponent(): JSX.Element {
           aria-label={t('nav.print')}
         >
           <PrinterIcon />
-          <span className="text-sm font-semibold text-gray-800 hidden sm:inline">{t('nav.print')}</span>
+          <span className="text-[13] font-semibold text-gray-800 hidden sm:inline">{t('nav.print')}</span>
         </Link>
 
         <div className="flex-1" />
@@ -113,7 +113,7 @@ export default function NavComponent(): JSX.Element {
           aria-label={t('nav.kiosko')}
         >
           <KioskoIcon />
-          <span className="text-sm font-semibold text-gray-800 hidden sm:inline">{t('nav.kiosko')}</span>
+          <span className="text-[13] font-semibold text-gray-800 hidden sm:inline">{t('nav.kiosko')}</span>
         </Link>
       </nav>
     </>

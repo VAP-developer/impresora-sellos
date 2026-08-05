@@ -1,6 +1,9 @@
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
+
+
+
 /**
  * HomeView — Main menu screen with navigation to all main application sections.
  *
@@ -57,6 +60,15 @@ export default function HomeView(): JSX.Element {
           ariaLabel="Ir a Eventos"
         />
 
+            
+        {/* Logo */}
+        <NavigationCard
+          icon={<SettingsLogo />}
+          title={t(' ')}
+          description=" "
+          ariaLabel=" "
+        />
+
         {/* Kiosko */}
         <NavigationCard
           onClick={() => navigate('/kiosko')}
@@ -94,7 +106,19 @@ function NavigationCard({ onClick, icon, title, description, ariaLabel }: Naviga
   )
 }
 
-/* ─── Inline SVG Icons (large, matching design) ─────────────────────────── */
+/* ─── Inline SVG Icons (large, matching design) ─────────────────────────── nuevo icono */ 
+
+function SettingsLogo(): JSX.Element {
+  return (
+    <img
+    //src="E:\_SvvS Kiosko\v6-imp\dist\stamp-sales-app-1.0.0-x64.nsis\resources\images\logo-svvs.svg"
+      src="E:\_SvvS Kiosko\v6-imp\dist\stamp-sales-app-1.0.0-x64.nsis\resources\images\logo-svvs.svg"
+      alt="Logo SvvS"
+      className="w-50 h-20"
+      //viewBox="0 0 24 24"
+    />
+  )
+}
 
 function ReportsIcon(): JSX.Element {
   return (

@@ -48,24 +48,24 @@ export const FONTS = {
   condensed: 'FranklinGothicCondensed'
 } as const
 
-// ─────────────────────────────────────────────
+// ───────────────────────────────────────────── ************ NUEVO TAMAÑO Y COORDENADAS TEXTO ETIQUETA ****************
 // Text Layout Constants
-// ─────────────────────────────────────────────
+// ───────────────────────────────────────────── ------------------------- AQUI NUEVO --------------------
 // Vertical positions are yBottom_mm (distance from the bottom of the canvas).
 // The logo placement is derived from the fecha/localidad block, so these
 // constants must be used by both the text drawing and the logo positioning
 // to keep them in sync.
 
 /** Left margin shared by all text fields (mm) */
-export const TEXT_LEFT_MM = 2
+export const TEXT_LEFT_MM = 2         //-------------------------------***  LEFT -CAMBIAR COLUMNA
 /** Right margin kept free at the label edge (mm) */
-export const TEXT_RIGHT_MARGIN_MM = 2
+export const TEXT_RIGHT_MARGIN_MM = 2  //-------------------------------***  RIGTH -CAMBIAR COLUMNA ¿?     
 /** Font size used for the fecha and localidad lines (pt) */
-export const FECHA_LOCALIDAD_FONT_SIZE = 9
+export const FECHA_LOCALIDAD_FONT_SIZE = 9 //-------------------------------***  3 y 4 -CAMBIAR TAMAÑO TTF
 /** yBottom of the fecha line (mm) */
-export const FECHA_Y_MM = 43
+export const FECHA_Y_MM = 43                //-------------------------------***  3-CAMBIAR fecha --------- VAR ETI
 /** yBottom of the localidad line (mm) */
-export const LOCALIDAD_Y_MM = 39.5
+export const LOCALIDAD_Y_MM = 39.5          //-------------------------------***  4-CAMBIAR localidad ------ VAR ETI
 /** Horizontal gap between the fecha/localidad text and the logo PNG (mm) */
 export const LOGO_TEXT_GAP_MM = 5
 
@@ -132,9 +132,9 @@ export function formatFechaMonthYear(fecha: string): string {
 }
 
 /**
- * Transforms a stamp code from original format to two-line display format.
+ * Transforms a stamp code from original format to two-line display format. ------------- AQUI CÓDIGO -------
  *
- * Input:  "P4ES26 CH17-0001-001"
+ * Input:  "P4ES26 CH17-0001-001"                                           LINEA 1 /  LINEA
  * Output: { line1: "P26-4ES", line2: "0001-001" }
  *
  * Format breakdown:
@@ -154,6 +154,7 @@ export function formatCodigoLines(codigo: string): { line1: string; line2: strin
   const prefix = codigo.substring(0, spaceIdx) // e.g. "P4ES26"
   const suffix = codigo.substring(spaceIdx + 1) // e.g. "CH17-0001-001"
 
+
   // Parse prefix: P{mes}{pais2}{año2} → "P4ES26"
   // P = prefix[0]
   // mes = prefix[1] (single digit/char: 1-9, O, N, D)
@@ -166,9 +167,12 @@ export function formatCodigoLines(codigo: string): { line1: string; line2: strin
   const mes = prefix[1]
   const pais = prefix.substring(2, 4)
   const anio = prefix.substring(4, 6)
+  const codigoFeria = suffix.substring(0, 4)
+
 
   // Line 1: P{año}-{mes}{pais}
-  const line1 = `P${anio}-${mes}${pais}`
+  //const line1 = `P${anio}-${mes}${pais}`
+  const line1 = `${codigoFeria}-${mes}${pais}`
 
   // Line 2: extract serie-num from suffix (last two dash-separated parts)
   // suffix = "CH17-0001-001" → we want "0001-001"
@@ -357,7 +361,7 @@ function drawOverlay(doc: PDFKit.PDFDocument, imageSource: string | null | undef
 }
 
 /**
- * Computes the logo PNG placement box.
+ * Computes the logo PNG placement box. --------------------------- AQUI LOGO ------------------- L O G O --------
  *
  * The logo is positioned relative to the text block but scaled 3× larger than
  * the original text-height-based box, shifted 5mm down and 10mm to the left
@@ -377,19 +381,20 @@ export function computeLogoBox(
   const textBlockWidth = Math.max(fechaWidth, eventoWidth)
 
   // X position: right of the text block + gap, shifted left
-  const baseX = TEXT_LEFT_MM * MM_TO_PT + textBlockWidth + LOGO_TEXT_GAP_MM * MM_TO_PT
-  const x = baseX - 20 * MM_TO_PT
+  //const baseX = TEXT_LEFT_MM * MM_TO_PT + textBlockWidth + LOGO_TEXT_GAP_MM * MM_TO_PT
+  const baseX = 88
+  const x = baseX - 31 * MM_TO_PT
 
   // Vertical: use bottomToTop for the same coordinate system as text
   const top = bottomToTop(FECHA_Y_MM, FECHA_LOCALIDAD_FONT_SIZE)
   const bottom = bottomToTop(LOCALIDAD_Y_MM, FECHA_LOCALIDAD_FONT_SIZE) + FECHA_LOCALIDAD_FONT_SIZE
   const baseHeight = bottom - top
-  const height = baseHeight * 5
-  const y = top - 10 * MM_TO_PT
+  const height = 160
+  const y = top - 25 * MM_TO_PT
 
   // Width scaled proportionally, capped to available space
-  const maxWidth = STAMP_WIDTH - TEXT_RIGHT_MARGIN_MM * MM_TO_PT - x
-  const width = Math.min(baseHeight * 3 * 3, maxWidth)
+  const maxWidth = 100
+  const width = 155
 
   if (width <= 0 || height <= 0) return null
 
@@ -663,7 +668,7 @@ export async function renderStampE4(params: StampEspecialParams): Promise<Buffer
 
 /**
  * Generates a multi-page PDF with multiple stamps (for tiras/strips of 4).--------------- T AAAA / T4T ----------- AMBAS TIRAS ---
- * Each page is one stamp (55×25mm).
+ * Each page is one stamp (55×25mm).    /////////////// --------------- Y   S I M P L E ----------------
  *
  * @param stamps - Array of StampRenderParams, one per stamp page
  * @returns Buffer containing a multi-page PDF
@@ -698,16 +703,50 @@ export async function renderStampMultiPage(stamps: StampRenderParams[]): Promise
       drawOverlay(doc, stamp.overlayImage)
     }
 
-    // Layout vertical:
-    //   Nombre Tarifa → Descripción → Fecha (mes+año) → Localidad → Código L1 → Código L2
-    drawTextLeft(doc, stamp.tarifa, FONTS.regular, 14, 2, 50)
-    drawTextLeft(doc, stamp.tarifaDescripcion ?? '', FONTS.regular, 7, 2, 47.5)
+
+      // Layout vertical: DISEÑO 1 imagen DERECHA Post & Go + MOT 1 DIS 1 + MOT 2 DIS 2 --------------- IMG DCHA
+      //   Nombre Tarifa → Descripción → Fecha (mes+año) → Localidad → Código L1 → Código L2
+    drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12.2, 2, 50)
+    drawTextLeft(doc, stamp.tarifaDescripcion ?? '', FONTS.regular, 9, 2, 47.2)
     drawTextLeft(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 2, 43)
     drawTextLeft(doc, stamp.evento, FONTS.regular, 9, 2, 39.5)
 
     const { line1, line2 } = formatCodigoLines(stamp.codigo)
-    drawTextLeft(doc, line1, FONTS.regular, 5, 2, 35.5)
-    drawTextLeft(doc, line2, FONTS.regular, 5, 2, 33.5)
+    drawTextLeft(doc, line1, FONTS.regular, 5.7, 2, 35.2)
+    drawTextLeft(doc, line2, FONTS.regular, 5.7, 2, 33)
+
+      // Layout vertical: DISEÑO 2 imagen IZQUIERDA --------------- IMG IZDA
+      //   Nombre Tarifa → Descripción → Fecha (mes+año) → Localidad → Código L1 → Código L2
+    //drawTextRight(doc, stamp.tarifa, FONTS.regular, 12.2, 53, 50)
+    //drawTextRight(doc, stamp.tarifaDescripcion ?? '', FONTS.regular, 9, 53, 47.2)
+    //drawTextRight(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 53, 43)
+    //drawTextRight(doc, stamp.evento, FONTS.regular, 9, 53, 39.5)
+
+    //const { line1, line2 } = formatCodigoLines(stamp.codigo)
+    //drawTextRight(doc, line1, FONTS.regular, 5.7, 53, 35.2)
+    //drawTextRight(doc, line2, FONTS.regular, 5.7, 53, 33)
+
+          // Layout horizontal: DISEÑO 4 imagen INFERIOR ------------------------------------- IMG INF
+      //   Nombre Tarifa → Descripción → Fecha (mes+año) → Localidad → Código L1 → Código L2
+    //drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12.2, 2, 50)
+    //drawTextLeft(doc, stamp.tarifaDescripcion ?? '', FONTS.regular, 9, 2, 47.2)
+    //drawTextRight(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 53, 50)
+    //drawTextRight(doc, stamp.evento, FONTS.regular, 9, 53, 47.2)
+
+    //const { line1, line2 } = formatCodigoLines(stamp.codigo)
+    //drawTextLeft(doc, line1, FONTS.regular, 5.7, 22, 46)
+    //drawTextLeft(doc, line2, FONTS.regular, 5.7, 22, 44.4)
+
+              // Layout horizontal: DISEÑO 5 imagen SUPERIOR ------------------------------------- IMG SUP
+      //   Nombre Tarifa → Descripción → Fecha (mes+año) → Localidad → Código L1 → Código L2
+    //drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12.2, 2, 36.8)
+    //drawTextLeft(doc, stamp.tarifaDescripcion ?? '', FONTS.regular, 9, 2, 34)
+    //drawTextRight(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 53, 36.8)
+    //drawTextRight(doc, stamp.evento, FONTS.regular, 9, 53, 34)
+
+    //const { line1, line2 } = formatCodigoLines(stamp.codigo)
+    //drawTextLeft(doc, line1, FONTS.regular, 5.7, 22, 35.2)
+    //drawTextLeft(doc, line2, FONTS.regular, 5.7, 22, 33)
   })
 
   doc.end()
