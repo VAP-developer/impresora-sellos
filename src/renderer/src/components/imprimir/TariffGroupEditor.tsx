@@ -46,6 +46,7 @@ export interface TariffGroupEditorProps {
 }
 
 interface TariffFormRow {
+  id?: number
   name: string
   price: string
 }
@@ -74,7 +75,7 @@ export default function TariffGroupEditor({
   const [title, setTitle] = useState<string>(group?.title ?? '')
   const [currency, setCurrency] = useState<string>(group?.currency ?? '')
   const [tariffs, setTariffs] = useState<TariffFormRow[]>(
-    group?.tariffs.map((t) => ({ name: t.name, price: String(t.price) })) ??
+    group?.tariffs.map((t) => ({ id: t.id, name: t.name, price: String(t.local_price) })) ??
       [
         { name: '', price: '' },
         { name: '', price: '' }
@@ -193,6 +194,7 @@ export default function TariffGroupEditor({
 
     try {
       const tariffInputs = tariffs.map((t, i) => ({
+        ...(t.id != null ? { id: t.id } : {}),
         name: t.name.trim(),
         price: parseFloat(t.price),
         position: i + 1

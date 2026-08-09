@@ -123,7 +123,7 @@ const DEFAULT_CONFIG: AppConfig = {
     lugar: 'Plaza Mayor - MadridJC',
     fecha: 'auto',
     hora: 'auto',
-    titulo: 'Factura SimplificadaJC',
+    titulo: 'Factura Simplificada',
     tituloCopia: 'COPIA Factura Simplificada',
     rollo1: 1500,
     rollo2: 1500,

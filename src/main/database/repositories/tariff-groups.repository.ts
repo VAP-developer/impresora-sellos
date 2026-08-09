@@ -48,6 +48,7 @@ export interface TariffGroupInput {
 }
 
 export interface TariffInput {
+  id?: number
   name: string
   description: string
   local_price: number
@@ -56,6 +57,7 @@ export interface TariffInput {
 }
 
 export interface StripInput {
+  id?: number
   name: string
   local_price: number
   secondary_price: number
@@ -444,7 +446,12 @@ export class TariffGroupsRepository {
   }
 
   /**
-   * Updates an existing tariff group and syncs its tariffs/strips (delete + re-insert) atomically.
+   * Updates an existing tariff group using a diff-based approach:
+   * - Existing tariffs/strips are updated in-place (preserving IDs)
+   * - New tariffs/strips are inserted
+   * - Omitted tariffs/strips are deleted
+   * - Orphaned references in events are cleaned up
+   * All operations execute atomically in a single transaction.
    * Returns the updated group or null if not found.
    */
   update(id: number, input: TariffGroupUpdateInput): TariffGroup | null {
@@ -470,14 +477,6 @@ export class TariffGroupsRepository {
       WHERE id = ?
     `)
 
-    const deleteStripTariffs = this.db.prepare(`
-      DELETE FROM strip_tariffs WHERE strip_id IN (
-        SELECT id FROM tariffs WHERE group_id = ? AND type = 'strip'
-      )
-    `)
-
-    const deleteTariffs = this.db.prepare('DELETE FROM tariffs WHERE group_id = ?')
-
     const insertTariff = this.db.prepare(`
       INSERT INTO tariffs (group_id, name, description, local_price, secondary_price, position, type)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -487,6 +486,15 @@ export class TariffGroupsRepository {
       INSERT INTO strip_tariffs (strip_id, tariff_id, quantity)
       VALUES (?, ?, ?)
     `)
+
+    const updateTariffStmt = this.db.prepare(`
+      UPDATE tariffs SET name = ?, description = ?, local_price = ?, secondary_price = ?, position = ?
+      WHERE id = ?
+    `)
+
+    const deleteSingleTariff = this.db.prepare('DELETE FROM tariffs WHERE id = ?')
+    const deleteStripTariffsForTariff = this.db.prepare('DELETE FROM strip_tariffs WHERE tariff_id = ?')
+    const deleteStripJunction = this.db.prepare('DELETE FROM strip_tariffs WHERE strip_id = ?')
 
     const updateTransaction = this.db.transaction(() => {
       const year = input.year ?? existing.year
@@ -500,56 +508,175 @@ export class TariffGroupsRepository {
         throw err
       }
 
-      // Delete existing strip_tariffs junction rows explicitly before deleting tariffs
-      deleteStripTariffs.run(id)
+      // --- NEW: In-place update for existing individual tariffs ---
+      const existingTariffIds = new Set(existing.tariffs.map((t) => t.id!))
+      const incomingTariffIds = new Set<number>()
+      const positionToId = new Map<number, number>()
 
-      // Delete existing tariffs (CASCADE should handle remaining strip_tariffs, but we already cleared them)
-      deleteTariffs.run(id)
-
-      // Re-insert individual tariffs and track position → new ID.
-      // The frontend sends tariff_ids as 1-indexed positions, so we need
-      // to resolve them to the newly generated database IDs.
-      const positionToNewId = new Map<number, number>()
       for (const tariff of input.tariffs) {
-        const tariffResult = insertTariff.run(
-          id,
-          tariff.name,
-          tariff.description ?? '',
-          tariff.local_price,
-          tariff.secondary_price,
-          tariff.position,
-          'individual'
-        )
-        positionToNewId.set(tariff.position, Number(tariffResult.lastInsertRowid))
+        if (tariff.id && existingTariffIds.has(tariff.id)) {
+          // Update existing tariff in-place, preserving its primary key
+          updateTariffStmt.run(
+            tariff.name,
+            tariff.description ?? '',
+            tariff.local_price,
+            tariff.secondary_price,
+            tariff.position,
+            tariff.id
+          )
+          incomingTariffIds.add(tariff.id)
+          positionToId.set(tariff.position, tariff.id)
+        }
+      }
+      // --- END NEW ---
+
+      // --- NEW: Insert new tariffs and delete omitted tariffs ---
+      for (const tariff of input.tariffs) {
+        if (!tariff.id || !existingTariffIds.has(tariff.id)) {
+          // Insert new tariff
+          const result = insertTariff.run(
+            id,
+            tariff.name,
+            tariff.description ?? '',
+            tariff.local_price,
+            tariff.secondary_price,
+            tariff.position,
+            'individual'
+          )
+          positionToId.set(tariff.position, Number(result.lastInsertRowid))
+        }
       }
 
-      // Re-insert strips and their junction rows
-      for (const strip of input.strips) {
-        const stripResult = insertTariff.run(
-          id,
-          strip.name,
-          '',
-          strip.local_price,
-          strip.secondary_price,
-          strip.position,
-          'strip'
-        )
-        const stripId = Number(stripResult.lastInsertRowid)
+      // Delete tariffs that exist in DB but are NOT in the incoming set
+      const deletedTariffIds: number[] = []
+      for (const existingId of existingTariffIds) {
+        if (!incomingTariffIds.has(existingId)) {
+          deleteStripTariffsForTariff.run(existingId)
+          deleteSingleTariff.run(existingId)
+          deletedTariffIds.push(existingId)
+        }
+      }
+      // --- END NEW: Insert/Delete tariffs ---
 
-        // A strip may repeat the same tariff (e.g. 4 x Tarifa A). Collapse the
-        // repeats into one junction row per tariff carrying its quantity.
-        for (const [tariffPosition, quantity] of this.countTariffOccurrences(strip.tariff_ids)) {
-          // tariff_ids from the frontend are 1-indexed positions, not DB IDs
-          const newTariffId = positionToNewId.get(tariffPosition)
-          if (newTariffId != null) {
-            insertStripTariff.run(stripId, newTariffId, quantity)
+      // --- NEW: In-place update, insert, and delete for strips ---
+      const existingStripIds = new Set(existing.strips.map((s) => s.id!))
+      const incomingStripIds = new Set<number>()
+      const deletedStripIds: number[] = []
+
+      for (const strip of input.strips) {
+        if (strip.id && existingStripIds.has(strip.id)) {
+          // Update existing strip in-place
+          updateTariffStmt.run(
+            strip.name,
+            '',
+            strip.local_price,
+            strip.secondary_price,
+            strip.position,
+            strip.id
+          )
+          incomingStripIds.add(strip.id)
+
+          // Re-sync junction rows for this strip
+          deleteStripJunction.run(strip.id)
+          for (const [tariffPosition, quantity] of this.countTariffOccurrences(strip.tariff_ids)) {
+            const resolvedId = positionToId.get(tariffPosition)
+            if (resolvedId != null) {
+              insertStripTariff.run(strip.id, resolvedId, quantity)
+            }
+          }
+        } else {
+          // Insert new strip
+          const result = insertTariff.run(
+            id,
+            strip.name,
+            '',
+            strip.local_price,
+            strip.secondary_price,
+            strip.position,
+            'strip'
+          )
+          const newStripId = Number(result.lastInsertRowid)
+
+          // Create junction rows for the new strip
+          for (const [tariffPosition, quantity] of this.countTariffOccurrences(strip.tariff_ids)) {
+            const resolvedId = positionToId.get(tariffPosition)
+            if (resolvedId != null) {
+              insertStripTariff.run(newStripId, resolvedId, quantity)
+            }
           }
         }
+      }
+
+      // Delete strips that exist in DB but are NOT in the incoming set
+      for (const existingId of existingStripIds) {
+        if (!incomingStripIds.has(existingId)) {
+          deleteStripJunction.run(existingId)
+          deleteSingleTariff.run(existingId)
+          deletedStripIds.push(existingId)
+        }
+      }
+      // --- END NEW: Strip diff logic ---
+
+      // Clean orphaned IDs from events within the same transaction
+      if (deletedTariffIds.length > 0 || deletedStripIds.length > 0) {
+        this.cleanOrphanedIds(id, deletedTariffIds, deletedStripIds)
       }
     })
 
     updateTransaction()
     return this.getById(id)
+  }
+
+  /**
+   * Removes deleted tariff/strip IDs from all events that reference the given tariff group.
+   * Updates `updated_at` for affected event rows.
+   * Must be called within the same transaction as the tariff deletions.
+   */
+  private cleanOrphanedIds(
+    groupId: number,
+    deletedTariffIds: number[],
+    deletedStripIds: number[]
+  ): void {
+    const events = this.db
+      .prepare('SELECT id, selected_tariff_ids, selected_strip_ids FROM eventos WHERE tariff_group_id = ?')
+      .all(groupId) as Array<{ id: number; selected_tariff_ids: string | null; selected_strip_ids: string | null }>
+
+    const updateStmt = this.db.prepare(`
+      UPDATE eventos SET selected_tariff_ids = ?, selected_strip_ids = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `)
+
+    const deletedTariffSet = new Set(deletedTariffIds)
+    const deletedStripSet = new Set(deletedStripIds)
+
+    for (const event of events) {
+      const currentTariffs: number[] = this.parseJsonArray(event.selected_tariff_ids)
+      const currentStrips: number[] = this.parseJsonArray(event.selected_strip_ids)
+
+      const filteredTariffs = currentTariffs.filter((id) => !deletedTariffSet.has(id))
+      const filteredStrips = currentStrips.filter((id) => !deletedStripSet.has(id))
+
+      const tariffChanged = filteredTariffs.length !== currentTariffs.length
+      const stripChanged = filteredStrips.length !== currentStrips.length
+
+      if (tariffChanged || stripChanged) {
+        updateStmt.run(
+          JSON.stringify(filteredTariffs),
+          JSON.stringify(filteredStrips),
+          event.id
+        )
+      }
+    }
+  }
+
+  private parseJsonArray(jsonStr: string | null): number[] {
+    if (!jsonStr) return []
+    try {
+      const parsed = JSON.parse(jsonStr)
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
   }
 
   /**

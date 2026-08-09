@@ -1,0 +1,213 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Update `TariffInput` and `StripInput` interfaces in `src/main/database/repositories/tariff-groups.repository.ts`": [
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785963925862
+      },
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785963934248
+      },
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785964001556
+      }
+    ],
+    "1.2 Update `TariffInput` and `StripInput` interfaces in `src/renderer/src/lib/ipc-client.ts`": [
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785963925906
+      },
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785963935016
+      },
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785964002505
+      }
+    ],
+    "2.1 Implement in-place UPDATE for existing individual tariffs": [
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785963925946
+      },
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785964006692
+      },
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785964276586
+      }
+    ],
+    "2.2 Implement INSERT for new individual tariffs and DELETE for omitted tariffs": [
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785963926025
+      },
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785964286945
+      },
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785964369825
+      }
+    ],
+    "2.3 Implement in-place UPDATE, INSERT, and DELETE for strips": [
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785963926060
+      },
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785964373737
+      },
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785964560771
+      }
+    ],
+    "2.4 Implement `cleanOrphanedIds()` private method": [
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785963926093
+      },
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785964564334
+      },
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785964746315
+      }
+    ],
+    "2.5 Wire diff-based logic into a single transaction": [
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785963926129
+      },
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785964565068
+      },
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785964747161
+      }
+    ],
+    "3. Checkpoint - Verify backend logic": [
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785963926163
+      },
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785965032133
+      },
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785965196598
+      }
+    ],
+    "4.1 Add `id` field to the internal `TariffFormRow` interface and strip form state": [
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785963926195
+      },
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785964007559
+      },
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785964277421
+      }
+    ],
+    "4.2 Propagate `id` in the `handleSave` / update payload builder": [
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785963926228
+      },
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785964754477
+      },
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785965010986
+      }
+    ],
+    "5. Final checkpoint - End-to-end verification": [
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785963926262
+      },
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785965200533
+      },
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785965315602
+      }
+    ],
+    "1. Add optional `id` field to TariffInput and StripInput types": [
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785964002565
+      }
+    ],
+    "2. Refactor `TariffGroupsRepository.update()` to diff-based logic": [
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785964747203
+      }
+    ],
+    "4. Update TariffGroupEditor to propagate existing IDs": [
+      {
+        "executionId": "94cc8120-4e5a-46c4-94d2-92e0b77b765c",
+        "chatSessionId": "sess_4536e9c9-d1e4-41a4-9ec5-30c2598e50b6",
+        "timestamp": 1785965011086
+      }
+    ]
+  }
+}

@@ -388,6 +388,7 @@ export interface TariffGroupInput {
 }
 
 export interface TariffInput {
+  id?: number
   name: string
   description: string
   local_price: number
@@ -396,6 +397,7 @@ export interface TariffInput {
 }
 
 export interface StripInput {
+  id?: number
   name: string
   local_price: number
   secondary_price: number

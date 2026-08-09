@@ -24,6 +24,7 @@ import type {
 // ─── Local Types ──────────────────────────────────────────────────────────────
 
 interface TariffFormRow {
+  id?: number
   name: string
   description: string
   local_price: string
@@ -31,6 +32,7 @@ interface TariffFormRow {
 }
 
 interface StripFormRow {
+  id?: number
   name: string
   local_price: string
   secondary_price: string
@@ -102,12 +104,14 @@ function groupToFormState(group: TariffGroup): FormState {
     local_currency: group.local_currency,
     complementary_currency: group.complementary_currency,
     tariffs: group.tariffs.map((t) => ({
+      id: t.id,
       name: t.name,
       description: t.description,
       local_price: String(t.local_price),
       secondary_price: String(t.secondary_price)
     })),
     strips: group.strips.map((s) => ({
+      id: s.id,
       name: s.name,
       local_price: String(s.local_price),
       secondary_price: String(s.secondary_price),
@@ -287,6 +291,7 @@ export function TariffGroupSection(): JSX.Element {
 
     try {
       const tariffs = form.tariffs.map((row, i) => ({
+        ...(row.id != null ? { id: row.id } : {}),
         name: row.name.trim(),
         description: row.description.trim(),
         local_price: Number(row.local_price),
@@ -295,6 +300,7 @@ export function TariffGroupSection(): JSX.Element {
       }))
 
       const strips = form.strips.map((row, i) => ({
+        ...(row.id != null ? { id: row.id } : {}),
         name: row.name.trim(),
         local_price: Number(row.local_price),
         secondary_price: row.secondary_price.trim() ? Number(row.secondary_price) : 0,
