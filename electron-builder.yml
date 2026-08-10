@@ -62,8 +62,8 @@ win:
     - target: nsis
       arch:
         - x64
-  icon: build/icon.png
-  artifactName: "StampSales-Setup-${version}.${ext}"
+  icon: build/icon.ico
+  artifactName: "svvs-app.${ext}"
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
@@ -71,13 +71,13 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: Stamp Sales
-  installerIcon: build/icon.png
-  uninstallerIcon: build/icon.png
-  installerHeaderIcon: build/icon.png
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
   deleteAppDataOnUninstall: false
   include: build/installer.nsh
   runAfterFinish: true
   installerLanguages:
-    - SpanishInternational
-    - English
+    - es_ES
+    - en_US
   language: 3082

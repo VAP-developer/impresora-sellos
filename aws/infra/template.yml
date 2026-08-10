@@ -1,0 +1,217 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Infraestructura para SvvS Kiosko: buckets S3 (web + releases) y distribución CloudFront.
+
+# ============================================================================
+# PARAMETROS
+# ============================================================================
+Parameters:
+  ProjectName:
+    Type: String
+    Default: svvs-kiosko
+    Description: Prefijo para nombrar recursos
+
+  # Descomenta si tienes dominio propio y certificado ACM
+  # DomainName:
+  #   Type: String
+  #   Default: descargas.tukiosko.com
+  #   Description: Dominio personalizado para CloudFront
+  # AcmCertificateArn:
+  #   Type: String
+  #   Description: ARN del certificado ACM en us-east-1
+
+# ============================================================================
+# RECURSOS
+# ============================================================================
+Resources:
+
+  # --------------------------------------------------------------------------
+  # S3: Bucket para la web estática
+  # --------------------------------------------------------------------------
+  WebBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ProjectName}-web'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # Política para que CloudFront pueda leer del bucket web
+  WebBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref WebBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontOAC
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub '${WebBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${WebDistribution}'
+
+  # --------------------------------------------------------------------------
+  # S3: Bucket para los releases (.exe, latest.yml)
+  # --------------------------------------------------------------------------
+  ReleasesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ProjectName}-releases'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldVersions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 90
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # Política para que CloudFront pueda leer del bucket releases
+  ReleasesBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ReleasesBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontOAC
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub '${ReleasesBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${WebDistribution}'
+
+  # --------------------------------------------------------------------------
+  # CloudFront: Origin Access Control
+  # --------------------------------------------------------------------------
+  CloudFrontOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub '${ProjectName}-oac'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # --------------------------------------------------------------------------
+  # CloudFront: Distribución
+  # --------------------------------------------------------------------------
+  WebDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub '${ProjectName} - Web + Releases'
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        PriceClass: PriceClass_100  # Solo edge locations en Europa y Norteamérica
+
+        # Descomenta si tienes dominio propio
+        # Aliases:
+        #   - !Ref DomainName
+        # ViewerCertificate:
+        #   AcmCertificateArn: !Ref AcmCertificateArn
+        #   SslSupportMethod: sni-only
+        #   MinimumProtocolVersion: TLSv1.2_2021
+
+        # Sin dominio propio, usa el certificado por defecto de CloudFront
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+
+        Origins:
+          # Origen 1: Web estática
+          - Id: S3WebOrigin
+            DomainName: !GetAtt WebBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt CloudFrontOAC.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+
+          # Origen 2: Releases
+          - Id: S3ReleasesOrigin
+            DomainName: !GetAtt ReleasesBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt CloudFrontOAC.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+
+        DefaultCacheBehavior:
+          TargetOriginId: S3WebOrigin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6  # CachingOptimized
+          ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03  # SecurityHeadersPolicy
+
+        CacheBehaviors:
+          # Patrón para releases (descargas .exe, latest.yml)
+          - PathPattern: '/releases/*'
+            TargetOriginId: S3ReleasesOrigin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD]
+            CachedMethods: [GET, HEAD]
+            Compress: false  # No comprimir binarios
+            CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+            ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03
+
+        # Página de error personalizada (redirige 404 al index)
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 60
+
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+# ============================================================================
+# OUTPUTS
+# ============================================================================
+Outputs:
+  WebBucketName:
+    Description: Nombre del bucket S3 para la web
+    Value: !Ref WebBucket
+    Export:
+      Name: !Sub '${ProjectName}-web-bucket'
+
+  ReleasesBucketName:
+    Description: Nombre del bucket S3 para las releases
+    Value: !Ref ReleasesBucket
+    Export:
+      Name: !Sub '${ProjectName}-releases-bucket'
+
+  CloudFrontDomainName:
+    Description: URL de la distribución CloudFront
+    Value: !GetAtt WebDistribution.DomainName
+    Export:
+      Name: !Sub '${ProjectName}-cloudfront-domain'
+
+  CloudFrontDistributionId:
+    Description: ID de la distribución (para invalidaciones)
+    Value: !Ref WebDistribution
+    Export:
+      Name: !Sub '${ProjectName}-cloudfront-id'
+
+  DownloadUrl:
+    Description: URL directa de descarga del último release
+    Value: !Sub 'https://${WebDistribution.DomainName}/releases/latest/kiosko-setup.exe'

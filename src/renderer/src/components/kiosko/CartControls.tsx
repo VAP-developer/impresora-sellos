@@ -279,7 +279,7 @@ export default function CartControls({
             <circle cx="20" cy="21" r="1" />
             <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
             {/* Diagonal strikethrough */}
-            <line x1="2" y1="2" x2="22" y2="22" stroke="rgb(200,30,30)" strokeWidth="2.5" />
+            <line x1="2" y1="22" x2="22" y2="2" stroke="rgb(200,30,30)" strokeWidth="2.5" />
           </svg>
         </button>
       </div>

@@ -2385,7 +2385,12 @@ class TariffGroupsRepository {
     return this.getById(groupId);
   }
   /**
-   * Updates an existing tariff group and syncs its tariffs/strips (delete + re-insert) atomically.
+   * Updates an existing tariff group using a diff-based approach:
+   * - Existing tariffs/strips are updated in-place (preserving IDs)
+   * - New tariffs/strips are inserted
+   * - Omitted tariffs/strips are deleted
+   * - Orphaned references in events are cleaned up
+   * All operations execute atomically in a single transaction.
    * Returns the updated group or null if not found.
    */
   update(id, input) {
@@ -2407,12 +2412,6 @@ class TariffGroupsRepository {
         updated_at = datetime('now')
       WHERE id = ?
     `);
-    const deleteStripTariffs = this.db.prepare(`
-      DELETE FROM strip_tariffs WHERE strip_id IN (
-        SELECT id FROM tariffs WHERE group_id = ? AND type = 'strip'
-      )
-    `);
-    const deleteTariffs = this.db.prepare("DELETE FROM tariffs WHERE group_id = ?");
     const insertTariff = this.db.prepare(`
       INSERT INTO tariffs (group_id, name, description, local_price, secondary_price, position, type)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -2421,6 +2420,13 @@ class TariffGroupsRepository {
       INSERT INTO strip_tariffs (strip_id, tariff_id, quantity)
       VALUES (?, ?, ?)
     `);
+    const updateTariffStmt = this.db.prepare(`
+      UPDATE tariffs SET name = ?, description = ?, local_price = ?, secondary_price = ?, position = ?
+      WHERE id = ?
+    `);
+    const deleteSingleTariff = this.db.prepare("DELETE FROM tariffs WHERE id = ?");
+    const deleteStripTariffsForTariff = this.db.prepare("DELETE FROM strip_tariffs WHERE tariff_id = ?");
+    const deleteStripJunction = this.db.prepare("DELETE FROM strip_tariffs WHERE strip_id = ?");
     const updateTransaction = this.db.transaction(() => {
       const year = input.year ?? existing.year;
       try {
@@ -2431,42 +2437,136 @@ class TariffGroupsRepository {
         }
         throw err;
       }
-      deleteStripTariffs.run(id);
-      deleteTariffs.run(id);
-      const positionToNewId = /* @__PURE__ */ new Map();
+      const existingTariffIds = new Set(existing.tariffs.map((t) => t.id));
+      const incomingTariffIds = /* @__PURE__ */ new Set();
+      const positionToId = /* @__PURE__ */ new Map();
       for (const tariff of input.tariffs) {
-        const tariffResult = insertTariff.run(
-          id,
-          tariff.name,
-          tariff.description ?? "",
-          tariff.local_price,
-          tariff.secondary_price,
-          tariff.position,
-          "individual"
-        );
-        positionToNewId.set(tariff.position, Number(tariffResult.lastInsertRowid));
+        if (tariff.id && existingTariffIds.has(tariff.id)) {
+          updateTariffStmt.run(
+            tariff.name,
+            tariff.description ?? "",
+            tariff.local_price,
+            tariff.secondary_price,
+            tariff.position,
+            tariff.id
+          );
+          incomingTariffIds.add(tariff.id);
+          positionToId.set(tariff.position, tariff.id);
+        }
       }
+      for (const tariff of input.tariffs) {
+        if (!tariff.id || !existingTariffIds.has(tariff.id)) {
+          const result = insertTariff.run(
+            id,
+            tariff.name,
+            tariff.description ?? "",
+            tariff.local_price,
+            tariff.secondary_price,
+            tariff.position,
+            "individual"
+          );
+          positionToId.set(tariff.position, Number(result.lastInsertRowid));
+        }
+      }
+      const deletedTariffIds = [];
+      for (const existingId of existingTariffIds) {
+        if (!incomingTariffIds.has(existingId)) {
+          deleteStripTariffsForTariff.run(existingId);
+          deleteSingleTariff.run(existingId);
+          deletedTariffIds.push(existingId);
+        }
+      }
+      const existingStripIds = new Set(existing.strips.map((s) => s.id));
+      const incomingStripIds = /* @__PURE__ */ new Set();
+      const deletedStripIds = [];
       for (const strip of input.strips) {
-        const stripResult = insertTariff.run(
-          id,
-          strip.name,
-          "",
-          strip.local_price,
-          strip.secondary_price,
-          strip.position,
-          "strip"
-        );
-        const stripId = Number(stripResult.lastInsertRowid);
-        for (const [tariffPosition, quantity] of this.countTariffOccurrences(strip.tariff_ids)) {
-          const newTariffId = positionToNewId.get(tariffPosition);
-          if (newTariffId != null) {
-            insertStripTariff.run(stripId, newTariffId, quantity);
+        if (strip.id && existingStripIds.has(strip.id)) {
+          updateTariffStmt.run(
+            strip.name,
+            "",
+            strip.local_price,
+            strip.secondary_price,
+            strip.position,
+            strip.id
+          );
+          incomingStripIds.add(strip.id);
+          deleteStripJunction.run(strip.id);
+          for (const [tariffPosition, quantity] of this.countTariffOccurrences(strip.tariff_ids)) {
+            const resolvedId = positionToId.get(tariffPosition);
+            if (resolvedId != null) {
+              insertStripTariff.run(strip.id, resolvedId, quantity);
+            }
+          }
+        } else {
+          const result = insertTariff.run(
+            id,
+            strip.name,
+            "",
+            strip.local_price,
+            strip.secondary_price,
+            strip.position,
+            "strip"
+          );
+          const newStripId = Number(result.lastInsertRowid);
+          for (const [tariffPosition, quantity] of this.countTariffOccurrences(strip.tariff_ids)) {
+            const resolvedId = positionToId.get(tariffPosition);
+            if (resolvedId != null) {
+              insertStripTariff.run(newStripId, resolvedId, quantity);
+            }
           }
         }
+      }
+      for (const existingId of existingStripIds) {
+        if (!incomingStripIds.has(existingId)) {
+          deleteStripJunction.run(existingId);
+          deleteSingleTariff.run(existingId);
+          deletedStripIds.push(existingId);
+        }
+      }
+      if (deletedTariffIds.length > 0 || deletedStripIds.length > 0) {
+        this.cleanOrphanedIds(id, deletedTariffIds, deletedStripIds);
       }
     });
     updateTransaction();
     return this.getById(id);
+  }
+  /**
+   * Removes deleted tariff/strip IDs from all events that reference the given tariff group.
+   * Updates `updated_at` for affected event rows.
+   * Must be called within the same transaction as the tariff deletions.
+   */
+  cleanOrphanedIds(groupId, deletedTariffIds, deletedStripIds) {
+    const events = this.db.prepare("SELECT id, selected_tariff_ids, selected_strip_ids FROM eventos WHERE tariff_group_id = ?").all(groupId);
+    const updateStmt = this.db.prepare(`
+      UPDATE eventos SET selected_tariff_ids = ?, selected_strip_ids = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `);
+    const deletedTariffSet = new Set(deletedTariffIds);
+    const deletedStripSet = new Set(deletedStripIds);
+    for (const event of events) {
+      const currentTariffs = this.parseJsonArray(event.selected_tariff_ids);
+      const currentStrips = this.parseJsonArray(event.selected_strip_ids);
+      const filteredTariffs = currentTariffs.filter((id) => !deletedTariffSet.has(id));
+      const filteredStrips = currentStrips.filter((id) => !deletedStripSet.has(id));
+      const tariffChanged = filteredTariffs.length !== currentTariffs.length;
+      const stripChanged = filteredStrips.length !== currentStrips.length;
+      if (tariffChanged || stripChanged) {
+        updateStmt.run(
+          JSON.stringify(filteredTariffs),
+          JSON.stringify(filteredStrips),
+          event.id
+        );
+      }
+    }
+  }
+  parseJsonArray(jsonStr) {
+    if (!jsonStr) return [];
+    try {
+      const parsed = JSON.parse(jsonStr);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
   }
   /**
    * Deletes a tariff group by ID.

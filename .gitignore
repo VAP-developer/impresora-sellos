@@ -4,3 +4,8 @@ out/
 *.AppImage
 *.deb
 *.exe
+
+# AWS
+aws/.env
+.env
+*.env.local

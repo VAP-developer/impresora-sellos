@@ -6,10 +6,13 @@ import type { EventoRow } from '@renderer/lib/ipc-client'
 import { getEventoById } from '@renderer/lib/ipc-client'
 import EventoSection from '@renderer/components/imprimir/EventoSection'
 import EventoEditor from '@renderer/components/imprimir/EventoEditor'
+import { useKioskoStore } from '@renderer/stores/kiosko.store'
 
 export default function ImprimirView(): JSX.Element {
   const config = useConfigStore((s) => s.config)
   const updateImprimir = useConfigStore((s) => s.updateImprimir)
+  const updateMaquina = useConfigStore((s) => s.updateMaquina)
+  const resetKiosko = useKioskoStore((s) => s.reset)
   const { t } = useTranslation()
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -143,6 +146,19 @@ export default function ImprimirView(): JSX.Element {
       }
 
       await updateImprimir({ sello: selloUpdate, precios: preciosUpdate })
+
+      // Si el evento cambió a uno distinto, resetear los rollos de etiqueta
+      // para que el usuario reconfigure en la pestaña Máquina.
+      const previousEventId = config.sello.elevento ?? 0
+      const newEventId = ev?.id ?? 0
+      if (newEventId !== previousEventId && newEventId > 0) {
+        await updateMaquina({
+          ticket: { rollo1: -1, rollo2: -1 },
+          codigo: {}
+        })
+        // Resetear cantidades del kiosko para evitar datos del evento anterior
+        resetKiosko()
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al guardar configuración'
       setSaveError(message)
@@ -150,7 +166,7 @@ export default function ImprimirView(): JSX.Element {
     } finally {
       setSaving(false)
     }
-  }, [config, selectedPerfil, selectedEvento, localProfileNames, updateImprimir])
+  }, [config, selectedPerfil, selectedEvento, localProfileNames, updateImprimir, updateMaquina, resetKiosko])
 
   if (!config) {
     return (

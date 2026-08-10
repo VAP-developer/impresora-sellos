@@ -73,7 +73,7 @@ export default function TariffGroupEditor({
   // Form state
   const [year, setYear] = useState<number>(group?.year ?? new Date().getFullYear())
   const [title, setTitle] = useState<string>(group?.title ?? '')
-  const [currency, setCurrency] = useState<string>(group?.currency ?? '')
+  const [currency, setCurrency] = useState<string>(group?.local_currency ?? '')
   const [tariffs, setTariffs] = useState<TariffFormRow[]>(
     group?.tariffs.map((t) => ({ id: t.id, name: t.name, price: String(t.local_price) })) ??
       [
@@ -196,24 +196,40 @@ export default function TariffGroupEditor({
       const tariffInputs = tariffs.map((t, i) => ({
         ...(t.id != null ? { id: t.id } : {}),
         name: t.name.trim(),
-        price: parseFloat(t.price),
+        description: '',
+        local_price: parseFloat(t.price),
+        secondary_price: parseFloat(t.price),
         position: i + 1
       }))
 
       if (isEditMode && group) {
+        // Preserve existing strips from the group so they are not deleted
+        const existingStrips = (group.strips ?? []).map((s) => ({
+          id: s.id,
+          name: s.name,
+          local_price: s.local_price,
+          secondary_price: s.secondary_price,
+          position: s.position,
+          tariff_ids: s.tariff_ids ?? []
+        }))
+
         const input: TariffGroupUpdateInput = {
           year,
           title: title.trim(),
-          currency: currency.trim(),
-          tariffs: tariffInputs
+          local_currency: currency.trim(),
+          complementary_currency: currency.trim(),
+          tariffs: tariffInputs,
+          strips: existingStrips
         }
         await updateGroup(group.id, input)
       } else {
         const input: TariffGroupInput = {
           year,
           title: title.trim(),
-          currency: currency.trim(),
-          tariffs: tariffInputs
+          local_currency: currency.trim(),
+          complementary_currency: currency.trim(),
+          tariffs: tariffInputs,
+          strips: []
         }
         await createGroup(input)
       }
