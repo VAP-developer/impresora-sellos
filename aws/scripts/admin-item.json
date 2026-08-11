@@ -2,5 +2,9 @@
   "username": {"S": "admin.svvs"},
   "userId": {"S": "usr_admin_svvs"},
   "displayName": {"S": "VJC"},
-  "welcomeMessage": {"S": "Bienvenido VJC"}
+  "welcomeMessage": {"S": "Bienvenido VJC"},
+  "maxMachines": {"N": "999"},
+  "isAdmin": {"BOOL": true},
+  "activeMachines": {"L": []},
+  "apiKey": {"S": "sk_admin_Xk9mP2vL7nQw4jR8"}
 }

@@ -20,6 +20,7 @@ import { TariffGroupSection } from '@renderer/components/settings/TariffGroupSec
 import { CutNumberSection } from '@renderer/components/settings/CutNumberSection'
 import { LanguageSection } from '@renderer/components/settings/LanguageSection'
 import { CodigoEspecialSection } from '@renderer/components/settings/CodigoEspecialSection'
+import { LicenseSection } from '@renderer/components/settings/LicenseSection'
 
 export default function SettingsView(): JSX.Element {
   const { t } = useTranslation()
@@ -29,6 +30,7 @@ export default function SettingsView(): JSX.Element {
   const [cutOpen, setCutOpen] = useState(false)
   const [langOpen, setLangOpen] = useState(false)
   const [codigoOpen, setCodigoOpen] = useState(true)
+  const [licenseOpen, setLicenseOpen] = useState(false)
 
   useEffect(() => {
     loadSettings()
@@ -184,6 +186,40 @@ export default function SettingsView(): JSX.Element {
                 aria-label={t('settings.language')}
               >
                 <LanguageSection />
+              </div>
+            )}
+          </div>
+
+          {/* Section 4: License */}
+          <div>
+            <button
+              type="button"
+              className="w-full bg-[rgb(255,192,0)] p-2 rounded cursor-pointer flex items-center gap-2
+                         text-left focus:outline-none focus:ring-2 focus:ring-yellow-500"
+              onClick={() => setLicenseOpen(!licenseOpen)}
+              aria-expanded={licenseOpen}
+              aria-controls="settings-license-content"
+            >
+              <input
+                type="checkbox"
+                checked={licenseOpen}
+                readOnly
+                className="cursor-pointer"
+                tabIndex={-1}
+                aria-hidden="true"
+              />
+              <h3 className="text-lg font-bold m-0">
+                LICENCIA
+              </h3>
+            </button>
+            {licenseOpen && (
+              <div
+                id="settings-license-content"
+                className="border border-gray-200 rounded-b p-4 bg-white"
+                role="region"
+                aria-label="Licencia"
+              >
+                <LicenseSection />
               </div>
             )}
           </div>

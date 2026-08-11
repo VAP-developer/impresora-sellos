@@ -1,0 +1,29 @@
+{
+  "admin.svvs": {
+    "username": {"S": "admin.svvs"},
+    "userId": {"S": "usr_admin_svvs"},
+    "displayName": {"S": "VJC"},
+    "welcomeMessage": {"S": "Bienvenido VJC"},
+    "maxMachines": {"N": "999"},
+    "isAdmin": {"BOOL": true},
+    "activeMachines": {"L": []}
+  },
+  "test": {
+    "username": {"S": "test"},
+    "userId": {"S": "usr_test"},
+    "displayName": {"S": "Test"},
+    "welcomeMessage": {"S": "Bienvenido Test"},
+    "maxMachines": {"N": "1"},
+    "isAdmin": {"BOOL": false},
+    "activeMachines": {"L": []}
+  },
+  "vjc.home": {
+    "username": {"S": "vjc.home"},
+    "userId": {"S": "usr_vjc_home"},
+    "displayName": {"S": "home"},
+    "welcomeMessage": {"S": "Bienvenido home"},
+    "maxMachines": {"N": "2"},
+    "isAdmin": {"BOOL": false},
+    "activeMachines": {"L": []}
+  }
+}

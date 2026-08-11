@@ -185,7 +185,7 @@ function findExternalConfig(): string | null {
   // Next to the executable
   candidates.push(join(dirname(app.getPath('exe')), 'config.json'))
 
-  // Downloads folder
+  // Downloads folder (system default)
   try {
     candidates.push(join(app.getPath('downloads'), 'config.json'))
   } catch { /* ignore */ }
@@ -195,13 +195,34 @@ function findExternalConfig(): string | null {
     candidates.push(join(app.getPath('desktop'), 'config.json'))
   } catch { /* ignore */ }
 
+  // Documents folder
+  try {
+    candidates.push(join(app.getPath('documents'), 'config.json'))
+  } catch { /* ignore */ }
+
+  // Home directory
+  try {
+    candidates.push(join(app.getPath('home'), 'config.json'))
+    candidates.push(join(app.getPath('home'), 'Downloads', 'config.json'))
+    candidates.push(join(app.getPath('home'), 'Descargas', 'config.json'))
+  } catch { /* ignore */ }
+
+  // Common alternative download locations (Windows)
+  const drives = ['C:', 'D:', 'E:', 'F:']
+  for (const drive of drives) {
+    candidates.push(join(drive, 'Downloads', 'config.json'))
+    candidates.push(join(drive, 'Descargas', 'config.json'))
+  }
+
   // Resources
   candidates.push(join(process.resourcesPath, 'config.json'))
 
   for (const candidate of candidates) {
-    if (existsSync(candidate)) {
-      return candidate
-    }
+    try {
+      if (existsSync(candidate)) {
+        return candidate
+      }
+    } catch { /* ignore permission errors */ }
   }
 
   return null

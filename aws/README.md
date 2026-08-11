@@ -379,12 +379,24 @@ aws cloudformation describe-stacks --stack-name svvs-kiosko-infra --query "Stack
 .\aws\scripts\setup-users.ps1
 
 # 4. Desplegar código de Lambdas (npm install + zip + update)
+cd aws\lambdas\activate; npm install; cd ..\..\..
 Compress-Archive -Path "aws\lambdas\login\*" -DestinationPath "aws\lambdas\login.zip" -Force
 aws lambda update-function-code --function-name svvs-kiosko-login --zip-file fileb://aws/lambdas/login.zip --region eu-west-1 --no-cli-pager
 
+cd aws\lambdas\activate; npm install; cd ..\..\..
 Compress-Archive -Path "aws\lambdas\download\*" -DestinationPath "aws\lambdas\download.zip" -Force
 aws lambda update-function-code --function-name svvs-kiosko-download --zip-file fileb://aws/lambdas/download.zip --region eu-west-1 --no-cli-pager
 
+cd aws\lambdas\activate; npm install; cd ..\..\..
+Compress-Archive -Path "aws\lambdas\activate\*" -DestinationPath "aws\lambdas\activate.zip" -Force
+aws lambda update-function-code --function-name svvs-kiosko-activate --zip-file fileb://aws/lambdas/activate.zip --region eu-west-1 --no-cli-pager
+
+cd aws\lambdas\deactivate; npm install; cd ..\..\..
+Compress-Archive -Path "aws\lambdas\deactivate\*" -DestinationPath "aws\lambdas\deactivate.zip" -Force
+aws lambda update-function-code --function-name svvs-kiosko-deactivate --zip-file fileb://aws/lambdas/deactivate.zip --region eu-west-1 --no-cli-pager
+
+Compress-Archive -Path "aws\lambdas\download\*" -DestinationPath "aws\lambdas\download.zip" -Force
+aws lambda update-function-code --function-name svvs-kiosko-download --zip-file fileb://aws/lambdas/download.zip --region eu-west-1 --no-cli-pager
 
 # 5. Subir la web actualizada
 .\aws\scripts\deploy-web.ps1 -Invalidate
@@ -392,3 +404,78 @@ aws lambda update-function-code --function-name svvs-kiosko-download --zip-file 
 # 6. Subir el .exe
 .\aws\scripts\upload-release.ps1 -Version "1.0.0" -ExePath ".\dist\svvs-app.exe"
 ```
+
+## Fase 3: Licencias
+Para esta fase definimos las licencias:
+- Generalmente 1 ordenadro por usuario
+- Si el usuario compra otra licencia se le amplia a un ordenador más
+- Admin puede instalarse en cualquier equipo
+
+Esta información se guarda en la tabla DynamoDB a traves de maxMachines donde se registra el machineID que es un hash único del hardware del PC ligado a la placa base.
+
+Este sistema funciona:
+1. Primer arranque: Con internet, lee config,json, generar el machineID del PC y llama al POST para activar la licencia y lo guarda en %APPDATA%\stamp-sales-app\.license-ticket
+2. Arranques siguientes: Lo valida con internet o sino localiza el fichero guardado en %APPDATA% y comprueba el ticket existente y la machineID
+3. Para cambiar de PC en el settings podemos desactivar equipo
+
+Por útlimo para que el usuario no edite el archivo .license-ticket vamos a implementar un enfoque HMAC.
+
+En este caso cuando el usuario edite cualqueir byte del ticket la firma deja de coincidir y el ticket se invalida automaticamente
+
+Para implementar esta parte necesitamos ejecutar:
+
+``` bash
+# Infra
+aws cloudformation deploy --template-file aws/infra/template.yml --stack-name svvs-kiosko-infra --region eu-west-1 --capabilities CAPABILITY_NAMED_IAM
+
+# Actualizar DynamoDB
+aws dynamodb put-item --table-name svvs-kiosko-users --item file://aws/scripts/admin-item.json --region eu-west-1
+aws dynamodb put-item --table-name svvs-kiosko-users --item file://aws/scripts/test-item.json --region eu-west-1
+aws dynamodb put-item --table-name svvs-kiosko-users --item file://aws/scripts/vjchome-item.json --region eu-west-1
+
+# Creamos vjc.home en Cognito
+aws cognito-idp admin-create-user --user-pool-id eu-west-1_CKDDDarFe --username "vjc.home" --temporary-password "TempPass1!" --message-action SUPPRESS --region eu-west-1 --no-cli-pager
+aws cognito-idp admin-set-user-password --user-pool-id eu-west-1_CKDDDarFe --username "vjc.home" --password "vjc_home_123" --permanent --region eu-west-1
+
+# Instalar y subir lambdas
+cd aws\lambdas\activate; npm install; cd ..\..\..
+Compress-Archive -Path "aws\lambdas\activate\*" -DestinationPath "aws\lambdas\activate.zip" -Force
+aws lambda update-function-code --function-name svvs-kiosko-activate --zip-file fileb://aws/lambdas/activate.zip --region eu-west-1 --no-cli-pager
+
+cd aws\lambdas\deactivate; npm install; cd ..\..\..
+Compress-Archive -Path "aws\lambdas\deactivate\*" -DestinationPath "aws\lambdas\deactivate.zip" -Force
+aws lambda update-function-code --function-name svvs-kiosko-deactivate --zip-file fileb://aws/lambdas/deactivate.zip --region eu-west-1 --no-cli-pager
+
+Compress-Archive -Path "aws\lambdas\download\*" -DestinationPath "aws\lambdas\download.zip" -Force
+aws lambda update-function-code --function-name svvs-kiosko-download --zip-file fileb://aws/lambdas/download.zip --region eu-west-1 --no-cli-pager
+
+# Build y subir app
+npm run build:win
+.\aws\scripts\upload-release.ps1 -Version "1.1.0" -ExePath ".\dist\svvs-app.exe"
+```
+
+## Fase 4: Base de datos
+La app sincroniza ferias/sellos/logos desde AWS. Cada usuario tiene sus propios datos.
+
+Endpoint GET /api/sync — devuelve ferias asignadas al usuario + presigned URLs de imágenes
+Botón "Actualizar" en la app → descarga imágenes nuevas → actualiza SQLite local
+Audit log: cada sync registra usuario + machineId + timestamp
+Validación: si machineId no es válido → deniega + te alerta
+
+## Fase 5: Panel admin web
+Una web separada (protegida con Cognito + MFA) para que tú puedas:
+
+Ver usuarios y sus licencias/máquinas activas
+Bloquear/desbloquear usuarios
+Liberar slots de máquinas
+Subir ferias/sellos/logos
+Asignar ferias a usuarios
+Ver audit log (quién hizo qué, cuándo, desde dónde)
+
+## Fase 6: Auto-update
+La app comprueba si hay nueva versión al arrancar y se actualiza automáticamente.
+
+electron-updater apuntando a CloudFront
+latest.yml se genera con cada build
+El usuario recibe un aviso "Hay actualización disponible" → acepta → se instala
+No necesita volver a la web ni descargar manualmente

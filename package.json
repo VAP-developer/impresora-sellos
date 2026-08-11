@@ -6,7 +6,6 @@
   "main": "./out/main/index.js",
   "engines": {
     "node": ">=20.0.0"
-    
   },
   "scripts": {
     "hello": "echo hello world",
@@ -41,6 +40,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "i18next": "^26.3.6",
+    "node-machine-id": "^1.1.12",
     "pdf-lib": "^1.17.1",
     "pdf-to-printer": "^5.8.0",
     "pdfkit": "^0.19.1",

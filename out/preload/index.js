@@ -82,6 +82,21 @@ const api = {
   },
   userConfig: {
     get: () => electron.ipcRenderer.invoke("userConfig:get")
+  },
+  license: {
+    activate: () => electron.ipcRenderer.invoke("license:activate"),
+    deactivate: () => electron.ipcRenderer.invoke("license:deactivate"),
+    status: () => electron.ipcRenderer.invoke("license:status"),
+    machineId: () => electron.ipcRenderer.invoke("license:machineId"),
+    onBlocked: (callback) => {
+      const handler = (_event, reason) => {
+        callback(reason);
+      };
+      electron.ipcRenderer.on("license:blocked", handler);
+      return () => {
+        electron.ipcRenderer.removeListener("license:blocked", handler);
+      };
+    }
   }
 };
 if (process.contextIsolated) {

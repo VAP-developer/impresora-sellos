@@ -1,0 +1,10 @@
+{
+  "username": {"S": "vjc.home"},
+  "userId": {"S": "usr_vjc_home"},
+  "displayName": {"S": "home"},
+  "welcomeMessage": {"S": "Bienvenido home"},
+  "maxMachines": {"N": "2"},
+  "isAdmin": {"BOOL": false},
+  "activeMachines": {"L": []},
+  "apiKey": {"S": "sk_vjchome_Qr7tW4xJ6nBv8kD3"}
+}

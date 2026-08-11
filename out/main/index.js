@@ -29,6 +29,27 @@ const Database = require("better-sqlite3");
 const child_process = require("child_process");
 const util = require("util");
 const PDFDocument = require("pdfkit");
+const nodeMachineId = require("node-machine-id");
+const crypto = require("crypto");
+const https = require("https");
+const url = require("url");
+function _interopNamespaceDefault(e) {
+  const n = Object.create(null, { [Symbol.toStringTag]: { value: "Module" } });
+  if (e) {
+    for (const k in e) {
+      if (k !== "default") {
+        const d = Object.getOwnPropertyDescriptor(e, k);
+        Object.defineProperty(n, k, d.get ? d : {
+          enumerable: true,
+          get: () => e[k]
+        });
+      }
+    }
+  }
+  n.default = e;
+  return Object.freeze(n);
+}
+const https__namespace = /* @__PURE__ */ _interopNamespaceDefault(https);
 function ensureMigrationsTable(db2) {
   db2.exec(`
     CREATE TABLE IF NOT EXISTS _migrations (
@@ -4920,10 +4941,28 @@ function findExternalConfig() {
     candidates.push(path.join(electron.app.getPath("desktop"), "config.json"));
   } catch {
   }
+  try {
+    candidates.push(path.join(electron.app.getPath("documents"), "config.json"));
+  } catch {
+  }
+  try {
+    candidates.push(path.join(electron.app.getPath("home"), "config.json"));
+    candidates.push(path.join(electron.app.getPath("home"), "Downloads", "config.json"));
+    candidates.push(path.join(electron.app.getPath("home"), "Descargas", "config.json"));
+  } catch {
+  }
+  const drives = ["C:", "D:", "E:", "F:"];
+  for (const drive of drives) {
+    candidates.push(path.join(drive, "Downloads", "config.json"));
+    candidates.push(path.join(drive, "Descargas", "config.json"));
+  }
   candidates.push(path.join(process.resourcesPath, "config.json"));
   for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
-      return candidate;
+    try {
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+    } catch {
     }
   }
   return null;
@@ -4946,6 +4985,229 @@ function registerUserConfigHandlers() {
     return getUserConfig();
   });
 }
+let cachedMachineId = null;
+function getMachineId() {
+  if (!cachedMachineId) {
+    cachedMachineId = nodeMachineId.machineIdSync({ original: false });
+  }
+  return cachedMachineId;
+}
+const API_BASE = "https://md6oe7qpfk.execute-api.eu-west-1.amazonaws.com/prod/api";
+let licenseStatus = { ok: false, error: "No validado aún" };
+let authToken = null;
+function setAuthToken(token) {
+  authToken = token;
+}
+async function activateLicense() {
+  const config = getUserConfig();
+  const machineId = getMachineId();
+  const apiKey = authToken || config.license?.apiKey || "";
+  if (!apiKey) {
+    const ticket = loadActivationTicket();
+    if (ticket && ticket.machineId === machineId) {
+      const EXPIRY_DAYS = 14;
+      const lastValidated = new Date(ticket.lastValidatedAt || ticket.activatedAt).getTime();
+      const now = Date.now();
+      const daysSinceValidation = (now - lastValidated) / (1e3 * 60 * 60 * 24);
+      if (daysSinceValidation > EXPIRY_DAYS) {
+        licenseStatus = {
+          ok: false,
+          error: `Licencia caducada. Han pasado más de ${EXPIRY_DAYS} días sin validar. Restaura el archivo config.json y conéctate a internet.`
+        };
+        return licenseStatus;
+      }
+      licenseStatus = { ok: true, message: "Licencia activa (ticket local)", isAdmin: ticket.isAdmin };
+      return licenseStatus;
+    }
+    licenseStatus = { ok: false, error: "No se encontró configuración de licencia. Reinstala la aplicación con el archivo config.json." };
+    return licenseStatus;
+  }
+  try {
+    const result = await httpPost(`${API_BASE}/activate`, {
+      machineId,
+      apiKey
+    });
+    if (result.ok) {
+      saveActivationTicket({
+        machineId,
+        username: config.user?.username || "unknown",
+        activatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        lastValidatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        isAdmin: result.isAdmin || false
+      });
+      licenseStatus = result;
+    } else {
+      removeActivationTicket();
+      licenseStatus = result;
+    }
+    return licenseStatus;
+  } catch (err) {
+    console.error("[license] Activation failed (network error):", err);
+    const ticket = loadActivationTicket();
+    if (ticket && ticket.machineId === machineId) {
+      const EXPIRY_DAYS = 14;
+      const lastValidated = new Date(ticket.lastValidatedAt || ticket.activatedAt).getTime();
+      const now = Date.now();
+      const daysSinceValidation = (now - lastValidated) / (1e3 * 60 * 60 * 24);
+      if (daysSinceValidation > EXPIRY_DAYS) {
+        licenseStatus = {
+          ok: false,
+          error: `Licencia caducada. Han pasado más de ${EXPIRY_DAYS} días sin conexión. Conéctate a internet y reinicia la aplicación.`
+        };
+        console.log(`[license] Offline mode: ticket expired (${Math.floor(daysSinceValidation)} days since last validation)`);
+      } else {
+        licenseStatus = {
+          ok: true,
+          message: `Licencia activa (modo offline, ${Math.floor(EXPIRY_DAYS - daysSinceValidation)} días restantes)`,
+          isAdmin: ticket.isAdmin
+        };
+        console.log(`[license] Offline mode: valid ticket, ${Math.floor(EXPIRY_DAYS - daysSinceValidation)} days remaining`);
+      }
+    } else {
+      licenseStatus = {
+        ok: false,
+        error: "Se requiere conexión a internet para activar la licencia por primera vez."
+      };
+      console.log("[license] Offline mode: no valid ticket, blocking");
+    }
+    return licenseStatus;
+  }
+}
+async function deactivateLicense() {
+  const config = getUserConfig();
+  const machineId = getMachineId();
+  const apiKey = authToken || config.license?.apiKey || "";
+  if (!apiKey) {
+    return { ok: false, error: "No hay apiKey configurada" };
+  }
+  try {
+    const result = await httpPost(`${API_BASE}/deactivate`, {
+      machineId,
+      apiKey
+    });
+    if (result.ok) {
+      removeActivationTicket();
+      licenseStatus = { ok: false, error: "Equipo desactivado" };
+    }
+    return result;
+  } catch (err) {
+    console.error("[license] Deactivation failed:", err);
+    return { ok: false, error: "Error de conexión. Se necesita internet para desactivar." };
+  }
+}
+function getLicenseStatus() {
+  return licenseStatus;
+}
+const _S1 = "SvvS";
+const _S2 = "K10sk0";
+const _S3 = "!L1c#";
+const _S4 = "2026xQ9";
+const TICKET_SECRET = [_S1, _S2, _S3, _S4].join("-");
+function computeSignature(ticket) {
+  const payload = JSON.stringify(ticket);
+  return crypto.createHmac("sha256", TICKET_SECRET).update(payload).digest("hex");
+}
+function getTicketPath() {
+  return path.join(electron.app.getPath("userData"), ".license-ticket");
+}
+function saveActivationTicket(ticket) {
+  try {
+    const dir = electron.app.getPath("userData");
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const signed = {
+      data: ticket,
+      signature: computeSignature(ticket)
+    };
+    fs.writeFileSync(getTicketPath(), JSON.stringify(signed), "utf-8");
+    console.log("[license] Activation ticket saved (signed)");
+  } catch (err) {
+    console.error("[license] Failed to save activation ticket:", err);
+  }
+}
+function loadActivationTicket() {
+  try {
+    const path2 = getTicketPath();
+    if (!fs.existsSync(path2)) {
+      return null;
+    }
+    const raw = fs.readFileSync(path2, "utf-8");
+    const signed = JSON.parse(raw);
+    if (!signed.data || !signed.signature) {
+      console.warn("[license] Ticket has invalid structure");
+      return null;
+    }
+    const expectedSignature = computeSignature(signed.data);
+    if (signed.signature !== expectedSignature) {
+      console.warn("[license] Ticket signature mismatch — file has been tampered with");
+      return null;
+    }
+    return signed.data;
+  } catch {
+    return null;
+  }
+}
+function removeActivationTicket() {
+  try {
+    const path2 = getTicketPath();
+    if (fs.existsSync(path2)) {
+      fs.unlinkSync(path2);
+      console.log("[license] Activation ticket removed");
+    }
+  } catch (err) {
+    console.error("[license] Failed to remove activation ticket:", err);
+  }
+}
+function httpPost(url$1, body) {
+  return new Promise((resolve, reject) => {
+    const bodyStr = JSON.stringify(body);
+    const parsedUrl = new url.URL(url$1);
+    const options = {
+      hostname: parsedUrl.hostname,
+      port: 443,
+      path: parsedUrl.pathname + parsedUrl.search,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(bodyStr)
+      }
+    };
+    const req = https__namespace.request(options, (res) => {
+      let responseData = "";
+      res.on("data", (chunk) => {
+        responseData += chunk.toString();
+      });
+      res.on("end", () => {
+        try {
+          const parsed = JSON.parse(responseData);
+          resolve(parsed);
+        } catch {
+          reject(new Error(`Invalid response: ${responseData}`));
+        }
+      });
+    });
+    req.on("error", (err) => {
+      reject(err);
+    });
+    req.write(bodyStr);
+    req.end();
+  });
+}
+function registerLicenseHandlers() {
+  handleIpc("license:activate", async () => {
+    return await activateLicense();
+  });
+  handleIpc("license:deactivate", async () => {
+    return await deactivateLicense();
+  });
+  handleIpc("license:status", () => {
+    return getLicenseStatus();
+  });
+  handleIpc("license:machineId", () => {
+    return getMachineId();
+  });
+}
 function registerAllHandlers() {
   registerConfigHandlers();
   registerOrdersHandlers();
@@ -4956,6 +5218,7 @@ function registerAllHandlers() {
   registerEventosHandlers();
   registerTariffGroupsHandlers();
   registerUserConfigHandlers();
+  registerLicenseHandlers();
 }
 function notifyConfigChanged(config) {
   const windows = electron.BrowserWindow.getAllWindows();
@@ -4998,9 +5261,12 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
   }
 }
-electron.app.whenReady().then(() => {
+electron.app.whenReady().then(async () => {
   utils.electronApp.setAppUserModelId("com.stamp-sales");
-  loadUserConfig();
+  const userConfig2 = loadUserConfig();
+  if (userConfig2.license && userConfig2.license.apiKey) {
+    setAuthToken(userConfig2.license.apiKey);
+  }
   try {
     initDatabase();
     const configRepo = new ConfigRepository();
@@ -5061,7 +5327,18 @@ Revisa el archivo startup-error.log junto al ejecutable.`);
   electron.app.on("browser-window-created", (_, window) => {
     utils.optimizer.watchWindowShortcuts(window);
   });
+  const licenseResult = await activateLicense();
+  console.log(`[license] Activation result: ${licenseResult.ok ? "OK" : "DENIED"} - ${licenseResult.message || licenseResult.error || ""}`);
   createWindow();
+  if (!licenseResult.ok) {
+    const { BrowserWindow: BW } = await import("electron");
+    const win = BW.getAllWindows()[0];
+    if (win) {
+      win.webContents.on("did-finish-load", () => {
+        win.webContents.send("license:blocked", licenseResult.error || "Licencia no válida");
+      });
+    }
+  }
   electron.app.on("activate", function() {
     if (electron.BrowserWindow.getAllWindows().length === 0) createWindow();
   });

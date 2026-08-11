@@ -2,5 +2,9 @@
   "username": {"S": "test"},
   "userId": {"S": "usr_test"},
   "displayName": {"S": "Test"},
-  "welcomeMessage": {"S": "Bienvenido Test"}
+  "welcomeMessage": {"S": "Bienvenido Test"},
+  "maxMachines": {"N": "1"},
+  "isAdmin": {"BOOL": false},
+  "activeMachines": {"L": []},
+  "apiKey": {"S": "sk_test_Ht3bN6wK9pYf2mA5"}
 }

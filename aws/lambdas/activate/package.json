@@ -1,0 +1,9 @@
+{
+  "name": "svvs-kiosko-activate",
+  "version": "1.0.0",
+  "description": "Lambda de activación de licencia para SvvS Kiosko",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.600.0"
+  }
+}

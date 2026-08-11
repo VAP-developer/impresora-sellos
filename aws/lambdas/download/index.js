@@ -80,7 +80,9 @@ exports.handler = async (event) => {
         welcomeMessage: welcomeMessage
       },
       license: {
-        // Se poblará en Fase 2
+        apiKey: item.apiKey?.S || '',
+        maxMachines: parseInt(item.maxMachines?.N || '1', 10),
+        isAdmin: item.isAdmin?.BOOL || false
       },
       database: {
         // Se poblará en Fase 3

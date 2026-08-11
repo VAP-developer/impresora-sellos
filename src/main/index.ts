@@ -9,6 +9,7 @@ import { initServices, shutdownServices } from './services'
 import { syncImages } from './images/sync-images'
 import { setLastSyncResult } from './ipc/images.handlers'
 import { loadUserConfig } from './user-config'
+import { setAuthToken, activateLicense } from './license'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -38,11 +39,16 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.stamp-sales')
 
   // Load user-specific config.json (personalization, license, etc.)
-  loadUserConfig()
+  const userConfig = loadUserConfig()
+
+  // Set auth token for license validation (if present in config)
+  if (userConfig.license && (userConfig.license as { apiKey?: string }).apiKey) {
+    setAuthToken((userConfig.license as { apiKey?: string }).apiKey!)
+  }
 
   try {
     // Initialize database and run pending migrations
@@ -111,7 +117,22 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
+  // Activate license in background (validates against backend or local ticket)
+  const licenseResult = await activateLicense()
+  console.log(`[license] Activation result: ${licenseResult.ok ? 'OK' : 'DENIED'} - ${licenseResult.message || licenseResult.error || ''}`)
+
   createWindow()
+
+  // If license is invalid, notify renderer to show block screen
+  if (!licenseResult.ok) {
+    const { BrowserWindow: BW } = await import('electron')
+    const win = BW.getAllWindows()[0]
+    if (win) {
+      win.webContents.on('did-finish-load', () => {
+        win.webContents.send('license:blocked', licenseResult.error || 'Licencia no válida')
+      })
+    }
+  }
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

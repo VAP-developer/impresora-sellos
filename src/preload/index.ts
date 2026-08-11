@@ -441,6 +441,13 @@ export interface ElectronAPI {
       database: Record<string, unknown>
     }>
   }
+  license: {
+    activate(): Promise<{ ok: boolean; message?: string; error?: string; isAdmin?: boolean; activeMachines?: number; maxMachines?: number }>
+    deactivate(): Promise<{ ok: boolean; message?: string; error?: string; activeMachines?: number; maxMachines?: number }>
+    status(): Promise<{ ok: boolean; message?: string; error?: string; isAdmin?: boolean; activeMachines?: number; maxMachines?: number }>
+    machineId(): Promise<string>
+    onBlocked(callback: (reason: string) => void): () => void
+  }
 }
 
 // === IPC API Implementation ===
@@ -532,6 +539,17 @@ const api: ElectronAPI = {
   },
   userConfig: {
     get: () => ipcRenderer.invoke('userConfig:get')
+  },
+  license: {
+    activate: () => ipcRenderer.invoke('license:activate'),
+    deactivate: () => ipcRenderer.invoke('license:deactivate'),
+    status: () => ipcRenderer.invoke('license:status'),
+    machineId: () => ipcRenderer.invoke('license:machineId'),
+    onBlocked: (callback: (reason: string) => void) => {
+      const handler = (_event: unknown, reason: string): void => { callback(reason) }
+      ipcRenderer.on('license:blocked', handler)
+      return () => { ipcRenderer.removeListener('license:blocked', handler) }
+    }
   }
 }
 

@@ -1,0 +1,9 @@
+{
+  "name": "svvs-kiosko-deactivate",
+  "version": "1.0.0",
+  "description": "Lambda de desactivación de licencia para SvvS Kiosko",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.600.0"
+  }
+}
