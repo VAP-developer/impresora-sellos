@@ -54,6 +54,15 @@ aws s3 cp "$webDir\styles.css" "s3://$bucketWeb/styles.css" `
   --content-type "text/css; charset=utf-8" `
   --cache-control "public, max-age=86400"
 
+# Subir JS
+Write-Host "Subiendo JS..." -ForegroundColor Yellow
+$jsFile = Join-Path $webDir "app.js"
+if (Test-Path $jsFile) {
+  aws s3 cp "$jsFile" "s3://$bucketWeb/app.js" `
+    --content-type "application/javascript; charset=utf-8" `
+    --cache-control "public, max-age=300"
+}
+
 # Subir cualquier otro asset (imágenes, JS, etc.)
 $assetsDir = Join-Path $webDir "assets"
 if (Test-Path $assetsDir) {

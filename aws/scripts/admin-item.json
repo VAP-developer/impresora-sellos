@@ -1,0 +1,6 @@
+{
+  "username": {"S": "admin.svvs"},
+  "userId": {"S": "usr_admin_svvs"},
+  "displayName": {"S": "VJC"},
+  "welcomeMessage": {"S": "Bienvenido VJC"}
+}

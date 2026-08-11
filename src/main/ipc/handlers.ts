@@ -7,6 +7,7 @@ import { registerSaleHandlers } from './sale.handlers'
 import { registerAutoLaunchHandlers } from './auto-launch.handlers'
 import { registerEventosHandlers } from './eventos.handlers'
 import { registerTariffGroupsHandlers } from './tariff-groups.handlers'
+import { registerUserConfigHandlers } from './user-config.handlers'
 
 /**
  * Centralized IPC handler registry.
@@ -29,6 +30,7 @@ export function registerAllHandlers(): void {
   registerAutoLaunchHandlers()
   registerEventosHandlers()
   registerTariffGroupsHandlers()
+  registerUserConfigHandlers()
 }
 
 /**

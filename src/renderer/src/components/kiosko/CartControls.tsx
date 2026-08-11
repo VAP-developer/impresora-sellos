@@ -57,6 +57,7 @@ export default function CartControls({
   const getUsedRollo1 = useKioskoStore((state) => state.getUsedRollo1)
   const getUsedRollo2 = useKioskoStore((state) => state.getUsedRollo2)
   const getUsedTickets = useKioskoStore((state) => state.getUsedTickets)
+  const getRemainingTickets = useKioskoStore((state) => state.getRemainingTickets)
 
   // Image layer flags from images store
   const printFondo = useImagesStore((state) => state.printFondo)
@@ -86,6 +87,14 @@ export default function CartControls({
 
   // Remaining budget
   const budgetRemaining = limite - total
+
+  // Remaining tickets
+  const remainingTickets = useMemo(() => {
+    if (!ticket) return 0
+    return getRemainingTickets(ticket)
+  }, [ticket, quantities, getRemainingTickets])
+
+  const usedTickets = useMemo(() => getUsedTickets(), [quantities, getUsedTickets])
 
   // Active print mode / profile name
   const profileName = useMemo(() => {
@@ -247,70 +256,71 @@ export default function CartControls({
 
   return (
     <div
-      className="flex items-center justify-center p-4"
+      className="flex flex-col items-center p-4"
       role="region"
       aria-label="Controles de cesta"
     >
-      {/* Left column: Oficina button (cart with strikethrough = special sale) */}
-      <div className="flex flex-col items-center gap-2 mr-6">
-        <button
-          type="button"
-          className="w-[65px] h-[65px] bg-transparent border-none cursor-pointer p-0
-                     hover:opacity-80 transition-opacity
-                     focus:outline-none focus:ring-2 focus:ring-red-500 rounded
-                     disabled:opacity-50 disabled:cursor-not-allowed"
-          aria-label="Venta Oficina - código especial"
-          disabled={printing}
-          onClick={handlePrintFilatelia}
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="rgb(200,30,30)"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="w-16 h-16"
-            aria-hidden="true"
+      {/* Top row: Red cart | Budget/Total/Mode | Blue cart */}
+      <div className="flex items-start justify-center">
+        {/* Left column: Oficina button (cart with strikethrough = special sale) */}
+        <div className="flex flex-col items-center gap-2 mr-6">
+          <button
+            type="button"
+            className="w-[65px] h-[65px] bg-transparent border-none cursor-pointer p-0
+                       hover:opacity-80 transition-opacity
+                       focus:outline-none focus:ring-2 focus:ring-red-500 rounded
+                       disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label="Venta Oficina - código especial"
+            disabled={printing}
+            onClick={handlePrintFilatelia}
           >
-            {/* Cart */}
-            <circle cx="9" cy="21" r="1" />
-            <circle cx="20" cy="21" r="1" />
-            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-            {/* Diagonal strikethrough */}
-            <line x1="2" y1="22" x2="22" y2="2" stroke="rgb(200,30,30)" strokeWidth="2.5" />
-          </svg>
-        </button>
-      </div>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="rgb(200,30,30)"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="w-16 h-16"
+              aria-hidden="true"
+            >
+              {/* Cart */}
+              <circle cx="9" cy="21" r="1" />
+              <circle cx="20" cy="21" r="1" />
+              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+              {/* Diagonal strikethrough */}
+              <line x1="2" y1="22" x2="22" y2="2" stroke="rgb(200,30,30)" strokeWidth="2.5" />
+            </svg>
+          </button>
+        </div>
 
-      {/* Center column: Budget, Total, Mode */}
-      <div className="flex flex-col items-center gap-1 mx-6">
-        {/* Remaining budget */}
-        <p className="text-center text-gray-500 text-sm font-bold" aria-label="Presupuesto restante">
-          {budgetRemaining.toFixed(2)} €
-        </p>
-
-        {/* Basket total */}
-        <h2
-          className="text-center text-xl font-bold"
-          aria-label="Total de la cesta"
-          aria-live="polite"
-        >
-          Cesta {total.toFixed(2)}€
-        </h2>
-
-        {/* Active profile/mode */}
-        {profileName && (
-          <p className="text-center text-red-700 text-lg font-bold" aria-label="Modo de impresión activo">
-            {profileName}
+        {/* Center column: Budget, Total, Mode */}
+        <div className="flex flex-col items-center gap-1 mx-6">
+          {/* Remaining budget */}
+          <p className="text-center text-gray-500 text-sm font-bold" aria-label="Presupuesto restante">
+            {budgetRemaining.toFixed(2)} €
           </p>
-        )}
-      </div>
 
-      {/* Right column: Print Normal + Reset + Logo PNG checkbox */}
-      <div className="flex flex-col items-center gap-3 ml-6">
-        <div className="flex items-center gap-3">
+          {/* Basket total */}
+          <h2
+            className="text-center text-3xl font-bold"
+            aria-label="Total de la cesta"
+            aria-live="polite"
+          >
+            Cesta {total.toFixed(2)}€
+          </h2>
+
+          {/* Active profile/mode */}
+          {profileName && (
+            <p className="text-center text-red-700 text-lg font-bold" aria-label="Modo de impresión activo">
+              {profileName}
+            </p>
+          )}
+        </div>
+
+        {/* Right column: Print Normal (blue cart) + Logo PNG checkbox */}
+        <div className="flex flex-col items-center gap-2 ml-6">
           {/* Print Normal (shopping cart icon) */}
           <button
             type="button"
@@ -339,47 +349,55 @@ export default function CartControls({
             </svg>
           </button>
 
-          {/* Reset / Cancel button */}
-          <button
-            type="button"
-            className="w-[50px] h-[50px] bg-gray-200 hover:bg-gray-300 rounded-full
-                       flex items-center justify-center cursor-pointer
-                       transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400"
-            aria-label="Reset - limpiar cantidades"
-            onClick={() => {
-              reset()
-              onReset?.()
-            }}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="w-6 h-6 text-red-600"
-              aria-hidden="true"
-            >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
+          {/* Logo PNG checkbox */}
+          <label className="flex items-center gap-1 text-xs cursor-pointer">
+            <input
+              type="checkbox"
+              checked={printLogoPng}
+              onChange={(e) => setPrintLogoPng(e.target.checked)}
+              className="w-4 h-4 cursor-pointer"
+              aria-label="Imprimir logo PNG a la derecha"
+            />
+            <span className="text-gray-700 font-medium">FERIA/LOGO</span>
+          </label>
         </div>
-
-        {/* Logo PNG checkbox */}
-        <label className="flex items-center gap-1 text-xs cursor-pointer">
-          <input
-            type="checkbox"
-            checked={printLogoPng}
-            onChange={(e) => setPrintLogoPng(e.target.checked)}
-            className="w-4 h-4 cursor-pointer"
-            aria-label="Imprimir logo PNG a la derecha"
-          />
-          <span className="text-gray-700 font-medium">FERIA/LOGO</span>
-        </label>
       </div>
+
+      {/* Reset button: centered below the basket */}
+      <button
+        type="button"
+        className="mt-3 px-4 py-1.5 bg-gray-200 hover:bg-gray-300 rounded
+                   flex items-center justify-center gap-1 cursor-pointer
+                   transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400
+                   text-sm font-medium text-red-600"
+        aria-label="Reset - limpiar cantidades"
+        onClick={() => {
+          reset()
+          onReset?.()
+        }}
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="w-4 h-4"
+          aria-hidden="true"
+        >
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+        Reset
+      </button>
+
+      {/* Tickets info: below the reset button */}
+      <p className="mt-1 text-xs text-[rgb(24,62,117)] text-center">
+        Tickets: <span className="font-bold">{remainingTickets}</span>
+        <span className="text-gray-500"> (Utilizados: {usedTickets})</span>
+      </p>
     </div>
   )
 }

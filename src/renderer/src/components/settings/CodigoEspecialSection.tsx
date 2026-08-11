@@ -63,7 +63,7 @@ export function CodigoEspecialSection(): JSX.Element {
       <div className="flex items-end gap-3">
         <div className="flex flex-col">
           <label htmlFor="settings-codigo-feria-1" className="text-xs text-gray-700 font-bold">
-            Código Feria 1
+            Código Oficina (max 4 chars)
           </label>
           <input
             id="settings-codigo-feria-1"
@@ -81,7 +81,7 @@ export function CodigoEspecialSection(): JSX.Element {
 
         <div className="flex flex-col">
           <label htmlFor="settings-codigo-feria-2" className="text-xs text-gray-700 font-bold">
-            Código Feria 2
+            Código Pais (max 3 chars)
           </label>
           <input
             id="settings-codigo-feria-2"

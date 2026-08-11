@@ -37,16 +37,12 @@ export default function RollCounters(): JSX.Element {
   // Model names from the active event
   const nombreModelo1 = useMemo(() => {
     if (!sello) return ''
-    const idx = sello.elevento ?? 0
-    const evento = sello.eventos?.[idx]
-    return evento?.motivoi ?? ''
+    return sello.modelo1 ?? sello.eventos?.[0]?.motivoi ?? ''
   }, [sello])
 
   const nombreModelo2 = useMemo(() => {
     if (!sello) return ''
-    const idx = sello.elevento ?? 0
-    const evento = sello.eventos?.[idx]
-    return evento?.motivod ?? ''
+    return sello.modelo2 ?? sello.eventos?.[0]?.motivod ?? ''
   }, [sello])
 
   // Computed stock values (depend on quantities for "used" amounts)

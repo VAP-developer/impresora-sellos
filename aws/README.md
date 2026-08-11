@@ -1,6 +1,6 @@
 # AWS - SvvS Kiosko
 
-Guía paso a paso para desplegar la infraestructura de distribución del kiosko.
+Guía paso a paso para desplegar la infraestructura de distribución y autenticación del kiosko.
 
 ---
 
@@ -25,247 +25,204 @@ Guía paso a paso para desplegar la infraestructura de distribución del kiosko.
 
 ## Permisos IAM necesarios
 
-Tu usuario IAM necesita estos permisos para desplegar y gestionar la web. Tienes dos opciones:
+### Opción A: Política administrador (rápido para empezar)
 
-### Opción A: Política administrador (rápido, menos seguro)
-
-Si eres el único que va a usar la cuenta, puedes asignar la política gestionada:
 ```
 arn:aws:iam::aws:policy/AdministratorAccess
 ```
-Esto te da acceso a todo. Cómodo para empezar, pero no recomendado a largo plazo.
 
-### Opción B: Política personalizada (mínimos privilegios, recomendado)
+### Opción B: Política personalizada (mínimos privilegios)
 
-Crea una política IAM personalizada con exactamente lo que necesitas:
+Crea una política IAM con permisos para: CloudFormation, S3, CloudFront, ACM, Cognito, DynamoDB, Lambda, API Gateway, IAM (crear roles).
+
+Necesitarás añadir estos permisos adicionales respecto a la versión básica:
 
 ```json
 {
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "CloudFormationDeploy",
-      "Effect": "Allow",
-      "Action": [
-        "cloudformation:CreateStack",
-        "cloudformation:UpdateStack",
-        "cloudformation:DeleteStack",
-        "cloudformation:DescribeStacks",
-        "cloudformation:DescribeStackEvents",
-        "cloudformation:GetTemplate",
-        "cloudformation:ValidateTemplate",
-        "cloudformation:CreateChangeSet",
-        "cloudformation:DescribeChangeSet",
-        "cloudformation:ExecuteChangeSet",
-        "cloudformation:DeleteChangeSet",
-        "cloudformation:ListStacks"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "S3BucketManagement",
-      "Effect": "Allow",
-      "Action": [
-        "s3:CreateBucket",
-        "s3:DeleteBucket",
-        "s3:PutBucketPolicy",
-        "s3:GetBucketPolicy",
-        "s3:DeleteBucketPolicy",
-        "s3:PutBucketVersioning",
-        "s3:GetBucketVersioning",
-        "s3:PutLifecycleConfiguration",
-        "s3:GetLifecycleConfiguration",
-        "s3:PutBucketPublicAccessBlock",
-        "s3:GetBucketPublicAccessBlock",
-        "s3:PutBucketTagging",
-        "s3:GetBucketTagging",
-        "s3:GetBucketLocation",
-        "s3:ListBucket"
-      ],
-      "Resource": [
-        "arn:aws:s3:::svvs-kiosko-web",
-        "arn:aws:s3:::svvs-kiosko-releases"
-      ]
-    },
-    {
-      "Sid": "S3ObjectManagement",
-      "Effect": "Allow",
-      "Action": [
-        "s3:PutObject",
-        "s3:GetObject",
-        "s3:DeleteObject",
-        "s3:ListBucket"
-      ],
-      "Resource": [
-        "arn:aws:s3:::svvs-kiosko-web/*",
-        "arn:aws:s3:::svvs-kiosko-releases/*"
-      ]
-    },
-    {
-      "Sid": "CloudFrontManagement",
-      "Effect": "Allow",
-      "Action": [
-        "cloudfront:CreateDistribution",
-        "cloudfront:UpdateDistribution",
-        "cloudfront:DeleteDistribution",
-        "cloudfront:GetDistribution",
-        "cloudfront:GetDistributionConfig",
-        "cloudfront:ListDistributions",
-        "cloudfront:CreateInvalidation",
-        "cloudfront:CreateOriginAccessControl",
-        "cloudfront:GetOriginAccessControl",
-        "cloudfront:DeleteOriginAccessControl",
-        "cloudfront:UpdateOriginAccessControl",
-        "cloudfront:ListOriginAccessControls",
-        "cloudfront:TagResource"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "ACMCertificates",
-      "Effect": "Allow",
-      "Action": [
-        "acm:RequestCertificate",
-        "acm:DescribeCertificate",
-        "acm:ListCertificates",
-        "acm:DeleteCertificate"
-      ],
-      "Resource": "*"
-    }
-  ]
+  "Sid": "CognitoManagement",
+  "Effect": "Allow",
+  "Action": [
+    "cognito-idp:CreateUserPool",
+    "cognito-idp:DeleteUserPool",
+    "cognito-idp:CreateUserPoolClient",
+    "cognito-idp:AdminCreateUser",
+    "cognito-idp:AdminSetUserPassword",
+    "cognito-idp:AdminGetUser"
+  ],
+  "Resource": "*"
+},
+{
+  "Sid": "DynamoDBManagement",
+  "Effect": "Allow",
+  "Action": [
+    "dynamodb:CreateTable",
+    "dynamodb:DeleteTable",
+    "dynamodb:DescribeTable",
+    "dynamodb:PutItem",
+    "dynamodb:GetItem"
+  ],
+  "Resource": "*"
+},
+{
+  "Sid": "LambdaManagement",
+  "Effect": "Allow",
+  "Action": [
+    "lambda:CreateFunction",
+    "lambda:UpdateFunctionCode",
+    "lambda:UpdateFunctionConfiguration",
+    "lambda:DeleteFunction",
+    "lambda:GetFunction",
+    "lambda:AddPermission",
+    "lambda:RemovePermission"
+  ],
+  "Resource": "*"
+},
+{
+  "Sid": "APIGatewayManagement",
+  "Effect": "Allow",
+  "Action": [
+    "apigateway:*"
+  ],
+  "Resource": "*"
+},
+{
+  "Sid": "IAMRoles",
+  "Effect": "Allow",
+  "Action": [
+    "iam:CreateRole",
+    "iam:DeleteRole",
+    "iam:AttachRolePolicy",
+    "iam:DetachRolePolicy",
+    "iam:PutRolePolicy",
+    "iam:DeleteRolePolicy",
+    "iam:GetRole",
+    "iam:PassRole"
+  ],
+  "Resource": "arn:aws:iam::*:role/svvs-kiosko-*"
 }
 ```
 
-### Cómo crear la política en AWS
-
-1. Ve a la consola AWS → **IAM** → **Policies** → **Create policy**.
-2. Pestaña **JSON** → pega el JSON de arriba.
-3. Nombre: `SvvSKioskoDeployPolicy`.
-4. Ve a **Users** → tu usuario → **Add permissions** → **Attach policies** → selecciona `SvvSKioskoDeployPolicy`.
-
-### Resumen de para qué sirve cada permiso
-
-| Permiso | Para qué lo necesitas |
-|---------|----------------------|
-| `cloudformation:*` | Desplegar el template que crea los buckets y CloudFront |
-| `s3:CreateBucket`, `s3:PutBucketPolicy`... | Crear y configurar los buckets |
-| `s3:PutObject`, `s3:GetObject` | Subir la web y los .exe |
-| `cloudfront:CreateDistribution`... | Crear y gestionar la CDN con HTTPS |
-| `cloudfront:CreateInvalidation` | Forzar refresco de caché tras un deploy |
-| `acm:RequestCertificate` | Obtener certificado SSL si usas dominio propio |
-
 ---
 
-## Paso 1: Desplegar la infraestructura (una sola vez)
+## Paso 1: Desplegar la infraestructura
 
-El template de CloudFormation crea automáticamente:
-- Bucket S3 para la web (`svvs-kiosko-web`)
-- Bucket S3 para las releases (`svvs-kiosko-releases`)
+El template de CloudFormation crea:
+- 2 Buckets S3 (web + releases)
 - Distribución CloudFront con HTTPS
+- Cognito User Pool (autenticación)
+- DynamoDB tabla `users` (datos por usuario)
+- API Gateway + 2 Lambdas (login + download)
 
 ```powershell
-# Desde la raíz del proyecto
 aws cloudformation deploy `
   --template-file aws/infra/template.yml `
   --stack-name svvs-kiosko-infra `
   --region eu-west-1 `
-  --capabilities CAPABILITY_IAM
+  --capabilities CAPABILITY_NAMED_IAM
 ```
 
-Espera 5-10 minutos a que CloudFront se propague.
-
-### Obtener los valores de salida
+Espera 5-10 minutos. Luego obtén los outputs:
 
 ```powershell
 aws cloudformation describe-stacks `
   --stack-name svvs-kiosko-infra `
   --query "Stacks[0].Outputs" `
-  --output table
+  --output json
 ```
 
-Esto te dará:
-- `CloudFrontDomainName` → La URL de tu web (ej: `d1234abcdef.cloudfront.net`)
-- `CloudFrontDistributionId` → Para invalidar caché
-- `WebBucketName` → Nombre del bucket web
-- `ReleasesBucketName` → Nombre del bucket de releases
-
-**Copia estos valores a tu `aws/.env`:**
+Copia los valores a tu `aws/.env`:
 ```env
 S3_BUCKET_WEB=svvs-kiosko-web
 S3_BUCKET_RELEASES=svvs-kiosko-releases
-CLOUDFRONT_DISTRIBUTION_ID=E1XXXXXXXXXX
-CLOUDFRONT_DOMAIN=d1234abcdef.cloudfront.net
+CLOUDFRONT_DISTRIBUTION_ID=E2J36X9R6JCRRE
+CLOUDFRONT_DOMAIN=d1m7hj56bdybto.cloudfront.net
+USER_POOL_ID=eu-west-1_XXXXXXXXX
+USER_POOL_CLIENT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxx
+USERS_TABLE=svvs-kiosko-users
+API_GATEWAY_URL=https://xxxxxxxx.execute-api.eu-west-1.amazonaws.com/prod
 ```
 
 ---
 
-## Paso 2: Subir la web
+## Paso 2: Crear usuarios iniciales
+
+Tras desplegar la infraestructura, ejecuta el script para crear los usuarios en Cognito y DynamoDB:
 
 ```powershell
-.\aws\scripts\deploy-web.ps1
+.\aws\scripts\setup-users.ps1
 ```
 
-Tras ejecutarlo, tu web estará accesible en:
-```
-https://<CLOUDFRONT_DOMAIN>/
+Esto crea:
+
+| Usuario | Contraseña | Mensaje de bienvenida |
+|---------|-----------|----------------------|
+| admin.svvs | Sv#vjc!vS.2026 | Bienvenido VJC |
+| test | test_123 | Bienvenido Test |
+
+---
+
+## Paso 3: Desplegar las Lambdas
+
+Las Lambdas se crean con placeholder code en el template. Para actualizar con el código real:
+
+```powershell
+# Lambda de login
+cd aws\lambdas\login
+npm install
+Compress-Archive -Path * -DestinationPath ..\login.zip -Force
+cd ..\..\..
+aws lambda update-function-code `
+  --function-name svvs-kiosko-login `
+  --zip-file fileb://aws/lambdas/login.zip `
+  --region eu-west-1
+
+# Lambda de download
+cd aws\lambdas\download
+npm install
+Compress-Archive -Path * -DestinationPath ..\download.zip -Force
+cd ..\..\..
+aws lambda update-function-code `
+  --function-name svvs-kiosko-download `
+  --zip-file fileb://aws/lambdas/download.zip `
+  --region eu-west-1
 ```
 
-Si necesitas forzar el refresco de caché:
+---
+
+## Paso 4: Subir la web
+
 ```powershell
 .\aws\scripts\deploy-web.ps1 -Invalidate
 ```
 
+La web estará en: `https://<CLOUDFRONT_DOMAIN>/`
+
 ---
 
-## Paso 3: Subir un release (.exe)
+## Paso 5: Subir un release (.exe)
 
-Primero genera el build de Electron:
 ```powershell
 npm run build:win
-```
-
-Esto crea el instalador en `dist/`. Luego:
-```powershell
-.\aws\scripts\upload-release.ps1 -Version "6.0.0" -ExePath ".\dist\kiosko-setup-6.0.0.exe"
-```
-
-La URL de descarga será:
-```
-https://<CLOUDFRONT_DOMAIN>/releases/latest/kiosko-setup-6.0.0.exe
+.\aws\scripts\upload-release.ps1 -Version "1.0.0" -ExePath ".\dist\svvs-app.exe"
 ```
 
 ---
 
-## Paso 4 (opcional): Dominio personalizado
+## Flujo completo del usuario
 
-Si quieres usar un dominio como `descargas.tukiosko.com`:
-
-1. **Registra o configura tu dominio** en Route 53 (o tu proveedor DNS).
-2. **Solicita un certificado SSL** en ACM (debe ser en `us-east-1` para CloudFront):
-   ```powershell
-   aws acm request-certificate `
-     --domain-name descargas.tukiosko.com `
-     --validation-method DNS `
-     --region us-east-1
-   ```
-3. **Valida el certificado** añadiendo el registro CNAME que te indique ACM en tu DNS.
-4. **Descomenta las líneas** en `aws/infra/template.yml`:
-   - Parámetros `DomainName` y `AcmCertificateArn`
-   - Sección `Aliases` y `ViewerCertificate` con el ARN
-5. **Redesplega el stack:**
-   ```powershell
-   aws cloudformation deploy `
-     --template-file aws/infra/template.yml `
-     --stack-name svvs-kiosko-infra `
-     --region eu-west-1 `
-     --parameter-overrides `
-       DomainName=descargas.tukiosko.com `
-       AcmCertificateArn=arn:aws:acm:us-east-1:123456789:certificate/xxx
-   ```
-6. **Añade un registro CNAME** en tu DNS:
-   ```
-   descargas.tukiosko.com → d1234abcdef.cloudfront.net
-   ```
+```
+1. Usuario abre https://<CLOUDFRONT_DOMAIN>/
+2. Ve formulario de login → introduce usuario/contraseña
+3. POST /api/login → Cognito valida → devuelve token + datos
+4. Se muestra "Bienvenido VJC" + botón de descarga
+5. Pulsa descargar → GET /api/download con token
+6. Lambda genera config.json + presigned URL del .exe
+7. Se descargan ambos archivos:
+   - svvs-app.exe (instalador)
+   - config.json (configuración personal)
+8. Usuario instala → copia config.json junto al .exe
+9. Al abrir la app → lee config.json → muestra "Bienvenido VJC"
+```
 
 ---
 
@@ -273,113 +230,165 @@ Si quieres usar un dominio como `descargas.tukiosko.com`:
 
 ```
 aws/
-├── .env                  ← Credenciales y config (NO va a git)
-├── .env.example          ← Plantilla de referencia
-├── README.md             ← Esta guía
+├── .env                          ← Credenciales y config (NO va a git)
+├── .env.example                  ← Plantilla de referencia
+├── README.md                     ← Esta guía
 ├── infra/
-│   └── template.yml      ← CloudFormation (infraestructura)
+│   └── template.yml              ← CloudFormation (toda la infraestructura)
+├── lambdas/
+│   ├── login/
+│   │   ├── index.js              ← Lambda: autenticación con Cognito
+│   │   └── package.json
+│   └── download/
+│       ├── index.js              ← Lambda: genera config + presigned URL
+│       └── package.json
 ├── scripts/
-│   ├── deploy-web.ps1    ← Sube la web a S3
-│   └── upload-release.ps1← Sube un .exe nuevo
+│   ├── deploy-web.ps1            ← Sube la web a S3
+│   ├── upload-release.ps1        ← Sube un .exe nuevo
+│   └── setup-users.ps1           ← Crea usuarios en Cognito + DynamoDB
 └── web/
-    ├── index.html         ← Página de descarga
-    └── styles.css         ← Estilos
+    ├── index.html                ← Página con login + descarga
+    ├── styles.css                ← Estilos
+    └── app.js                    ← Lógica de login y descarga
+
+Electron (cambios en la app):
+├── config.json                   ← Config por usuario (NO va a git)
+├── src/main/user-config/
+│   └── index.ts                  ← Lee config.json al arrancar
+├── src/main/ipc/
+│   └── user-config.handlers.ts   ← IPC handler para el renderer
+└── src/renderer/src/views/
+    └── HomeView.tsx              ← Muestra welcomeMessage
 ```
 
 ---
 
 ## Costes estimados
 
-| Servicio | Uso | Coste |
-|----------|-----|-------|
-| S3 | Almacén web + releases | < 0.50€/mes |
-| CloudFront | CDN + HTTPS | < 1€/mes (poco tráfico) |
-| ACM | Certificado SSL | Gratis |
-| **Total** | | **< 2€/mes** |
+| Servicio | Uso | Coste/mes (sin free tier) |
+|----------|-----|--------------------------|
+| S3 | Web + releases | < 0.50€ |
+| CloudFront | CDN + HTTPS | < 1€ |
+| Cognito | Autenticación | < 0.30€ (50 usuarios) |
+| DynamoDB | Datos usuarios | < 0.01€ |
+| Lambda | Login + download | < 0.01€ |
+| API Gateway | 2 endpoints | < 0.01€ |
+| **Total** | | **~1-2€/mes** |
 
 ---
 
 ## Troubleshooting
 
 ### "Access Denied" al acceder a la web
-- Verifica que el stack se desplegó correctamente: `aws cloudformation describe-stacks --stack-name svvs-kiosko-infra`
-- Comprueba que subiste los archivos al bucket correcto.
+- Verifica que el stack se desplegó: `aws cloudformation describe-stacks --stack-name svvs-kiosko-infra`
+- Comprueba que subiste los archivos con `deploy-web.ps1`.
 
 ### La web no se actualiza tras deploy
-- CloudFront cachea. Usa `.\aws\scripts\deploy-web.ps1 -Invalidate` para forzar refresco.
-- O espera ~5 minutos a que expire el TTL.
+- Usa `.\aws\scripts\deploy-web.ps1 -Invalidate` para forzar refresco.
 
-### Error al subir release
-- Verifica que `S3_BUCKET_RELEASES` está definido en `.env`.
-- Verifica que tu usuario IAM tiene permisos `s3:PutObject` en ese bucket.
+### Login falla con "Usuario o contraseña incorrectos"
+- Verifica que ejecutaste `setup-users.ps1` correctamente.
+- Comprueba en Cognito que el usuario existe y está confirmado.
+
+### La app no muestra el mensaje de bienvenida
+- Verifica que `config.json` está junto al ejecutable (en la carpeta de instalación).
+- En modo dev, debe estar en la raíz del proyecto.
+
+### Error al desplegar Lambdas
+- Asegúrate de ejecutar `npm install` dentro de cada carpeta de lambda antes de comprimir.
+- El zip debe contener los archivos en la raíz (no dentro de una subcarpeta).
 
 ---
 
 ## Próximos pasos
 
-- [ ] Sistema de licencias (API Gateway + Lambda + DynamoDB)
-- [ ] Auto-update con electron-updater apuntando a CloudFront
-- [ ] Panel admin para gestionar ferias/sellos
-- [ ] Sincronización de datos desde la app
+- [ ] **Fase 2:** Sistema de licencias (validar licencia al arrancar, limitar por máquina)
+- [ ] **Fase 3:** Base de datos por usuario (sync de ferias/sellos desde AWS)
+- [ ] **Fase 4:** Panel admin web (gestionar usuarios, licencias, ferias)
+- [ ] **Fase 5:** Auto-update con electron-updater apuntando a CloudFront
 
-# Web
-Desplegamos la infra ejecutando:
+---
 
- ``` bash
- aws cloudformation deploy --template-file aws/infra/template.yml --stack-name svvs-kiosko-infra --region eu-west-1
-```
+## Dominio personalizado (opcional)
 
-Ejecutamos para ver la salida:
+Si quieres usar un dominio como `descargas.tukiosko.com`:
 
+1. Solicita un certificado SSL en ACM (región `us-east-1`):
+   ```powershell
+   aws acm request-certificate `
+     --domain-name descargas.tukiosko.com `
+     --validation-method DNS `
+     --region us-east-1
+   ```
+2. Valida el certificado añadiendo el CNAME en tu DNS.
+3. Descomenta las líneas de `DomainName` y `AcmCertificateArn` en `template.yml`.
+4. Redesplega el stack con los parámetros adicionales.
+5. Añade un CNAME: `descargas.tukiosko.com → d1m7hj56bdybto.cloudfront.net`.
+
+
+# Resumen
+
+## Fase 1: Creación de web
+Primero vamos a crear una web para que los usuarios puedan descargar la aplicación.
+
+Para eso vamos a necesitar los servicios:
+- Cloudfornt: Para maner un url público
+- S3: Para almacenar la web y los release de la app
+
+Primero tenemos que ejecutar este comando para desplegar la infraestructura
 ``` bash
+aws cloudformation deploy --template-file aws/infra/template.yml --stack-name svvs-kiosko-infra --region eu-west-1
+
+# Si da error
 aws cloudformation describe-stacks --stack-name svvs-kiosko-infra --region eu-west-1 --query "Stacks[0].Outputs" --output json
 
-# Salida
-E:\_SvvS Kiosko\v6-imp> aws cloudformation describe-stacks --stack-name svvs-kiosko-infra --region eu-west-1 --query "Stacks[0].Outputs" --output json
-[                                                                           
-    {
-        "OutputKey": "WebBucketName",
-        "OutputValue": "svvs-kiosko-web",
-        "Description": "Nombre del bucket S3 para la web",
-        "ExportName": "svvs-kiosko-web-bucket"
-    },
-    {
-        "OutputKey": "ReleasesBucketName",
-        "OutputValue": "svvs-kiosko-releases",
-        "Description": "Nombre del bucket S3 para las releases",
-        "ExportName": "svvs-kiosko-releases-bucket"
-    },
-    {
-        "OutputKey": "CloudFrontDistributionId",
-        "OutputValue": "E2J36X9R6JCRRE",
-        "Description": "ID de la distribuci??n (para invalidaciones)",
-        "ExportName": "svvs-kiosko-cloudfront-id"
-    },
-    {
-        "OutputKey": "CloudFrontDomainName",
-        "OutputValue": "d1m7hj56bdybto.cloudfront.net",
+
+# Borrar
+aws cloudformation delete-stack --stack-name svvs-kiosko-infra --region eu-west-1
 ```
 
-Cuando todo este creado y rellenemos los .env podemos ejecutar:
-- Desplegar web: .\aws\scripts\deploy-web.ps1
-- Subir release: .\aws\scripts\upload-release.ps1
+Cuando todo este bien subimos la web
+``` bash
+.\aws\scripts\deploy-web.ps1
+```
+### WEB
+La url de la web es: https://d1m7hj56bdybto.cloudfront.net/
 
-En caso de actaulziar la web editando index.html o el styles.css volveriamos a ejectuar es script deploy-web.
+## Fase 2: Autenticación
+Para la autenticación vamos a convertir la web pública a que tenga un login. Y según el usuario que se autentique personalizar la descarga.
 
-El enlace de la web es: https://d1m7hj56bdybto.cloudfront.net
+Para ello vamos a utilizar los servicios:
+- Cognito User Pool: Autenticar usuarios
+- DynamoDB: Configuración por usuarios
+- Lambda: Generar el zip personalizado
+- API Gateway: Generar los endpoints
 
-Para subir la aplicación debemos:
+Ahora los pasos para desplegarlos son:
 
 ``` bash
-# Ejecutar el build:
-.\aws\scripts\upload-release.ps1 -Version "1.0.0" -ExePath ".\dist\svvs-app.exe"
+# Validate
+aws cloudformation validate-template --template-body file://aws/infra/template.yml --region eu-west-1
 
-# Generar el svvs-app.exe
-.\aws\scripts\upload-release.ps1 -Version "1.0.0" -ExePath ".\dist\svvs-app.exe"
+# 1. Redesplegar infraestructura (añade Cognito, DynamoDB, API, Lambdas)
+aws cloudformation deploy --template-file aws/infra/template.yml --stack-name svvs-kiosko-infra --region eu-west-1 --capabilities CAPABILITY_NAMED_IAM
 
-# Subir la versión actualizada
+# 2. Obtener outputs y actualizar .env
+aws cloudformation describe-stacks --stack-name svvs-kiosko-infra --query "Stacks[0].Outputs" --output json --no-cli-pager
+
+# 3. Crear usuarios
+.\aws\scripts\setup-users.ps1
+
+# 4. Desplegar código de Lambdas (npm install + zip + update)
+Compress-Archive -Path "aws\lambdas\login\*" -DestinationPath "aws\lambdas\login.zip" -Force
+aws lambda update-function-code --function-name svvs-kiosko-login --zip-file fileb://aws/lambdas/login.zip --region eu-west-1 --no-cli-pager
+
+Compress-Archive -Path "aws\lambdas\download\*" -DestinationPath "aws\lambdas\download.zip" -Force
+aws lambda update-function-code --function-name svvs-kiosko-download --zip-file fileb://aws/lambdas/download.zip --region eu-west-1 --no-cli-pager
+
+
+# 5. Subir la web actualizada
 .\aws\scripts\deploy-web.ps1 -Invalidate
+
+# 6. Subir el .exe
+.\aws\scripts\upload-release.ps1 -Version "1.0.0" -ExePath ".\dist\svvs-app.exe"
 ```
-
-
-

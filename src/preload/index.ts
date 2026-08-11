@@ -432,6 +432,15 @@ export interface ElectronAPI {
     update(id: number, input: TariffGroupUpdateInput): Promise<TariffGroup | null>
     delete(id: number): Promise<{ success: boolean; error?: string }>
   }
+  userConfig: {
+    get(): Promise<{
+      version: number
+      user: { id: string; username: string; displayName: string }
+      app: { welcomeMessage: string }
+      license: Record<string, unknown>
+      database: Record<string, unknown>
+    }>
+  }
 }
 
 // === IPC API Implementation ===
@@ -520,6 +529,9 @@ const api: ElectronAPI = {
     create: (input) => ipcRenderer.invoke('tariff-groups:create', input),
     update: (id, input) => ipcRenderer.invoke('tariff-groups:update', id, input),
     delete: (id) => ipcRenderer.invoke('tariff-groups:delete', id)
+  },
+  userConfig: {
+    get: () => ipcRenderer.invoke('userConfig:get')
   }
 }
 

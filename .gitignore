@@ -9,3 +9,6 @@ out/
 aws/.env
 .env
 *.env.local
+
+# User config (personalizado por usuario, se genera al descargar)
+/config.json

@@ -8,16 +8,76 @@
 </head>
 <body>
   <div class="container">
-    <header class="header">
-      <div class="logo">
+    <!-- ============================================================ -->
+    <!-- HEADER con logo y nombre                                     -->
+    <!-- ============================================================ -->
+    <div class="header-banner">
+      <img src="assets/logo-cuadrado.jpg" alt="SvvS Logo" class="logo-img-large" />
+      <div class="header-banner-text">
         <h1>SvvS Kiosko</h1>
-        <span class="version" id="app-version">v6.0.0</span>
+        <p>Software de gestión para kioscos filatélicos</p>
       </div>
-      <p class="subtitle">Software de gestión para kioscos filatélicos</p>
-    </header>
+    </div>
 
     <main class="main">
-      <section class="download-card">
+      <!-- ============================================================ -->
+      <!-- SECCIÓN: LOGIN                                               -->
+      <!-- ============================================================ -->
+      <section class="login-card" id="login-section">
+        <div class="login-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+        </div>
+        <h2>Iniciar sesión</h2>
+        <p class="login-info">Introduce tus credenciales para acceder a la descarga</p>
+
+        <form id="login-form" class="login-form" autocomplete="off">
+          <div class="form-group">
+            <label for="username">Usuario</label>
+            <input
+              type="text"
+              id="username"
+              name="username"
+              required
+              autocomplete="username"
+              placeholder="Tu nombre de usuario"
+            />
+          </div>
+          <div class="form-group">
+            <label for="password">Contraseña</label>
+            <input
+              type="password"
+              id="password"
+              name="password"
+              required
+              autocomplete="current-password"
+              placeholder="Tu contraseña"
+            />
+          </div>
+          <div class="form-error" id="login-error" role="alert" aria-live="polite"></div>
+          <button type="submit" class="btn-login" id="btn-login">
+            Acceder
+          </button>
+        </form>
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- SECCIÓN: DESCARGA (oculta hasta login exitoso)               -->
+      <!-- ============================================================ -->
+      <section class="download-card hidden" id="download-section">
+        <div class="welcome-banner" id="welcome-banner">
+          <span class="welcome-text" id="welcome-text"></span>
+          <button class="btn-logout" id="btn-logout" title="Cerrar sesión">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+          </button>
+        </div>
+
         <div class="download-icon">
           <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -27,21 +87,33 @@
         </div>
         <h2>Descargar para Windows</h2>
         <p class="download-info">Compatible con Windows 10 y Windows 11</p>
-        <a href="/releases/latest/svvs-app.exe" class="btn-download" id="btn-download">
-          Descargar instalador
-        </a>
+
+        <button class="btn-download" id="btn-download">
+          Descargar instalador + configuración
+        </button>
         <p class="file-info">
-          <span id="file-size">~80 MB</span> &middot; Instalador .exe
+          Se descargará <strong>svvs-app.exe</strong> y <strong>config.json</strong>
         </p>
+
+        <div class="download-progress hidden" id="download-progress">
+          <div class="progress-bar">
+            <div class="progress-fill" id="progress-fill"></div>
+          </div>
+          <p class="progress-text" id="progress-text">Preparando descarga...</p>
+        </div>
       </section>
 
-      <section class="instructions">
+      <!-- ============================================================ -->
+      <!-- INSTRUCCIONES (visibles tras login)                          -->
+      <!-- ============================================================ -->
+      <section class="instructions hidden" id="instructions-section">
         <h3>Instalación</h3>
         <ol>
-          <li>Descarga el instalador haciendo clic en el botón.</li>
-          <li>Ejecuta el archivo <code>kiosko-setup.exe</code> descargado.</li>
-          <li>Sigue las instrucciones del asistente de instalación.</li>
-          <li>Al abrir la aplicación, introduce tu clave de licencia.</li>
+          <li>Haz clic en "Descargar instalador + configuración".</li>
+          <li>Se descargarán dos archivos: <code>svvs-app.exe</code> y <code>config.json</code>.</li>
+          <li>Ejecuta <code>svvs-app.exe</code> y sigue el asistente de instalación.</li>
+          <li>Asegúrate de que <code>config.json</code> esté en tu carpeta de Descargas al abrir la app por primera vez.</li>
+          <li>La aplicación detectará tu configuración automáticamente.</li>
         </ol>
       </section>
 
@@ -51,17 +123,24 @@
           <li>Windows 10 o superior (64 bits)</li>
           <li>4 GB de RAM mínimo</li>
           <li>500 MB de espacio en disco</li>
-          <li>Conexión a internet para activar la licencia</li>
+          <li>Conexión a internet para la descarga</li>
         </ul>
       </section>
     </main>
 
     <footer class="footer">
+      <img src="assets/logo-rectangular.jpg" alt="SvvS" class="footer-logo" />
       <p>&copy; 2026 SvvS Kiosko. Todos los derechos reservados.</p>
       <p class="footer-links">
         <a href="mailto:soporte@svvskiosko.com">Soporte</a>
       </p>
     </footer>
   </div>
+
+  <script>
+    // Configurar la URL del API Gateway
+    window.API_BASE = 'https://md6oe7qpfk.execute-api.eu-west-1.amazonaws.com/prod/api'
+  </script>
+  <script src="app.js"></script>
 </body>
 </html>

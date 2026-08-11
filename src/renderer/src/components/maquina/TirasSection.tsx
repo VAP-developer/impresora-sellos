@@ -127,8 +127,7 @@ export default function TirasSection({
           aria-hidden="true"
         />
         <h3 className="text-base font-bold m-0">
-          TIRAS ESPECIALES {nombreModelo1 || 'Modelo 1'}: {temod1} / {nombreModelo2 || 'Modelo 2'}:{' '}
-          {temod2}
+          TIRAS ESPECIALES
         </h3>
       </button>
 
@@ -203,7 +202,7 @@ export default function TirasSection({
 
               <div className="flex flex-col gap-1">
                 <label htmlFor="tiras-temod1" className="text-xs text-gray-600">
-                  MODELO 1: {nombreModelo1 || 'Modelo 1'}
+                  {nombreModelo1 || 'Modelo 1'}
                 </label>
                 <input
                   id="tiras-temod1"
@@ -221,7 +220,7 @@ export default function TirasSection({
 
               <div className="flex flex-col gap-1">
                 <label htmlFor="tiras-temod2" className="text-xs text-gray-600">
-                  MODELO 2: {nombreModelo2 || 'Modelo 2'}
+                  {nombreModelo2 || 'Modelo 2'}
                 </label>
                 <input
                   id="tiras-temod2"

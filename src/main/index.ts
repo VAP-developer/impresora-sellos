@@ -8,6 +8,7 @@ import { registerAllHandlers } from './ipc/handlers'
 import { initServices, shutdownServices } from './services'
 import { syncImages } from './images/sync-images'
 import { setLastSyncResult } from './ipc/images.handlers'
+import { loadUserConfig } from './user-config'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -39,6 +40,9 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.stamp-sales')
+
+  // Load user-specific config.json (personalization, license, etc.)
+  loadUserConfig()
 
   try {
     // Initialize database and run pending migrations

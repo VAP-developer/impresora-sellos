@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { TicketConfig } from '@renderer/types/config'
 import type { OrderLine } from '@renderer/types/order'
+import { getImageByName } from '@renderer/lib/ipc-client'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -96,6 +97,41 @@ export default function RollosSection({
     setRollo1(ticket.rollo1 ?? 0)
     setRollo2(ticket.rollo2 ?? 0)
   }, [ticket])
+
+  // ─── Load stamp images for visual reference ───────────────────────────────
+
+  const [imageUrl1, setImageUrl1] = useState<string | null>(null)
+  const [imageUrl2, setImageUrl2] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function load(): Promise<void> {
+      if (!nombreModelo1) { setImageUrl1(null); return }
+      try {
+        const result = await getImageByName(nombreModelo1)
+        if (!cancelled) setImageUrl1(result?.url ?? null)
+      } catch {
+        if (!cancelled) setImageUrl1(null)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [nombreModelo1])
+
+  useEffect(() => {
+    let cancelled = false
+    async function load(): Promise<void> {
+      if (!nombreModelo2) { setImageUrl2(null); return }
+      try {
+        const result = await getImageByName(nombreModelo2)
+        if (!cancelled) setImageUrl2(result?.url ?? null)
+      } catch {
+        if (!cancelled) setImageUrl2(null)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [nombreModelo2])
 
   // ─── Derived state ────────────────────────────────────────────────────────
 
@@ -287,6 +323,20 @@ export default function RollosSection({
                   Motivo {nombreModelo1 || 'Modelo 1'}
                 </h4>
               </div>
+              {/* Visual reference image */}
+              <div className="mt-2 w-[200px] h-[91px] rounded overflow-hidden shadow-sm border border-gray-300 mx-auto">
+                {imageUrl1 ? (
+                  <img
+                    src={imageUrl1}
+                    alt={nombreModelo1 || 'Modelo 1'}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                    <span className="text-gray-500 text-xs">{nombreModelo1 || 'Sin imagen'}</span>
+                  </div>
+                )}
+              </div>
               <div className="flex flex-col gap-1 mt-1">
                 <label htmlFor="rollos-rollo1" className="text-xs text-gray-600">
                   Existencias
@@ -322,6 +372,20 @@ export default function RollosSection({
                 <h4 className="text-sm font-bold m-0">
                   Motivo {nombreModelo2 || 'Modelo 2'}
                 </h4>
+              </div>
+              {/* Visual reference image */}
+              <div className="mt-2 w-[200px] h-[91px] rounded overflow-hidden shadow-sm border border-gray-300 mx-auto">
+                {imageUrl2 ? (
+                  <img
+                    src={imageUrl2}
+                    alt={nombreModelo2 || 'Modelo 2'}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                    <span className="text-gray-500 text-xs">{nombreModelo2 || 'Sin imagen'}</span>
+                  </div>
+                )}
               </div>
               <div className="flex flex-col gap-1 mt-1">
                 <label htmlFor="rollos-rollo2" className="text-xs text-gray-600">
@@ -361,6 +425,20 @@ export default function RollosSection({
               <h4 className="text-sm font-bold m-0">
                 Colocar rollo {nombreModelo1 || 'Modelo 1'}
               </h4>
+            </div>
+            {/* Visual reference image */}
+            <div className="mt-2 w-[200px] h-[91px] rounded overflow-hidden shadow-sm border border-gray-300">
+              {imageUrl1 ? (
+                <img
+                  src={imageUrl1}
+                  alt={nombreModelo1 || 'Modelo 1'}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                  <span className="text-gray-500 text-xs">{nombreModelo1 || 'Sin imagen'}</span>
+                </div>
+              )}
             </div>
             <div className="flex flex-col gap-1 mt-2">
               <label htmlFor="rollos-cantidad1" className="text-xs text-gray-600">
@@ -408,6 +486,20 @@ export default function RollosSection({
               <h4 className="text-sm font-bold m-0">
                 Colocar rollo {nombreModelo2 || 'Modelo 2'}
               </h4>
+            </div>
+            {/* Visual reference image */}
+            <div className="mt-2 w-[200px] h-[91px] rounded overflow-hidden shadow-sm border border-gray-300">
+              {imageUrl2 ? (
+                <img
+                  src={imageUrl2}
+                  alt={nombreModelo2 || 'Modelo 2'}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                  <span className="text-gray-500 text-xs">{nombreModelo2 || 'Sin imagen'}</span>
+                </div>
+              )}
             </div>
             <div className="flex flex-col gap-1 mt-2">
               <label htmlFor="rollos-cantidad2" className="text-xs text-gray-600">

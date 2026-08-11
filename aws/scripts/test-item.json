@@ -1,0 +1,6 @@
+{
+  "username": {"S": "test"},
+  "userId": {"S": "usr_test"},
+  "displayName": {"S": "Test"},
+  "welcomeMessage": {"S": "Bienvenido Test"}
+}

@@ -1,0 +1,12 @@
+{
+  "name": "svvs-kiosko-download",
+  "version": "1.0.0",
+  "description": "Lambda de descarga personalizada para SvvS Kiosko",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.600.0",
+    "@aws-sdk/client-dynamodb": "^3.600.0",
+    "@aws-sdk/client-s3": "^3.600.0",
+    "@aws-sdk/s3-request-presigner": "^3.600.0"
+  }
+}

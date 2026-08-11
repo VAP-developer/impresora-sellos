@@ -529,7 +529,7 @@ export default function EventoEditor({
                     <div className="flex gap-3">
                       <div className="flex-1">
                         <label htmlFor="ev-codigo-feria-1" className="block text-sm text-gray-600">
-                          Código Feria 1 (max 4 chars)
+                          Código Feria (max 4 chars)
                         </label>
                         <input
                           id="ev-codigo-feria-1"
@@ -543,7 +543,7 @@ export default function EventoEditor({
                       </div>
                       <div className="flex-1">
                         <label htmlFor="ev-codigo-feria-2" className="block text-sm text-gray-600">
-                          Código Feria 2 (max 3 chars)
+                          Código Pais (max 3 chars)
                         </label>
                         <input
                           id="ev-codigo-feria-2"

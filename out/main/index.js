@@ -4826,6 +4826,126 @@ function registerTariffGroupsHandlers() {
     return repo.delete(id);
   });
 }
+const DEFAULT_USER_CONFIG = {
+  version: 1,
+  user: {
+    id: "local",
+    username: "local",
+    displayName: "Usuario"
+  },
+  app: {
+    welcomeMessage: "Bienvenido"
+  },
+  license: {},
+  database: {}
+};
+let userConfig = { ...DEFAULT_USER_CONFIG };
+function loadUserConfig() {
+  const { path: configPath, shouldCopy } = findConfigPath();
+  if (!configPath) {
+    console.log("[user-config] No config.json found. Using default configuration.");
+    userConfig = { ...DEFAULT_USER_CONFIG };
+    return userConfig;
+  }
+  try {
+    const raw = fs.readFileSync(configPath, "utf-8");
+    const parsed = JSON.parse(raw);
+    userConfig = {
+      version: parsed.version ?? DEFAULT_USER_CONFIG.version,
+      user: {
+        ...DEFAULT_USER_CONFIG.user,
+        ...parsed.user
+      },
+      app: {
+        ...DEFAULT_USER_CONFIG.app,
+        ...parsed.app
+      },
+      license: parsed.license ?? {},
+      database: parsed.database ?? {}
+    };
+    console.log(`[user-config] Loaded config.json from: ${configPath}`);
+    console.log(`[user-config] User: ${userConfig.user.displayName} (${userConfig.user.username})`);
+    if (shouldCopy && electron.app.isPackaged) {
+      copyToUserData(raw);
+    }
+    return userConfig;
+  } catch (err) {
+    console.error("[user-config] Failed to parse config.json:", err);
+    userConfig = { ...DEFAULT_USER_CONFIG };
+    return userConfig;
+  }
+}
+function getUserConfig() {
+  return userConfig;
+}
+function findConfigPath() {
+  if (electron.app.isPackaged) {
+    const userDataPath = path.join(electron.app.getPath("userData"), "config.json");
+    const externalPath = findExternalConfig();
+    if (externalPath && fs.existsSync(userDataPath)) {
+      const { statSync } = require("fs");
+      try {
+        const externalMtime = statSync(externalPath).mtimeMs;
+        const userDataMtime = statSync(userDataPath).mtimeMs;
+        if (externalMtime > userDataMtime) {
+          return { path: externalPath, shouldCopy: true };
+        }
+      } catch {
+        return { path: externalPath, shouldCopy: true };
+      }
+      return { path: userDataPath, shouldCopy: false };
+    }
+    if (externalPath) {
+      return { path: externalPath, shouldCopy: true };
+    }
+    if (fs.existsSync(userDataPath)) {
+      return { path: userDataPath, shouldCopy: false };
+    }
+  } else {
+    const devPath = path.join(electron.app.getAppPath(), "config.json");
+    if (fs.existsSync(devPath)) {
+      return { path: devPath, shouldCopy: false };
+    }
+  }
+  return { path: null, shouldCopy: false };
+}
+function findExternalConfig() {
+  const candidates = [];
+  candidates.push(path.join(path.dirname(electron.app.getPath("exe")), "config.json"));
+  try {
+    candidates.push(path.join(electron.app.getPath("downloads"), "config.json"));
+  } catch {
+  }
+  try {
+    candidates.push(path.join(electron.app.getPath("desktop"), "config.json"));
+  } catch {
+  }
+  candidates.push(path.join(process.resourcesPath, "config.json"));
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+function copyToUserData(content) {
+  try {
+    const userDataDir = electron.app.getPath("userData");
+    if (!fs.existsSync(userDataDir)) {
+      fs.mkdirSync(userDataDir, { recursive: true });
+    }
+    const destPath = path.join(userDataDir, "config.json");
+    fs.writeFileSync(destPath, content, "utf-8");
+    console.log(`[user-config] Copied config.json to userData: ${destPath}`);
+  } catch (err) {
+    console.error("[user-config] Failed to copy config.json to userData:", err);
+  }
+}
+function registerUserConfigHandlers() {
+  handleIpc("userConfig:get", () => {
+    return getUserConfig();
+  });
+}
 function registerAllHandlers() {
   registerConfigHandlers();
   registerOrdersHandlers();
@@ -4835,6 +4955,7 @@ function registerAllHandlers() {
   registerAutoLaunchHandlers();
   registerEventosHandlers();
   registerTariffGroupsHandlers();
+  registerUserConfigHandlers();
 }
 function notifyConfigChanged(config) {
   const windows = electron.BrowserWindow.getAllWindows();
@@ -4879,6 +5000,7 @@ function createWindow() {
 }
 electron.app.whenReady().then(() => {
   utils.electronApp.setAppUserModelId("com.stamp-sales");
+  loadUserConfig();
   try {
     initDatabase();
     const configRepo = new ConfigRepository();

@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useState, useEffect } from 'react'
 
 
 
@@ -17,9 +18,21 @@ import { useTranslation } from 'react-i18next'
 export default function HomeView(): JSX.Element {
   const navigate = useNavigate()
   const { t } = useTranslation()
+  const [welcomeMessage, setWelcomeMessage] = useState<string>('')
+
+  useEffect(() => {
+    window.electronAPI.userConfig.get().then((config) => {
+      setWelcomeMessage(config.app.welcomeMessage)
+    }).catch(() => {
+      setWelcomeMessage('Bienvenido')
+    })
+  }, [])
 
   return (
     <div className="flex flex-col items-center justify-center min-h-full px-4 py-8">
+      {welcomeMessage && (
+        <p className="text-lg text-gray-600 mb-2">{welcomeMessage}</p>
+      )}
       <h1 className="text-3xl font-bold text-[#212F5D] mb-12">{t('nav.home').toUpperCase()}</h1>
 
       {/* Navigation grid */}

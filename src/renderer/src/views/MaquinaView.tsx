@@ -14,11 +14,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useConfigStore } from '@renderer/stores/config.store'
 import * as ipc from '@renderer/lib/ipc-client'
-import { downloadCSV } from '@renderer/lib/ipc-client'
 import type { CodigoConfig, TicketConfig } from '@renderer/types/config'
 import type { OrderLine } from '@renderer/types/order'
 import CodigoSection from '@renderer/components/maquina/CodigoSection'
@@ -28,7 +26,6 @@ import TirasSection from '@renderer/components/maquina/TirasSection'
 import ImageConfig from '@renderer/components/images/ImageConfig'
 
 export default function MaquinaView(): JSX.Element {
-  const navigate = useNavigate()
   const { t } = useTranslation()
   const { config, loading, error: storeError, loadConfig, updateMaquina } = useConfigStore()
 
@@ -40,10 +37,6 @@ export default function MaquinaView(): JSX.Element {
   const [saving, setSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-
-  // Export operation state
-  const [exporting, setExporting] = useState(false)
-  const [exportError, setExportError] = useState<string | null>(null)
 
   // Load config on mount if not already loaded
   useEffect(() => {
@@ -67,16 +60,12 @@ export default function MaquinaView(): JSX.Element {
   // Active event's model names for display
   const nombreModelo1 = useMemo(() => {
     if (!sello) return ''
-    const evIdx = sello.elevento ?? 0
-    const evento = sello.eventos?.[evIdx]
-    return evento?.motivoi ?? sello.modelo1 ?? ''
+    return sello.modelo1 ?? sello.eventos?.[0]?.motivoi ?? ''
   }, [sello])
 
   const nombreModelo2 = useMemo(() => {
     if (!sello) return ''
-    const evIdx = sello.elevento ?? 0
-    const evento = sello.eventos?.[evIdx]
-    return evento?.motivod ?? sello.modelo2 ?? ''
+    return sello.modelo2 ?? sello.eventos?.[0]?.motivod ?? ''
   }, [sello])
 
   // Active profile name
@@ -144,43 +133,19 @@ export default function MaquinaView(): JSX.Element {
     }
   }, [ticketChanges, codigoChanges, updateMaquina])
 
-  // ─── Export XLS handler ───────────────────────────────────────────────────
-
-  const handleExportXLS = useCallback(async () => {
-    setExportError(null)
-    setExporting(true)
-    try {
-      const fileContent = await downloadCSV()
-      if (fileContent) {
-        const nameFile = 'reporte-ATM.csv'
-        const blob = new Blob([fileContent], { type: 'text/csv;charset=utf-8' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = nameFile
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-      }
-    } catch (err) {
-      console.error('[MaquinaView] Error exporting CSV:', err)
-      setExportError('Error al exportar. Inténtelo de nuevo.')
-    } finally {
-      setExporting(false)
-    }
-  }, [])
-
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div className="p-4 bg-gray-100 min-h-screen">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2">
+      <div className="flex flex-col items-center px-4 py-2">
         <h1 className="text-black text-[25px] font-bold text-center m-0">{t('views.machine')}</h1>
+        <p className="text-gray-500 text-[25px] font-bold text-center m-0">
+          Configuración tickets y rollos
+        </p>
         <button
           type="button"
-          className="bg-gray-400 text-white px-4 py-2 rounded font-semibold hover:bg-gray-500
+          className="mt-2 bg-gray-400 text-white px-4 py-2 rounded font-semibold hover:bg-gray-500
                      focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50"
           onClick={handleGuardar}
           disabled={saving || loading || !config}
@@ -188,9 +153,6 @@ export default function MaquinaView(): JSX.Element {
         >
           {saving ? 'Guardando...' : 'Guardar'}
         </button>
-        <p className="text-gray-500 text-[25px] font-bold text-center m-0">
-          Configuración de código, ticket y rollos
-        </p>
       </div>
 
       {/* Save feedback messages */}
@@ -267,48 +229,6 @@ export default function MaquinaView(): JSX.Element {
 
           {/* Section 5: IMÁGENES FERIA */}
           <ImageConfig />
-
-          {/* Footer buttons */}
-          <div className="flex justify-center items-center gap-4 mt-6 mb-4">
-            <button
-              type="button"
-              className="bg-gray-400 text-white px-4 py-2 rounded font-semibold hover:bg-gray-500
-                         focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50"
-              onClick={handleGuardar}
-              disabled={saving}
-            >
-              {saving ? 'Guardando...' : 'Guardar'}
-            </button>
-
-            <button
-              type="button"
-              className="bg-[#212F5D] text-white px-4 py-2 rounded font-semibold hover:bg-[#2d3f7a]
-                         focus:outline-none focus:ring-2 focus:ring-[#212F5D] disabled:opacity-50 disabled:cursor-not-allowed"
-              onClick={handleExportXLS}
-              disabled={exporting}
-              aria-label="Exportar informe XLS"
-            >
-              {exporting ? 'Exportando...' : 'Exportar XLS'}
-            </button>
-            <button
-              type="button"
-              className="bg-gray-200 text-black px-4 py-2 rounded font-semibold hover:bg-gray-300
-                         focus:outline-none focus:ring-2 focus:ring-gray-300"
-              onClick={() => navigate('/home')}
-            >
-              Cancelar
-            </button>
-          </div>
-
-          {/* Export error message */}
-          {exportError && (
-            <div
-              className="mx-4 mb-4 p-2 bg-red-100 text-red-800 rounded text-center"
-              role="alert"
-            >
-              {exportError}
-            </div>
-          )}
         </div>
       </div>
       )}

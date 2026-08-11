@@ -8,15 +8,21 @@
 }
 
 :root {
-  --color-primary: #1a56db;
-  --color-primary-hover: #1244b8;
+  --color-primary: #212F5D;
+  --color-primary-light: #2d3f7a;
+  --color-accent: rgb(255, 192, 0);
+  --color-accent-hover: rgb(230, 172, 0);
   --color-bg: #f8fafc;
   --color-card: #ffffff;
   --color-text: #1e293b;
   --color-text-muted: #64748b;
   --color-border: #e2e8f0;
+  --color-error: #dc2626;
+  --color-error-bg: #fef2f2;
+  --color-success: #16a34a;
+  --color-success-bg: #f0fdf4;
   --radius: 12px;
-  --shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  --shadow: 0 4px 24px rgba(33, 47, 93, 0.12);
 }
 
 body {
@@ -33,6 +39,10 @@ body {
   padding: 3rem 1.5rem;
 }
 
+.hidden {
+  display: none !important;
+}
+
 /* Header */
 .header {
   text-align: center;
@@ -43,21 +53,27 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.75rem;
-  margin-bottom: 0.5rem;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.logo-img {
+  height: 48px;
+  width: auto;
+  border-radius: 6px;
 }
 
 .logo h1 {
   font-size: 2rem;
   font-weight: 700;
-  color: var(--color-text);
+  color: var(--color-primary);
 }
 
 .version {
   font-size: 0.8rem;
   font-weight: 600;
-  background: var(--color-primary);
-  color: white;
+  background: var(--color-accent);
+  color: var(--color-primary);
   padding: 0.2rem 0.5rem;
   border-radius: 4px;
 }
@@ -67,15 +83,180 @@ body {
   font-size: 1.1rem;
 }
 
-/* Download card */
-.download-card {
+/* Header banner */
+.header-banner {
+  background: var(--color-primary);
+  border-radius: var(--radius);
+  padding: 1.5rem 2rem;
+  margin-bottom: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+}
+
+.header-banner .logo-img-large {
+  height: 60px;
+  width: auto;
+  border-radius: 8px;
+}
+
+.header-banner-text {
+  text-align: left;
+}
+
+.header-banner-text h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 0.25rem;
+}
+
+.header-banner-text p {
+  color: var(--color-accent);
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+/* Login card */
+.login-card {
   background: var(--color-card);
-  border: 1px solid var(--color-border);
+  border: 2px solid var(--color-border);
+  border-top: 4px solid var(--color-accent);
   border-radius: var(--radius);
   padding: 2.5rem 2rem;
   text-align: center;
   box-shadow: var(--shadow);
   margin-bottom: 2.5rem;
+}
+
+.login-icon {
+  color: var(--color-primary);
+  margin-bottom: 1rem;
+}
+
+.login-card h2 {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: var(--color-primary);
+}
+
+.login-info {
+  color: var(--color-text-muted);
+  margin-bottom: 1.5rem;
+}
+
+/* Login form */
+.login-form {
+  text-align: left;
+  max-width: 320px;
+  margin: 0 auto;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin-bottom: 0.35rem;
+  color: var(--color-primary);
+}
+
+.form-group input {
+  width: 100%;
+  padding: 0.7rem 0.9rem;
+  border: 2px solid var(--color-border);
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: border-color 0.2s;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(255, 192, 0, 0.2);
+}
+
+.form-error {
+  color: var(--color-error);
+  font-size: 0.85rem;
+  min-height: 1.2rem;
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+
+.btn-login {
+  width: 100%;
+  padding: 0.8rem;
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.btn-login:hover {
+  background: var(--color-primary-light);
+  transform: translateY(-1px);
+}
+
+.btn-login:active {
+  transform: translateY(0);
+}
+
+.btn-login:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Download card */
+.download-card {
+  background: var(--color-card);
+  border: 2px solid var(--color-border);
+  border-top: 4px solid var(--color-accent);
+  border-radius: var(--radius);
+  padding: 2.5rem 2rem;
+  text-align: center;
+  box-shadow: var(--shadow);
+  margin-bottom: 2.5rem;
+}
+
+.welcome-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  background: var(--color-primary);
+  border-radius: 8px;
+  padding: 0.7rem 1.2rem;
+  margin-bottom: 1.5rem;
+}
+
+.welcome-text {
+  font-weight: 600;
+  color: var(--color-accent);
+  font-size: 1.1rem;
+}
+
+.btn-logout {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 4px;
+  transition: color 0.2s;
+}
+
+.btn-logout:hover {
+  color: #ffffff;
 }
 
 .download-icon {
@@ -86,6 +267,7 @@ body {
 .download-card h2 {
   font-size: 1.5rem;
   margin-bottom: 0.5rem;
+  color: var(--color-primary);
 }
 
 .download-info {
@@ -95,23 +277,30 @@ body {
 
 .btn-download {
   display: inline-block;
-  background: var(--color-primary);
-  color: white;
-  text-decoration: none;
+  background: var(--color-accent);
+  color: var(--color-primary);
+  border: none;
   padding: 0.9rem 2.5rem;
   border-radius: 8px;
   font-size: 1.1rem;
-  font-weight: 600;
+  font-weight: 700;
+  cursor: pointer;
   transition: background 0.2s, transform 0.1s;
 }
 
 .btn-download:hover {
-  background: var(--color-primary-hover);
+  background: var(--color-accent-hover);
   transform: translateY(-1px);
 }
 
 .btn-download:active {
   transform: translateY(0);
+}
+
+.btn-download:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .file-info {
@@ -120,11 +309,39 @@ body {
   color: var(--color-text-muted);
 }
 
+/* Progress bar */
+.download-progress {
+  margin-top: 1.5rem;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 6px;
+  background: var(--color-border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--color-accent);
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.progress-text {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  margin-top: 0.5rem;
+}
+
 /* Sections */
 .instructions,
 .requirements {
   background: var(--color-card);
-  border: 1px solid var(--color-border);
+  border: 2px solid var(--color-border);
+  border-left: 4px solid var(--color-primary);
   border-radius: var(--radius);
   padding: 1.5rem 2rem;
   margin-bottom: 1.5rem;
@@ -134,7 +351,7 @@ body {
 .requirements h3 {
   font-size: 1.1rem;
   margin-bottom: 0.75rem;
-  color: var(--color-text);
+  color: var(--color-primary);
 }
 
 .instructions ol,
@@ -153,6 +370,7 @@ body {
   padding: 0.15rem 0.4rem;
   border-radius: 4px;
   font-size: 0.9em;
+  color: var(--color-primary);
 }
 
 /* Footer */
@@ -160,9 +378,16 @@ body {
   text-align: center;
   margin-top: 3rem;
   padding-top: 1.5rem;
-  border-top: 1px solid var(--color-border);
+  border-top: 2px solid var(--color-border);
   color: var(--color-text-muted);
   font-size: 0.85rem;
+}
+
+.footer-logo {
+  height: 30px;
+  width: auto;
+  opacity: 0.6;
+  margin-bottom: 0.5rem;
 }
 
 .footer-links {
@@ -172,10 +397,12 @@ body {
 .footer-links a {
   color: var(--color-primary);
   text-decoration: none;
+  font-weight: 500;
 }
 
 .footer-links a:hover {
   text-decoration: underline;
+  color: var(--color-accent-hover);
 }
 
 /* Responsive */
@@ -184,11 +411,25 @@ body {
     padding: 2rem 1rem;
   }
 
+  .login-card,
   .download-card {
     padding: 2rem 1.25rem;
   }
 
-  .logo h1 {
-    font-size: 1.5rem;
+  .header-banner {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .header-banner-text {
+    text-align: center;
+  }
+
+  .header-banner-text h1 {
+    font-size: 1.4rem;
+  }
+
+  .login-form {
+    max-width: 100%;
   }
 }

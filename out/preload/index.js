@@ -79,6 +79,9 @@ const api = {
     create: (input) => electron.ipcRenderer.invoke("tariff-groups:create", input),
     update: (id, input) => electron.ipcRenderer.invoke("tariff-groups:update", id, input),
     delete: (id) => electron.ipcRenderer.invoke("tariff-groups:delete", id)
+  },
+  userConfig: {
+    get: () => electron.ipcRenderer.invoke("userConfig:get")
   }
 };
 if (process.contextIsolated) {

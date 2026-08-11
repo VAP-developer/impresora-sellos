@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useConfigStore } from '@renderer/stores/config.store'
 import type { PreciosConfig, SelloConfig } from '@renderer/types/config'
 import type { EventoRow } from '@renderer/lib/ipc-client'
@@ -13,7 +12,6 @@ export default function ImprimirView(): JSX.Element {
   const updateImprimir = useConfigStore((s) => s.updateImprimir)
   const updateMaquina = useConfigStore((s) => s.updateMaquina)
   const resetKiosko = useKioskoStore((s) => s.reset)
-  const { t } = useTranslation()
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
@@ -179,19 +177,19 @@ export default function ImprimirView(): JSX.Element {
   return (
     <div className="p-4 bg-gray-100 min-h-screen">
       {/* Header - same format as MaquinaView */}
-      <div className="flex items-center justify-between px-4 py-2">
-        <h1 className="text-black text-[25px] font-bold text-center m-0">{t('views.print').toUpperCase()}</h1>
+      <div className="flex flex-col items-center px-4 py-2">
+        <h1 className="text-black text-[25px] font-bold text-center m-0">Eventos</h1>
+        <p className="text-gray-500 text-[25px] font-bold text-center m-0">
+          Creación de eventos
+        </p>
         <button
           onClick={handleSave}
           disabled={saving}
-          className="bg-gray-400 text-white px-4 py-2 rounded font-semibold hover:bg-gray-500
+          className="mt-2 bg-gray-400 text-white px-4 py-2 rounded font-semibold hover:bg-gray-500
                      focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50"
         >
           {saving ? 'Guardando...' : 'Guardar'}
         </button>
-        <p className="text-gray-500 text-[25px] font-bold text-center m-0">
-          Creación de eventos
-        </p>
       </div>
 
       {saveError && (
