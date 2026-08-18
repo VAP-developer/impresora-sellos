@@ -681,7 +681,7 @@ export async function generateSalePdfs(
   // Determine if we use blank stamps (modes MD/FI don't print background)
   const usesBlankBackground = config.codigo.modo === 'MD' || config.codigo.modo === 'FI'
 
-  // ─── Generate stamp PDFs ───────────────────────────────────────────────────
+  // ─── Generate stamp PDFs ─────────────────────────────────────────────────── AQUI
 
   if (dynamicTariffCtx) {
     // ─── Dynamic tariff stamp generation ─────────────────────────────────────
