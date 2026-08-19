@@ -539,26 +539,6 @@ export default function RollosSection({
         )}
       </div>
 
-      {/* ─── BLOQUEADO / DESBLOQUEADO indicator ──────────────────────────── */}
-      <div className="flex justify-center mt-4">
-        {!isBlocked ? (
-          <div
-            className="bg-[rgb(0,153,51)] rounded px-4 py-2"
-            role="status"
-            aria-live="polite"
-          >
-            <span className="text-white text-xl font-bold">DESBLOQUEADO</span>
-          </div>
-        ) : (
-          <div
-            className="bg-[rgb(153,38,0)] rounded px-4 py-2"
-            role="status"
-            aria-live="polite"
-          >
-            <span className="text-white text-xl font-bold">BLOQUEADO</span>
-          </div>
-        )}
-      </div>
       </div>
       )}
     </section>

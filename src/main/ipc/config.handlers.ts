@@ -85,4 +85,12 @@ export function registerConfigHandlers(): void {
   handleIpc('config:setLanguage', (value: unknown) => {
     repo.setLanguage(value as AppLanguage)
   })
+
+  handleIpc('config:getPrintRotation', () => {
+    return repo.getPrintRotation()
+  })
+
+  handleIpc('config:setPrintRotation', (value: unknown) => {
+    repo.setPrintRotation(value as boolean)
+  })
 }

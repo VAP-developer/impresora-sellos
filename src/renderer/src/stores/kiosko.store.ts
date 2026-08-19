@@ -196,7 +196,7 @@ export interface KioskoState {
    * Validate whether the current basket can be sold.
    * Returns null if valid, or an error message string if invalid.
    */
-  validateSale: (config: AppConfig) => string | null
+  validateSale: (config: AppConfig, skipBudgetCheck?: boolean) => string | null
 }
 
 /** Legacy empty quantities for backward compatibility when no dynamic group is active */
@@ -471,7 +471,7 @@ export const useKioskoStore = create<KioskoState>((set, get) => ({
     set({ useSecondaryPrice: value })
   },
 
-  validateSale: (config) => {
+  validateSale: (config, skipBudgetCheck) => {
     const state = get()
     const { ticket, sello, codigo } = config
 
@@ -503,8 +503,8 @@ export const useKioskoStore = create<KioskoState>((set, get) => ({
         return 'No hay suficientes sellos del segundo motivo'
       }
 
-      // Check spending limit
-      if (total > limite) {
+      // Check spending limit (skip for Oficina/filatelia profile)
+      if (!skipBudgetCheck && total > limite) {
         return `Ha excedido el límite de compra de ${limite}€`
       }
 
@@ -514,7 +514,7 @@ export const useKioskoStore = create<KioskoState>((set, get) => ({
     // Legacy validation
     const q = toLegacyQuantities(state.quantities)
     const { precios } = config
-    return validateSale(q, precios, ticket, sello, codigo.cliente)
+    return validateSale(q, precios, ticket, sello, codigo.cliente, skipBudgetCheck)
   }
 }))
 

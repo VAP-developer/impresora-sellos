@@ -23,6 +23,7 @@ import PDFDocument from 'pdfkit'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { existsSync } from 'fs'
+import { ConfigRepository } from '../database/repositories/config.repository'
 
 // ─────────────────────────────────────────────
 // Constants
@@ -228,6 +229,36 @@ export interface StampEspecialParams {
 // ─────────────────────────────────────────────
 
 /**
+ * Reads the printRotation180 setting from the config repository.
+ * Returns false if the DB is unavailable (e.g. in unit tests).
+ */
+function shouldRotate180(): boolean {
+  try {
+    const configRepo = new ConfigRepository()
+    return configRepo.getPrintRotation()
+  } catch {
+    return false
+  }
+}
+
+/** Height of the physical label in mm (the printer only prints this area) */
+const LABEL_HEIGHT_MM = 25
+
+/**
+ * Applies a 180° rotation for printers that feed labels inverted.
+ *
+ * Strategy: rotate 180° around the center of the physical label area (25mm tall),
+ * which occupies the top portion of the 55mm canvas.
+ * The center of the printable area in pdfkit coordinates is at:
+ *   X = STAMP_WIDTH / 2, Y = (LABEL_HEIGHT_MM / 2) * MM_TO_PT
+ */
+function applyRotation180(doc: PDFKit.PDFDocument): void {
+  const centerX = STAMP_WIDTH / 2
+  const centerY = (LABEL_HEIGHT_MM / 2) * MM_TO_PT
+  doc.rotate(180, { origin: [centerX, centerY] })
+}
+
+/**
  * Registers Franklin Gothic fonts on a PDFDocument instance using absolute file paths.
  */
 function registerFonts(doc: PDFKit.PDFDocument): void {
@@ -293,18 +324,58 @@ function drawTextLeft(
 }
 
 /**
+ * Pre-decodes all unique base64 images from a stamp batch into reusable Buffers.
+ * File paths are skipped — PDFKit reads them directly from the filesystem.
+ * Malformed base64 entries are silently skipped (don't abort the batch).
+ */
+function buildImageCache(stamps: StampRenderParams[]): Map<string, Buffer> {
+  const cache = new Map<string, Buffer>()
+
+  for (const stamp of stamps) {
+    for (const src of [stamp.backgroundImage, stamp.overlayImage, stamp.logoPngImage]) {
+      if (!src || cache.has(src)) continue
+      if (src.startsWith('data:')) {
+        const base64Data = src.split(',')[1]
+        if (base64Data) {
+          try {
+            cache.set(src, Buffer.from(base64Data, 'base64'))
+          } catch {
+            // Malformed base64 — skip, drawBackground/drawOverlay will handle gracefully
+          }
+        }
+      }
+      // File paths no se cachean como Buffer — PDFKit los lee directamente del FS
+    }
+  }
+
+  return cache
+}
+
+/**
  * Draws the background image on the stamp (full cover 55×25mm).
  * Handles file paths and base64 data URIs.
+ * When imageCache is provided and contains the imageSource key, uses the cached Buffer
+ * instead of re-decoding base64 (avoids redundant decoding in multi-page batches).
  */
-function drawBackground(doc: PDFKit.PDFDocument, imageSource: string | null | undefined): void {
+function drawBackground(
+  doc: PDFKit.PDFDocument,
+  imageSource: string | null | undefined,
+  imageCache?: Map<string, Buffer>
+): void {
   if (!imageSource) return
 
   try {
     if (imageSource.startsWith('data:')) {
-      const base64Data = imageSource.split(',')[1]
-      if (base64Data) {
-        const buffer = Buffer.from(base64Data, 'base64')
-        doc.image(buffer, 0, 0, { width: STAMP_WIDTH, height: STAMP_HEIGHT })
+      const cached = imageCache?.get(imageSource)
+      if (cached) {
+        doc.image(cached, 0, 0, { width: STAMP_WIDTH, height: STAMP_HEIGHT })
+      } else {
+        // Fallback: decode inline (para llamadores sin caché, e.g. renderStamp individual)
+        const base64Data = imageSource.split(',')[1]
+        if (base64Data) {
+          const buffer = Buffer.from(base64Data, 'base64')
+          doc.image(buffer, 0, 0, { width: STAMP_WIDTH, height: STAMP_HEIGHT })
+        }
       }
     } else if (existsSync(imageSource)) {
       doc.image(imageSource, 0, 0, { width: STAMP_WIDTH, height: STAMP_HEIGHT })
@@ -318,21 +389,30 @@ function drawBackground(doc: PDFKit.PDFDocument, imageSource: string | null | un
  * Draws the overlay image on the right half of the stamp (27.5mm–55mm x, 0–25mm y). --------------- AQUI 27.5 ----------
  * Used for sello layer that should only occupy the right half of the label.
  * Handles file paths and base64 data URIs.
+ * When imageCache is provided and contains the key, uses the pre-decoded Buffer
+ * instead of re-decoding inline (performance optimisation for multi-page batches).
  */
-function drawOverlay(doc: PDFKit.PDFDocument, imageSource: string | null | undefined): void {
+function drawOverlay(
+  doc: PDFKit.PDFDocument,
+  imageSource: string | null | undefined,
+  imageCache?: Map<string, Buffer>
+): void {
   if (!imageSource) return
 
- // const overlayX = 27.5 * MM_TO_PT
-  //const overlayWidth = 27.5 * MM_TO_PT
   const overlayX = 27.5 * MM_TO_PT
   const overlayWidth = 27.5 * MM_TO_PT
 
   try {
     if (imageSource.startsWith('data:')) {
-      const base64Data = imageSource.split(',')[1]
-      if (base64Data) {
-        const buffer = Buffer.from(base64Data, 'base64')
-        doc.image(buffer, overlayX, 0, { width: overlayWidth, height: STAMP_HEIGHT })
+      const cached = imageCache?.get(imageSource)
+      if (cached) {
+        doc.image(cached, overlayX, 0, { width: overlayWidth, height: STAMP_HEIGHT })
+      } else {
+        const base64Data = imageSource.split(',')[1]
+        if (base64Data) {
+          const buffer = Buffer.from(base64Data, 'base64')
+          doc.image(buffer, overlayX, 0, { width: overlayWidth, height: STAMP_HEIGHT })
+        }
       }
     } else if (existsSync(imageSource)) {
       doc.image(imageSource, overlayX, 0, { width: overlayWidth, height: STAMP_HEIGHT })
@@ -395,16 +475,14 @@ function drawLogoPng(
   doc: PDFKit.PDFDocument,
   imageSource: string | null | undefined,
   fecha: string,
-  evento: string
+  evento: string,
+  imageCache?: Map<string, Buffer>
 ): void {
   if (!imageSource) return
 
   const box = computeLogoBox(doc, fecha, evento)
   if (!box) return
 
-  // `fit` scales the image down to fit the box while preserving aspect ratio.
-  // No horizontal align is needed: the box already starts exactly where the
-  // logo must begin (5mm after the text), so the default left placement is right.
   const options: PDFKit.Mixins.ImageOption = {
     fit: [box.width, box.height],
     valign: 'center'
@@ -412,16 +490,21 @@ function drawLogoPng(
 
   try {
     if (imageSource.startsWith('data:')) {
-      const base64Data = imageSource.split(',')[1]
-      if (base64Data) {
-        const buffer = Buffer.from(base64Data, 'base64')
-        doc.image(buffer, box.x, box.y, options)
+      const cached = imageCache?.get(imageSource)
+      if (cached) {
+        doc.image(cached, box.x, box.y, options)
+      } else {
+        const base64Data = imageSource.split(',')[1]
+        if (base64Data) {
+          const buffer = Buffer.from(base64Data, 'base64')
+          doc.image(buffer, box.x, box.y, options)
+        }
       }
     } else if (existsSync(imageSource)) {
       doc.image(imageSource, box.x, box.y, options)
     }
   } catch {
-    // Gracefully ignore image errors (matches legacy behavior)
+    // Gracefully ignore image errors
   }
 }
 
@@ -479,6 +562,12 @@ export async function renderStamp(params: StampRenderParams): Promise<Buffer> {
 
 
   registerFonts(doc)
+
+  // Apply 180° rotation if enabled (for printers that feed labels inverted)
+  if (shouldRotate180()) {
+    applyRotation180(doc)
+  }
+
   drawBackground(doc, params.backgroundImage)
   
   // If printLogoPng is true, draw the logo to the right of fecha/localidad
@@ -558,6 +647,10 @@ export async function renderStampE1(params: StampEspecialParams): Promise<Buffer
   const result = collectPdf(doc)
   registerFonts(doc)
 
+  if (shouldRotate180()) {
+    applyRotation180(doc)
+  }
+
   const bgPath = join(getImagesPath(), 'TiraEspecial1.png')
   drawBackground(doc, existsSync(bgPath) ? bgPath : null)
   drawTextLeft(doc, params.codigo, FONTS.regular, 6, 2, 32)
@@ -581,6 +674,10 @@ export async function renderStampE2(params: StampEspecialParams): Promise<Buffer
 
   const result = collectPdf(doc)
   registerFonts(doc)
+
+  if (shouldRotate180()) {
+    applyRotation180(doc)
+  }
 
   const bgPath = join(getImagesPath(), 'TiraEspecial2.png')
   drawBackground(doc, existsSync(bgPath) ? bgPath : null)
@@ -609,6 +706,10 @@ export async function renderStampE3(params: StampEspecialParams): Promise<Buffer
 
   const result = collectPdf(doc)
   registerFonts(doc)
+
+  if (shouldRotate180()) {
+    applyRotation180(doc)
+  }
 
   const bgPath = join(getImagesPath(), 'TiraEspecial3.png')
   drawBackground(doc, existsSync(bgPath) ? bgPath : null)
@@ -668,21 +769,30 @@ export async function renderStampMultiPage(stamps: StampRenderParams[]): Promise
 
   const result = collectPdf(doc)
   registerFonts(doc)
+  const imageCache = buildImageCache(stamps)
+
+  // Read rotation setting once for the entire batch
+  const rotate180 = shouldRotate180()
 
   stamps.forEach((stamp, index) => {
     if (index > 0) {
       doc.addPage({ size: [STAMP_WIDTH, STAMP_HEIGHT], margin: 0 })
     }
 
-    drawBackground(doc, stamp.backgroundImage)
+    // Apply 180° rotation on each page if enabled
+    if (rotate180) {
+      applyRotation180(doc)
+    }
+
+    drawBackground(doc, stamp.backgroundImage, imageCache)
     
     // If printLogoPng is true, draw the logo to the right of fecha/localidad
     // instead of using the full right-half overlay
     if (stamp.printLogoPng && stamp.logoPngImage) {
-      drawLogoPng(doc, stamp.logoPngImage, stamp.fecha, stamp.evento)
+      drawLogoPng(doc, stamp.logoPngImage, stamp.fecha, stamp.evento, imageCache)
     } else {
       // Otherwise, use the standard overlay behavior
-      drawOverlay(doc, stamp.overlayImage)
+      drawOverlay(doc, stamp.overlayImage, imageCache)
     }
 
 
@@ -752,14 +862,21 @@ export async function renderStampEspecialStrip(
   })
 
   const result = collectPdf(doc)
+  registerFonts(doc)
   const pageWidth = doc.page.width   // 156
   const pageHeight = doc.page.height // 71
+
+  // Read rotation setting once for the entire strip
+  const rotate180 = shouldRotate180()
 
   doc.save() // guardamos el estado antes de rotar  // const pageWidth = doc.page.width   // 156
    // Rotamos 90° (o -90° según el sentido que quieras) // const pageHeight = doc.page.height // 71
   // el origin es el punto sobre el que pivota la rotación
   // doc.rotate(90, { origin: [pageWidth / 2, pageHeight / 2] })
   doc.rotate(90, { origin: [pageWidth / 2, pageHeight / 2] })
+  if (rotate180) {
+    applyRotation180(doc)
+  }
 
   const imagesPath = getImagesPath()
 
@@ -771,6 +888,10 @@ export async function renderStampEspecialStrip(
 
   // Page 2: E2 — tarifa + código + especial
   doc.addPage({ size: [STAMP_WIDTH, STAMP_HEIGHT], margin: 0 })
+  doc.rotate(90, { origin: [pageWidth / 2, pageHeight / 2] })
+  if (rotate180) {
+    applyRotation180(doc)
+  }
   const bg2 = join(imagesPath, 'TiraEspecial2.png')
   drawBackground(doc, existsSync(bg2) ? bg2 : null)
   drawTextLeft(doc, tarifa, FONTS.regular, 12, 1.5, 19.5)
@@ -779,6 +900,10 @@ export async function renderStampEspecialStrip(
 
   // Page 3: E3 — tarifa + código + especial
   doc.addPage({ size: [STAMP_WIDTH, STAMP_HEIGHT], margin: 0 })
+  doc.rotate(90, { origin: [pageWidth / 2, pageHeight / 2] })
+  if (rotate180) {
+    applyRotation180(doc)
+  }
   const bg3 = join(imagesPath, 'TiraEspecial3.png')
   drawBackground(doc, existsSync(bg3) ? bg3 : null)
   drawTextLeft(doc, tarifa, FONTS.regular, 12, 1.5, 19.5)
@@ -787,6 +912,10 @@ export async function renderStampEspecialStrip(
 
   // Page 4: E4 — only código + especial
   doc.addPage({ size: [STAMP_WIDTH, STAMP_HEIGHT], margin: 0 })
+  doc.rotate(90, { origin: [pageWidth / 2, pageHeight / 2] })
+  if (rotate180) {
+    applyRotation180(doc)
+  }
   const bg4 = join(imagesPath, 'TiraEspecial4.png')
   drawBackground(doc, existsSync(bg4) ? bg4 : null)
   drawTextLeft(doc, codigos[3], FONTS.regular, 6, 1.5, 2)

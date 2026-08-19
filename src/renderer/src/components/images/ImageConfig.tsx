@@ -24,14 +24,10 @@ export default function ImageConfig(): JSX.Element {
   const {
     fairList,
     activeFair,
-    printFondo,
-    printSello,
     loading,
     error,
     loadFairList,
-    selectFair,
-    setPrintFondo,
-    setPrintSello
+    selectFair
   } = useImagesStore()
 
   // Load fair list on mount
@@ -53,20 +49,6 @@ export default function ImageConfig(): JSX.Element {
       }
     },
     [selectFair]
-  )
-
-  const handlePrintFondoChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      setPrintFondo(e.target.checked)
-    },
-    [setPrintFondo]
-  )
-
-  const handlePrintSelloChange = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      await setPrintSello(e.target.checked)
-    },
-    [setPrintSello]
   )
 
   const handleResync = useCallback(async () => {
@@ -181,43 +163,6 @@ export default function ImageConfig(): JSX.Element {
             >
               {syncing ? 'Sincronizando...' : 'Resincronizar'}
             </button>
-          </div>
-
-          {/* Print checkboxes */}
-          <div className="flex flex-col gap-3">
-            <label
-              htmlFor="print-fondo-checkbox"
-              className="flex items-center gap-2 cursor-pointer select-none"
-            >
-              <input
-                id="print-fondo-checkbox"
-                type="checkbox"
-                checked={printFondo}
-                onChange={handlePrintFondoChange}
-                className="w-4 h-4 rounded border-gray-300 text-blue-600
-                           focus:ring-2 focus:ring-blue-400 cursor-pointer"
-              />
-              <span className="text-sm">
-                Imprimir imagen de fondo (pruebas)
-              </span>
-            </label>
-
-            <label
-              htmlFor="print-sello-checkbox"
-              className="flex items-center gap-2 cursor-pointer select-none"
-            >
-              <input
-                id="print-sello-checkbox"
-                type="checkbox"
-                checked={printSello}
-                onChange={handlePrintSelloChange}
-                className="w-4 h-4 rounded border-gray-300 text-blue-600
-                           focus:ring-2 focus:ring-blue-400 cursor-pointer"
-              />
-              <span className="text-sm">
-                Imprimir imagen del sello
-              </span>
-            </label>
           </div>
         </div>
       )}

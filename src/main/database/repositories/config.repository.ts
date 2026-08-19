@@ -8,8 +8,9 @@ export type AppLanguage = 'es' | 'en'
 
 /** Global settings managed through the SettingsView */
 export interface GlobalSettings {
-  cutNumber: number     // 2-16, default 4
-  language: AppLanguage // 'es' | 'en', default 'es'
+  cutNumber: number        // 2-16, default 4
+  language: AppLanguage    // 'es' | 'en', default 'es'
+  printRotation180: boolean // true = rotate PDF 180° for special printers, default false
 }
 
 /** Error constants for config validation */
@@ -58,8 +59,8 @@ export interface CodigoConfig {
   maquina: string // "CH17", "FI01", etc.
   cliente: number // Auto-incrementing session ID
   producto: number
-  codigo_feria_1: string // Código feria parte 1 (max 4 chars, ej: "J26") - usado por perfil Filatelia/Oficina
-  codigo_feria_2: string // Código feria parte 2 (max 3 chars, ej: "8GI") - usado por perfil Filatelia/Oficina
+  codigo_feria_1: string // Código feria parte 1 (max 4 chars, ej: "ABCD") - usado por perfil Filatelia/Oficina
+  codigo_feria_2: string // Código feria parte 2 (max 2 chars, ej: "EF") - el mes se antepone automáticamente
 }
 
 export interface EventoData {
@@ -438,6 +439,32 @@ export class ConfigRepository {
     }
 
     config.settings = { ...config.settings, cutNumber: config.settings?.cutNumber ?? 4, language: value }
+    this.set(config)
+  }
+
+  /**
+   * Get the print rotation setting, returns default false if unset.
+   */
+  getPrintRotation(): boolean {
+    const config = this.get()
+    return config?.settings?.printRotation180 ?? false
+  }
+
+  /**
+   * Set the print rotation setting (true = 180° rotation enabled).
+   */
+  setPrintRotation(value: boolean): void {
+    const config = this.get()
+    if (!config) {
+      throw new Error('Config not initialized. Call initConfig() first.')
+    }
+
+    config.settings = {
+      ...config.settings,
+      cutNumber: config.settings?.cutNumber ?? 4,
+      language: config.settings?.language ?? 'es',
+      printRotation180: value
+    }
     this.set(config)
   }
 }

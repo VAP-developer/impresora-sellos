@@ -9,10 +9,12 @@
  * 8.7 (resume resends), 18.2 (persist before sending)
  */
 
-import { createPrinterManager, PrinterManager, DEFAULT_THERMAL_CONFIG } from './printing/printer-manager'
+import { PrinterManager, DEFAULT_THERMAL_CONFIG } from './printing/printer-manager'
 import type { PrinterAssignments } from './printing/printer-manager'
 import { PrintQueueService } from './printing/print-queue.service'
 import { PrinterAssignmentsRepository } from './database/repositories/printer-assignments.repository'
+import { DpiCache, WmiDpiDetector } from './printing/dpi-detector'
+import { WindowsBackend, defaultWindowsExecutor } from './printing/windows-backend'
 
 // ─── Singleton instances ──────────────────────────────────────────────────────
 
@@ -53,7 +55,20 @@ export function getPrinterManager(): PrinterManager {
           }
         : undefined
 
-    printerManager = createPrinterManager(assignments)
+    // Create DPI infrastructure: cache stores detected DPIs, detector queries WMI
+    const dpiCache = new DpiCache()
+    const dpiDetector = new WmiDpiDetector(defaultWindowsExecutor)
+
+    // Create WindowsBackend with DPI cache so print jobs use detected resolution
+    const backend = new WindowsBackend(defaultWindowsExecutor, dpiCache)
+
+    // Create PrinterManager with all dependencies
+    printerManager = new PrinterManager(backend, assignments, dpiDetector, dpiCache)
+
+    // Trigger initial DPI detection for all assigned printers (fire-and-forget)
+    if (assignments) {
+      printerManager.setAssignments(assignments)
+    }
   }
   return printerManager
 }

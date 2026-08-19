@@ -92,7 +92,10 @@ export function formatProducto(producto: number): string {
 /**
  * Format the complete label code (Código de Etiqueta).
  *
- * Pattern: {modo}{mes}{pais}{año} {maquina}-{cliente4dígitos}-{producto3dígitos}
+ * New pattern (with feria codes): {feria1}-{mes}{feria2} {cliente4dígitos}-{producto3dígitos}
+ * Example: "ABCD-8EF 0001-001" (4 chars + mes + 2 chars)
+ *
+ * Legacy pattern: {modo}{mes}{pais}{año} {maquina}-{cliente4dígitos}-{producto3dígitos}
  *
  * Property 3: For any valid code configuration, the formatted code must conform
  * to the pattern with months 10/11/12 as O/N/D, client zero-padded to 4 digits,
@@ -111,8 +114,11 @@ export function formatLabelCode(codigo: CodigoConfig, now?: Date): string | null
   const feria2 = codigo.codigo_feria_2 ?? ''
 
   // New format when feria codes are configured
+  // Pattern: {feria1}-{mes}{feria2} {cliente}-{producto}
+  // The month char from pestaña Máquina is prepended to the second block
   if (feria1 || feria2) {
-    return `${feria1}-${feria2} ${clienteStr}-${producto}`
+    const mes = formatMes(codigo.mes, now)
+    return `${feria1}-${mes}${feria2} ${clienteStr}-${producto}`
   }
 
   // Legacy fallback

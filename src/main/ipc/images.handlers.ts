@@ -1,134 +1,161 @@
 import { handleIpc } from './handlers'
-import { ImagesRepository } from '../database/repositories/images.repository'
-import { ImageSyncRepository } from '../database/repositories/image-sync.repository'
-import { buildImageName, syncImages } from '../images/sync-images'
-import type { SyncResult } from '../images/sync-images'
-import { join, dirname } from 'path'
-import { existsSync } from 'fs'
-import { app } from 'electron'
-
-// Module-level storage for the last sync result.
-// Set via `setLastSyncResult` after running syncImages() at startup.
-let lastSyncResult: SyncResult | null = null
+import { StampsRepository, StampRecord } from '../database/repositories/stamps.repository'
+import { existsSync, readFileSync } from 'fs'
+import { extname } from 'path'
 
 /**
- * Stores the result of the last image synchronization run.
- * Called from the app startup flow after syncImages() completes.
+ * Reads an image file from disk and returns it as a base64 data URI.
+ * Returns null if the file does not exist or cannot be read.
  */
-export function setLastSyncResult(result: SyncResult): void {
-  lastSyncResult = result
+function fileToDataUri(filePath: string): string | null {
+  if (!filePath || !existsSync(filePath)) return null
+
+  try {
+    const buffer = readFileSync(filePath)
+    const ext = extname(filePath).toLowerCase()
+    const mimeType = ext === '.png' ? 'image/png' : 'image/jpeg'
+    return `data:${mimeType};base64,${buffer.toString('base64')}`
+  } catch {
+    return null
+  }
 }
 
 /**
- * Returns the stored last sync result (for testing or internal use).
+ * Constructs the image name key (same format as the legacy system for compatibility).
+ * Format: "{year}/{stampName}-{type}" e.g. "2026/Año Serpiente-fondo"
  */
-export function getLastSyncResult(): SyncResult | null {
-  return lastSyncResult
+export function buildImageName(year: string, fairName: string, imageType: string): string {
+  return `${year}/${fairName}-${imageType}`
 }
 
 /**
  * Registers IPC handlers for image management.
+ * All images are now sourced exclusively from the cloud-synced stamps table.
+ * Local upload/remove is no longer supported.
  *
  * Channels:
- * - images:upload — Uploads (inserts or replaces) an image as Base64 data URI
- * - images:remove — Removes an image by name
- * - images:getByName — Retrieves an image's name and data URI by name
- * - images:getFairList — Returns list of available fairs from sync records
+ * - images:getByName — Retrieves an image by stamp name (reads from disk file)
+ * - images:getFairList — Returns list of available fairs from stamps table
  * - images:getByFair — Returns fondo/sello images for a specific fair
- * - images:getSyncStatus — Returns the last synchronization result
+ * - images:getSyncStatus — Returns stamp sync info
  */
 export function registerImagesHandlers(): void {
-  const repo = new ImagesRepository()
-  const syncRepo = new ImageSyncRepository()
+  const stampsRepo = new StampsRepository()
 
-  handleIpc('images:upload', (name: unknown, dataUri: unknown, type: unknown, size: unknown) => {
-    repo.upload(name as string, dataUri as string, type as string, size as number)
+  // No-op handlers for upload/remove (kept for backward compat with preload contract)
+  handleIpc('images:upload', () => {
+    // Local image upload is disabled. All images come from cloud sync.
+    console.warn('[images:upload] Disabled — images are managed via cloud sync only.')
   })
 
-  handleIpc('images:remove', (name: unknown) => {
-    repo.remove(name as string)
+  handleIpc('images:remove', () => {
+    // Local image removal is disabled.
+    console.warn('[images:remove] Disabled — images are managed via cloud sync only.')
   })
 
   handleIpc('images:getByName', (name: unknown) => {
     const imageName = name as string
-
     if (!imageName) return null
 
-    // Direct lookup by exact name (legacy uploaded images or full sync name)
-    const directResult = repo.getByName(imageName)
-    if (directResult) return directResult
+    const allStamps = stampsRepo.getAll()
 
-    // Fallback 1: try to find by fair name from bbdd-ferias sync
-    // When the user puts "serpiente" in the motivo field, the image is stored
-    // as "{year}/serpiente-fondo" from the folder sync. We search the image_sync
-    // table for a matching fair name and then look up the fondo image.
-    const fairs = syncRepo.getFairList()
-    const matchedFair = fairs.find(
-      (f) => f.fairName.toLowerCase() === imageName.toLowerCase()
+    // Strategy 1: exact match by stampName (e.g. motivoi = "Año Serpiente")
+    const exactMatch = allStamps.find(
+      (s) => s.stampName.toLowerCase() === imageName.toLowerCase()
     )
-    if (matchedFair) {
-      const fondoName = buildImageName(matchedFair.year, matchedFair.fairName, 'fondo')
-      const fondoResult = repo.getByName(fondoName)
-      if (fondoResult) return fondoResult
+    if (exactMatch && exactMatch.fondoPath) {
+      const url = fileToDataUri(exactMatch.fondoPath)
+      if (url) return { name: exactMatch.stampName, url }
     }
 
-    // Fallback 2: partial match — search for any image whose name contains the input
-    // This handles cases like the user typing "serpiente" and the image being "2026/serpiente-fondo"
-    const allImages = repo.getAll()
+    // Strategy 2: match by constructed image name key (e.g. "2026/Año Serpiente-fondo")
+    // This handles the case where pdf-generator passes buildImageName results
     const lowerName = imageName.toLowerCase()
-    const partialMatch = allImages.find(
-      (img) => img.name.toLowerCase().includes(lowerName) && img.name.toLowerCase().includes('fondo')
-    )
-    if (partialMatch) {
-      return { name: partialMatch.name, url: partialMatch.data }
+    for (const stamp of allStamps) {
+      const fondoKey = buildImageName(stamp.year, stamp.stampName, 'fondo')
+      const selloKey = buildImageName(stamp.year, stamp.stampName, 'sello')
+
+      if (fondoKey.toLowerCase() === lowerName) {
+        const url = fileToDataUri(stamp.fondoPath ?? '')
+        if (url) return { name: fondoKey, url }
+      }
+      if (selloKey.toLowerCase() === lowerName) {
+        const url = fileToDataUri(stamp.logoPath ?? '')
+        if (url) return { name: selloKey, url }
+      }
     }
 
-    // Fallback 3: any image containing the name (even without -fondo)
-    const anyMatch = allImages.find(
-      (img) => img.name.toLowerCase().includes(lowerName)
+    // Strategy 3: partial match (e.g. user typed "serpiente" and we have "Año Serpiente")
+    const partialMatch = allStamps.find(
+      (s) => s.stampName.toLowerCase().includes(lowerName)
     )
-    if (anyMatch) {
-      return { name: anyMatch.name, url: anyMatch.data }
+    if (partialMatch && partialMatch.fondoPath) {
+      const url = fileToDataUri(partialMatch.fondoPath)
+      if (url) return { name: partialMatch.stampName, url }
     }
 
     return null
   })
 
   handleIpc('images:getFairList', () => {
-    return syncRepo.getFairList()
+    const stamps = stampsRepo.getAll()
+    // Return unique year+stampName pairs (deduplicated)
+    const seen = new Set<string>()
+    const result: Array<{ year: string; fairName: string }> = []
+
+    for (const stamp of stamps) {
+      const key = `${stamp.year}#${stamp.stampName}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        result.push({ year: stamp.year, fairName: stamp.stampName })
+      }
+    }
+
+    return result
   })
 
   handleIpc('images:getByFair', (year: unknown, fairName: unknown) => {
     const y = year as string
     const fn = fairName as string
 
-    const fondoName = buildImageName(y, fn, 'fondo')
-    const selloName = buildImageName(y, fn, 'sello')
+    const stamps = stampsRepo.getAll()
+    const match = stamps.find(
+      (s) => s.year === y && s.stampName.toLowerCase() === fn.toLowerCase()
+    )
 
-    const fondoRecord = repo.getByName(fondoName)
-    const selloRecord = repo.getByName(selloName)
+    if (!match) {
+      return { fondo: null, sello: null }
+    }
 
     return {
-      fondo: fondoRecord?.url ?? null,
-      sello: selloRecord?.url ?? null
+      fondo: fileToDataUri(match.fondoPath ?? ''),
+      sello: fileToDataUri(match.logoPath ?? '')
     }
   })
 
   handleIpc('images:getSyncStatus', () => {
-    return lastSyncResult
+    // Return basic stamp sync info instead of the old bbdd-ferias sync result
+    const stamps = stampsRepo.getAll()
+    return {
+      inserted: stamps.length,
+      updated: 0,
+      deleted: 0,
+      unchanged: 0,
+      errors: []
+    }
   })
 
   handleIpc('images:resync', () => {
-    let basePath: string
-    if (app.isPackaged) {
-      const exeDirPath = join(dirname(app.getPath('exe')), 'bbdd-ferias')
-      const resourcesPath = join(process.resourcesPath, 'bbdd-ferias')
-      basePath = existsSync(exeDirPath) ? exeDirPath : resourcesPath
-    } else {
-      basePath = join(app.getAppPath(), 'bbdd-ferias')
+    // No-op: resync from local folder is disabled.
+    // Cloud sync is done via stamps:sync channel.
+    console.warn('[images:resync] Disabled — use stamps:sync for cloud synchronization.')
+    const stamps = stampsRepo.getAll()
+    return {
+      inserted: stamps.length,
+      updated: 0,
+      deleted: 0,
+      unchanged: 0,
+      errors: []
     }
-    const result = syncImages(basePath)
-    lastSyncResult = result
-    return result
   })
 }

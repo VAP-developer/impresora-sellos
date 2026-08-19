@@ -220,7 +220,8 @@ export class PrintQueueService {
       }
     }
 
-    // Stamp printers (printer1, printer2)
+    // Stamp printers (printer1, printer2) — all stamp PDFs use standard media.
+    // Grouping by cutNumber is handled at PDF generation time (1 PDF per group).
     return {
       media: STAMP_MEDIA,
       orientation: STAMP_ORIENTATION,

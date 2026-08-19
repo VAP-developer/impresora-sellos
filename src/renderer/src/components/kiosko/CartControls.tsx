@@ -125,7 +125,9 @@ export default function CartControls({
       if (!config || printing) return
 
       // 1. Validate the sale
-      const error = validateSale(config)
+      // For 'filatelia' (red cart / Oficina), skip budget limit validation
+      const skipBudgetCheck = profile === 'filatelia'
+      const error = validateSale(config, skipBudgetCheck)
       if (error) {
         // Empty basket: silent reject (legacy behavior)
         if (error === 'empty') return

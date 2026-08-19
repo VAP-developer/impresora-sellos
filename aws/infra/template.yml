@@ -100,6 +100,26 @@ Resources:
                 AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${WebDistribution}'
 
   # --------------------------------------------------------------------------
+  # S3: Bucket para los sellos (imágenes de fondo y logo)
+  # --------------------------------------------------------------------------
+  StampsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ProjectName}-stamps'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # --------------------------------------------------------------------------
   # CloudFront: Origin Access Control
   # --------------------------------------------------------------------------
   CloudFrontOAC:
@@ -227,6 +247,28 @@ Resources:
           Value: !Ref ProjectName
 
   # --------------------------------------------------------------------------
+  # DynamoDB: Tabla catálogo de sellos
+  # --------------------------------------------------------------------------
+  StampCatalogTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-stamp-catalog'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: username
+          AttributeType: S
+        - AttributeName: stampId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: username
+          KeyType: HASH
+        - AttributeName: stampId
+          KeyType: RANGE
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # --------------------------------------------------------------------------
   # IAM: Rol para las Lambdas
   # --------------------------------------------------------------------------
   LambdaExecutionRole:
@@ -272,6 +314,29 @@ Resources:
                 Action:
                   - s3:GetObject
                 Resource: !Sub '${ReleasesBucket.Arn}/*'
+        - PolicyName: S3StampsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: !GetAtt StampsBucket.Arn
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: !Sub '${StampsBucket.Arn}/*'
+        - PolicyName: DynamoDBStampCatalogAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:Query
+                  - dynamodb:PutItem
+                  - dynamodb:DeleteItem
+                Resource: !GetAtt StampCatalogTable.Arn
 
   # --------------------------------------------------------------------------
   # Lambda: Login
@@ -452,6 +517,8 @@ Resources:
       - ActivateOptionsMethod
       - DeactivateMethod
       - DeactivateOptionsMethod
+      - SyncStampsMethod
+      - SyncStampsOptionsMethod
     Properties:
       RestApiId: !Ref KioskoApi
 
@@ -530,6 +597,87 @@ Resources:
       Tags:
         - Key: Project
           Value: !Ref ProjectName
+
+  # --------------------------------------------------------------------------
+  # Lambda: Sync Stamps (escanea S3, sincroniza DynamoDB, genera presigned URLs)
+  # --------------------------------------------------------------------------
+  SyncStampsFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-sync-stamps'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          USERS_TABLE: !Ref UsersTable
+          STAMPS_BUCKET: !Ref StampsBucket
+          STAMP_CATALOG_TABLE: !Ref StampCatalogTable
+      Code:
+        ZipFile: |
+          // Placeholder - se actualiza con deploy de lambda
+          exports.handler = async (event) => {
+            return { statusCode: 200, body: 'sync-stamps placeholder' };
+          };
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # /api/stamps
+  StampsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref KioskoApi
+      ParentId: !Ref ApiResource
+      PathPart: stamps
+
+  # /api/stamps/sync
+  StampsSyncResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref KioskoApi
+      ParentId: !Ref StampsResource
+      PathPart: sync
+
+  SyncStampsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref KioskoApi
+      ResourceId: !Ref StampsSyncResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SyncStampsFunction.Arn}/invocations'
+
+  SyncStampsOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref KioskoApi
+      ResourceId: !Ref StampsSyncResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: '200'
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: ''
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: '200'
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
 
   # /api/activate
   ActivateResource:
@@ -639,6 +787,14 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${KioskoApi}/*/POST/api/deactivate'
 
+  SyncStampsFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SyncStampsFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${KioskoApi}/*/POST/api/stamps/sync'
+
 # ============================================================================
 # OUTPUTS
 # ============================================================================
@@ -690,6 +846,18 @@ Outputs:
     Value: !Ref UsersTable
     Export:
       Name: !Sub '${ProjectName}-users-table'
+
+  StampsBucketName:
+    Description: Nombre del bucket S3 para los sellos
+    Value: !Ref StampsBucket
+    Export:
+      Name: !Sub '${ProjectName}-stamps-bucket'
+
+  StampCatalogTableName:
+    Description: Nombre de la tabla DynamoDB del catálogo de sellos
+    Value: !Ref StampCatalogTable
+    Export:
+      Name: !Sub '${ProjectName}-stamp-catalog-table'
 
   DownloadUrl:
     Description: URL directa de descarga del último release

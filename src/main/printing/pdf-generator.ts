@@ -20,11 +20,11 @@
 import type { AppConfig, PreciosConfig } from '../../renderer/src/types/config'
 import { renderStampMultiPage, renderStampEspecialStrip } from './stamp-renderer'
 import type { StampRenderParams, StampLayout } from './stamp-renderer'
-import { genTicket, genTicketCaja, genTicketMaster, calcTicketHeightMm, calcTicketCajaHeightMm, calcTicketMasterHeightMm, calcActualTicketHeight, calcActualTicketCajaHeight, countActiveItems } from './ticket-renderer'
+import { genTicket, genTicketCaja, genTicketMaster, calcTicketHeightMm, calcTicketCajaHeightMm, calcTicketMasterHeightMm, countActiveItems } from './ticket-renderer'
 import type { TicketItem, TicketProduct } from './ticket-renderer'
-import { ImagesRepository } from '../database/repositories/images.repository'
-import { ImageSyncRepository } from '../database/repositories/image-sync.repository'
-import { buildImageName } from '../images/sync-images'
+import { StampsRepository, StampRecord } from '../database/repositories/stamps.repository'
+import { existsSync, readFileSync } from 'fs'
+import { extname } from 'path'
 import { groupLabels } from './label-grouping'
 import { ConfigRepository } from '../database/repositories/config.repository'
 
@@ -172,15 +172,17 @@ export interface DynamicTariffContext {
   groupId: number
   /** Group title */
   title: string
-  /** Event name (optional, for ticket header) */
+  /** Event name (optional, for ticket header — nferia field) */
   eventName?: string
+  /** Event lugar for ticket header (nlugar field) */
+  eventNlugar?: string
   /** Event date for stamp labels (e.g., "21-24 abril 2025") */
   eventFecha?: string
   /** Event locality for stamp labels (e.g., "Madrid") */
   eventLocalidad?: string
-  /** Event fair code part 1 (max 4 chars, e.g., "J26") */
+  /** Event fair code part 1 (max 4 chars, e.g., "ABCD") */
   eventCodigoFeria1?: string
-  /** Event fair code part 2 (max 3 chars, e.g., "8GI") */
+  /** Event fair code part 2 (max 2 chars, e.g., "EF") - month char prepended automatically */
   eventCodigoFeria2?: string
   /** Layout template for modelo1 stamps */
   eventLayoutModelo1?: string
@@ -190,6 +192,8 @@ export interface DynamicTariffContext {
   currency: string
   /** Currency symbol (e.g., '€', '$') */
   currencySymbol: string
+  /** Complementary currency symbol (e.g., '$', '€') — used when useSecondaryPrice is active */
+  complementaryCurrencySymbol?: string
   /** Active tariffs in this group */
   tariffs: DynamicTariffDef[]
   /** Active strips in this group */
@@ -275,8 +279,10 @@ function formatProducto(producto: number): string {
 /**
  * Builds the complete label code string.
  *
- * New pattern: {codigoFeria1}-{codigoFeria2} {cliente4dígitos}-{producto3dígitos}
- * Example:     "J26-8GI 0001-001"
+ * New pattern: {codigoFeria1}-{mes}{codigoFeria2} {cliente4dígitos}-{producto3dígitos}
+ * Example:     "ABCD-8EF 0001-001"  (4 chars + mes + 2 chars)
+ *
+ * The month character (mes from pestaña Máquina) is prepended to codigoFeria2.
  *
  * When codigoFeria1/codigoFeria2 are empty, falls back to legacy pattern using maquina.
  *
@@ -294,9 +300,11 @@ function buildLabelCode(config: AppConfig, productoId: number, codigoFeria1Overr
   const feria1 = codigoFeria1Override ?? codigo.codigo_feria_1 ?? ''
   const feria2 = codigoFeria2Override ?? codigo.codigo_feria_2 ?? ''
 
-  // New format: {codigoFeria1}-{codigoFeria2} {cliente}-{producto}
+  // New format: {codigoFeria1}-{mes}{codigoFeria2} {cliente}-{producto}
+  // The month char from pestaña Máquina is prepended to the second block
   if (feria1 || feria2) {
-    return `${feria1}-${feria2} ${cliente}-${producto}`
+    const mes = formatMes(codigo.mes)
+    return `${feria1}-${mes}${feria2} ${cliente}-${producto}`
   }
 
   // Legacy fallback when no feria codes configured
@@ -345,32 +353,48 @@ function getTicketDateTime(config: AppConfig): string {
 }
 
 /**
+ * Reads an image file from disk and returns it as a base64 data URI.
+ * Returns null if the file does not exist or cannot be read.
+ */
+function fileToDataUri(filePath: string): string | null {
+  if (!filePath || !existsSync(filePath)) return null
+  try {
+    const buffer = readFileSync(filePath)
+    const ext = extname(filePath).toLowerCase()
+    const mimeType = ext === '.png' ? 'image/png' : 'image/jpeg'
+    return `data:${mimeType};base64,${buffer.toString('base64')}`
+  } catch {
+    return null
+  }
+}
+
+/**
  * Retrieves the background image for a given model name.
- * Returns the data URI from the database, or null if not found.
- * Falls back to searching by fair name from the bbdd-ferias sync if direct lookup fails.
+ * Resolves from the cloud-synced stamps table (reads file from disk).
  */
 function getModelBackground(
   modelName: string,
-  imagesRepo: ImagesRepository,
-  syncRepo?: ImageSyncRepository
+  stampsRepo: StampsRepository
 ): string | null {
   if (!modelName) return null
 
-  // Direct lookup by exact name
-  const image = imagesRepo.getByName(modelName)
-  if (image) return image.url
+  const allStamps = stampsRepo.getAll()
 
-  // Fallback: search by fair name in image_sync table
-  if (syncRepo) {
-    const fairs = syncRepo.getFairList()
-    const matchedFair = fairs.find(
-      (f) => f.fairName.toLowerCase() === modelName.toLowerCase()
-    )
-    if (matchedFair) {
-      const fondoName = buildImageName(matchedFair.year, matchedFair.fairName, 'fondo')
-      const fondoImage = imagesRepo.getByName(fondoName)
-      return fondoImage?.url ?? null
-    }
+  // Match by stampName (e.g. motivoi = "Año Serpiente")
+  const match = allStamps.find(
+    (s) => s.stampName.toLowerCase() === modelName.toLowerCase()
+  )
+  if (match && match.fondoPath) {
+    return fileToDataUri(match.fondoPath)
+  }
+
+  // Partial match fallback
+  const lowerName = modelName.toLowerCase()
+  const partial = allStamps.find(
+    (s) => s.stampName.toLowerCase().includes(lowerName)
+  )
+  if (partial && partial.fondoPath) {
+    return fileToDataUri(partial.fondoPath)
   }
 
   return null
@@ -378,58 +402,41 @@ function getModelBackground(
 
 /**
  * Resolves the logo PNG image for a given model name.
+ * Reads from the cloud-synced stamps table (sello/logo file on disk).
  *
- * Each fair folder holds two images: a JPG background (`-fondo`) and a PNG
- * stamp/logo (`-sello`). The logo PNG is the `-sello` one, so this resolves the
- * model name to its fair and returns that image, verifying it really is a PNG.
- *
- * Falls back to `fallbackLogo` (the active fair's sello) when the model cannot
- * be resolved, so enabling "Logo PNG" still prints something sensible.
+ * Falls back to `fallbackLogo` when the model cannot be resolved.
  */
 function getModelLogoPng(
   modelName: string,
-  imagesRepo: ImagesRepository,
-  syncRepo: ImageSyncRepository | undefined,
+  stampsRepo: StampsRepository,
   fallbackLogo: string | null
 ): string | null {
-  const isPng = (record: { type: string | null; data: string } | null): boolean => {
-    if (!record) return false
-    if (record.type) return record.type.toLowerCase() === 'image/png'
-    // No stored mime type — infer from the data URI prefix
-    return record.data.startsWith('data:image/png')
-  }
+  console.log(`[getModelLogoPng] modelName="${modelName}", fallbackLogo length=${fallbackLogo?.length ?? 0}`)
 
-  console.log(`[getModelLogoPng] modelName="${modelName}", syncRepo=${!!syncRepo}, fallbackLogo length=${fallbackLogo?.length ?? 0}`)
-
-  if (modelName && syncRepo) {
-    try {
-      const fairs = syncRepo.getFairList()
-      console.log(`[getModelLogoPng] Fair list: ${JSON.stringify(fairs.map(f => f.fairName))}`)
-      const matchedFair = fairs.find(
-        (f) => f.fairName.toLowerCase() === modelName.toLowerCase()
-      )
-      if (matchedFair) {
-        const selloName = buildImageName(matchedFair.year, matchedFair.fairName, 'sello')
-        const record = imagesRepo.getFullByName(selloName)
-        console.log(`[getModelLogoPng] Matched fair "${matchedFair.fairName}", selloName="${selloName}", record exists=${!!record}, isPng=${isPng(record)}`)
-        if (isPng(record)) return record!.data
-      } else {
-        console.log(`[getModelLogoPng] No fair matched for modelName="${modelName}"`)
-      }
-    } catch (err) {
-      console.log(`[getModelLogoPng] syncRepo error: ${err}`)
-      // image_sync unavailable — fall through to the fallback below
-    }
-  }
-
-  // Direct lookup: the model name may already point at a PNG image record
   if (modelName) {
-    try {
-      const direct = imagesRepo.getFullByName(modelName)
-      console.log(`[getModelLogoPng] Direct lookup "${modelName}": found=${!!direct}, isPng=${isPng(direct)}`)
-      if (isPng(direct)) return direct!.data
-    } catch {
-      // ignore and fall back
+    const allStamps = stampsRepo.getAll()
+    const match = allStamps.find(
+      (s) => s.stampName.toLowerCase() === modelName.toLowerCase()
+    )
+    if (match && match.logoPath) {
+      const dataUri = fileToDataUri(match.logoPath)
+      if (dataUri) {
+        console.log(`[getModelLogoPng] Found stamp "${match.stampName}", logo loaded`)
+        return dataUri
+      }
+    }
+
+    // Partial match
+    const lowerName = modelName.toLowerCase()
+    const partial = allStamps.find(
+      (s) => s.stampName.toLowerCase().includes(lowerName)
+    )
+    if (partial && partial.logoPath) {
+      const dataUri = fileToDataUri(partial.logoPath)
+      if (dataUri) {
+        console.log(`[getModelLogoPng] Partial match "${partial.stampName}", logo loaded`)
+        return dataUri
+      }
     }
   }
 
@@ -437,23 +444,6 @@ function getModelLogoPng(
   if (fallbackLogo) {
     console.log(`[getModelLogoPng] Returning fallback (length=${fallbackLogo.length})`)
     return fallbackLogo
-  }
-
-  // Last resort: if syncRepo is available, grab the sello from the first available fair
-  if (syncRepo) {
-    try {
-      const fairs = syncRepo.getFairList()
-      for (const fair of fairs) {
-        const selloName = buildImageName(fair.year, fair.fairName, 'sello')
-        const record = imagesRepo.getFullByName(selloName)
-        if (record) {
-          console.log(`[getModelLogoPng] Last resort: using sello from fair "${fair.fairName}" (${record.data.length} chars)`)
-          return record.data
-        }
-      }
-    } catch {
-      // ignore
-    }
   }
 
   console.log(`[getModelLogoPng] Returning null — no logo found`)
@@ -560,11 +550,11 @@ export async function generateSalePdfs(
   config: AppConfig,
   quantities: SaleQuantities | DynamicSaleQuantities,
   profile: string,
-  imagesRepo?: ImagesRepository,
+  _imagesRepo?: unknown,
   imageLayerOptions?: ImageLayerOptions,
   dynamicTariffCtx?: DynamicTariffContext
 ): Promise<SaleGenerationResult> {
-  const repo = imagesRepo ?? new ImagesRepository()
+  const stampsRepo = new StampsRepository()
   const pdfs: GeneratedPdf[] = []
   const notifications: ImageLayerNotification[] = []
 
@@ -656,26 +646,13 @@ export async function generateSalePdfs(
     // right of the fecha/localidad text instead of the right-half overlay.
     printLogoPng = imageLayerOptions.printLogoPng ?? false
     if (printLogoPng) {
-      let syncRepo: ImageSyncRepository | undefined
-      try {
-        syncRepo = new ImageSyncRepository()
-      } catch {
-        // DB not available (e.g. in unit tests) — fall back to the active fair sello
-      }
-      logoPng1 = getModelLogoPng(model1Name, repo, syncRepo, imageLayerOptions.selloImage)
-      logoPng2 = getModelLogoPng(model2Name, repo, syncRepo, imageLayerOptions.selloImage)
+      logoPng1 = getModelLogoPng(model1Name, stampsRepo, imageLayerOptions.selloImage)
+      logoPng2 = getModelLogoPng(model2Name, stampsRepo, imageLayerOptions.selloImage)
     }
   } else {
-    // Legacy: load background from images repository by model name
-    // Create syncRepo for fair name fallback (may not be available in test environments)
-    let syncRepo: ImageSyncRepository | undefined
-    try {
-      syncRepo = new ImageSyncRepository()
-    } catch {
-      // DB not available (e.g. in unit tests) — skip fair name fallback
-    }
-    bg1 = getModelBackground(model1Name, repo, syncRepo)
-    bg2 = getModelBackground(model2Name, repo, syncRepo)
+    // Legacy: load background from stamps repository by model name
+    bg1 = getModelBackground(model1Name, stampsRepo)
+    bg2 = getModelBackground(model2Name, stampsRepo)
   }
 
   // Determine if we use blank stamps (modes MD/FI don't print background)
@@ -688,6 +665,9 @@ export async function generateSalePdfs(
     // Generate stamps based on the active tariff group's tariffs
     const dynQty = quantities as DynamicSaleQuantities
 
+    // ─── Dynamic individual stamp generation ─────────────────────────────────
+    // 1 PDF per tariff/model containing ALL stamps of that tariff.
+    // The printer driver cuts every cutNumber pages within the job.
     for (const tariff of dynamicTariffCtx.tariffs) {
       // Model 1 (printer1)
       const key1 = `tariff_${tariff.id}_s1`
@@ -711,7 +691,7 @@ export async function generateSalePdfs(
           })
           productoCounter++
         }
-        // Group stamps by cutNumber — each group becomes a separate PDF with cut marks between groups - AQUI VER INDIVIDUAL ------
+        // Split into groups of cutNumber — 1 PDF per group
         const groups = groupLabels(stamps, cutNumber)
         for (const group of groups) {
           const pdfBuffer = await renderStampMultiPage(group)
@@ -746,7 +726,7 @@ export async function generateSalePdfs(
           })
           productoCounter++
         }
-        // Group stamps by cutNumber — each group becomes a separate PDF with cut marks between groups
+        // Split into groups of cutNumber — 1 PDF per group
         const groups = groupLabels(stamps, cutNumber)
         for (const group of groups) {
           const pdfBuffer = await renderStampMultiPage(group)
@@ -761,9 +741,9 @@ export async function generateSalePdfs(
     }
 
     // ─── Dynamic strip (tira) stamp generation ─────────────────────────────── AQUI TIRA DINÁMICA ----------------
-    // A strip is a fixed sequence of individual tariffs printed as one job.
-    // Each unit sold produces one multi-page PDF with one page per tariff in
-    // the strip, in the order defined by `tariff_ids` (repetitions included).
+    // 1 PDF per strip type/model containing ALL units of that strip.
+    // Each tira unit generates its own PDF (1 PDF = 1 complete strip).
+    // The printer cuts at the end of each PDF job.
     for (const strip of dynamicTariffCtx.strips ?? []) {
       // Resolve the tariff definitions referenced by the strip, preserving order
       // and repetitions. Unknown ids are skipped (tariff may have been deleted).
@@ -782,10 +762,11 @@ export async function generateSalePdfs(
         const logo = model === 1 ? logoPng1 : logoPng2
         const target: PrinterTarget = model === 1 ? 'printer1' : 'printer2'
 
+        // Generate 1 PDF per tira unit
         for (let i = 0; i < qty; i++) {
-          const stamps: StampRenderParams[] = []
+          const stripStamps: StampRenderParams[] = []
           for (const stripTariff of stripTariffs) {
-            stamps.push({
+            stripStamps.push({
               tarifa: stripTariff.name,
               tarifaDescripcion: stripTariff.description,
               fecha: stampFecha,
@@ -800,13 +781,12 @@ export async function generateSalePdfs(
             productoCounter++
           }
 
-          // A strip is a single physical unit: it is never split by cutNumber.
-          const pdfBuffer = await renderStampMultiPage(stamps)
+          const pdfBuffer = await renderStampMultiPage(stripStamps)
           pdfs.push({
             buffer: pdfBuffer,
             target,
             pdfType: 'stamp_tira',
-            description: `Tira ${strip.name} modelo${model} #${i + 1} x${stamps.length}`
+            description: `Tira ${strip.name} modelo${model} unidad ${i + 1}/${qty} (${stripStamps.length} sellos)`
           })
         }
       }
@@ -835,15 +815,14 @@ export async function generateSalePdfs(
       const logo = tariff.model === 1 ? logoPng1 : logoPng2
 
       if (tariff.isTira) {
-        // Tiras: each unit generates a 4-page PDF (4 stamps in one print job)
+        // Tiras: 1 PDF per tira unit — printer cuts at end of each PDF job.
         for (let i = 0; i < qty; i++) {
-          const stamps: StampRenderParams[] = []
-
+          const stripStamps: StampRenderParams[] = []
           if (tariff.qtyKey.startsWith('tarifa4T')) {
             // "Tira 4 Tarifas" — 4 different tariffs: A, A2, B, C
             const tariffLabels = ['Tarifa AJ', 'Tarifa A2J', 'Tarifa BJ', 'Tarifa CJ']
             for (const tLabel of tariffLabels) {
-              stamps.push({
+              stripStamps.push({
                 tarifa: tLabel,
                 fecha: stampFecha,
                 evento: stampEvento,
@@ -859,7 +838,7 @@ export async function generateSalePdfs(
           } else {
             // "Tira Tarifa A" — 4 stamps all same tariff
             for (let j = 0; j < 4; j++) {
-              stamps.push({
+              stripStamps.push({
                 tarifa: tariff.label,
                 fecha: stampFecha,
                 evento: stampEvento,
@@ -874,12 +853,12 @@ export async function generateSalePdfs(
             }
           }
 
-          const pdfBuffer = await renderStampMultiPage(stamps)
+          const pdfBuffer = await renderStampMultiPage(stripStamps)
           pdfs.push({
             buffer: pdfBuffer,
             target: tariff.target,
             pdfType: 'stamp_tira',
-            description: `Tira ${tariff.label} modelo${tariff.model} #${i + 1}`
+            description: `Tira ${tariff.label} modelo${tariff.model} unidad ${i + 1}/${qty} (${stripStamps.length} sellos)`
           })
         }
       } else {
@@ -901,14 +880,14 @@ export async function generateSalePdfs(
           productoCounter++
         }
 
-        // Group stamps by cutNumber — each group becomes a separate PDF --------------NO --------- AQUI INDIVIDUAL ---CORTE------
+        // Split into groups of cutNumber — 1 PDF per group
         const groups = groupLabels(stamps, cutNumber)
         for (const group of groups) {
           const pdfBuffer = await renderStampMultiPage(group)
           pdfs.push({
             buffer: pdfBuffer,
             target: tariff.target,
-            pdfType: 'SELLO_simple',
+            pdfType: 'stamp_simple',
             description: `${tariff.label} modelo${tariff.model} x${group.length}`
           })
         }
@@ -977,9 +956,8 @@ export async function generateSalePdfs(
 
   if (hasAnyItems) {
     const fechaTicket = getTicketDateTime(config)
-    // Build ticket title: just the base title (e.g. "Factura Simplificada")
-    // The feria code is appended by the ticket-renderer when codigoFeria1/2 are provided
-    const baseTitle = buildTicketTitle(profile, config.ticket.titulo)
+    // Build ticket title: use eltitulo (user-editable field) when available, fallback to titulo
+    const baseTitle = buildTicketTitle(profile, config.ticket.eltitulo || config.ticket.titulo)
     const modoTicket = baseTitle
     const modelo1Ticket = model1Name || 'Modelo 1'
     const modelo2Ticket = model2Name || 'Modelo 2'
@@ -989,7 +967,7 @@ export async function generateSalePdfs(
       ? (dynamicTariffCtx.eventName || dynamicTariffCtx.title || config.ticket.feria)
       : config.ticket.feria
     const ticketLugar = dynamicTariffCtx
-      ? (config.sello.eventos?.[0]?.localidad || config.ticket.lugar)
+      ? (dynamicTariffCtx.eventNlugar || config.ticket.lugar)
       : config.ticket.lugar
 
     // Apply secondary pricing if flag is set (swap prices in productos)
@@ -1014,6 +992,22 @@ export async function generateSalePdfs(
     const ticketMasterHeightMm = calcTicketMasterHeightMm(countActiveItems(items))
 
     // Main ticket
+    // When useSecondaryPrice is active, use the complementary currency symbol
+    const currencySymbol = (imageLayerOptions?.useSecondaryPrice && dynamicTariffCtx?.complementaryCurrencySymbol)
+      ? dynamicTariffCtx.complementaryCurrencySymbol
+      : (dynamicTariffCtx?.currencySymbol ?? '€')
+
+    // Build the ticket code: {feria1}-{mes}{feria2} {cliente4dígitos}
+    // This is the code displayed in the ticket header after "Factura Simplificada:"
+    const feria1ForTicket = codigoFeria1 ?? ''
+    const feria2ForTicket = codigoFeria2 ?? ''
+    let codigoTicket = ''
+    if (feria1ForTicket || feria2ForTicket) {
+      const mes = formatMes(config.codigo.mes)
+      const cliente = formatCliente(config.codigo.cliente)
+      codigoTicket = `${feria1ForTicket}-${mes}${feria2ForTicket} ${cliente}`
+    }
+
     const mainTicketParams = {
       fechaTicket,
       modoTicket,
@@ -1031,18 +1025,67 @@ export async function generateSalePdfs(
       l1: config.ticket.l1,
       l2: config.ticket.l2,
       l3: config.ticket.l3,
-      codigoFeria1: codigoFeria1 ?? '',
-      codigoFeria2: codigoFeria2 ?? ''
+      currencySymbol,
+      codigoTicket
     }
-    const ticketHeightMm = calcActualTicketHeight(mainTicketParams)
+    const ticketHeightMm = calcTicketHeightMm(countActiveItems(items))
     const ticketBuffer = await genTicket(mainTicketParams)
+
+    // Main ticket — its own PDF with its own height
     pdfs.push({
       buffer: ticketBuffer,
       target: 'ticket',
       pdfType: 'ticket',
-      description: 'Ticket principal (Factura Simplificada)',
+      description: 'Ticket principal',
       ticketHeightMm
     })
+
+    // ─── Individual ticket per tira (strip) ─────────────────────────────────
+    // Generate one ticket per tira unit as a separate PDF (each with its own height).
+    // This only applies when the machine mode is NOT "MD" or "FI".
+    const maquinaPrefix = config.codigo.maquina.substring(0, 2).toUpperCase()
+    if (maquinaPrefix !== 'MD' && maquinaPrefix !== 'FI') {
+      for (let idx = 0; idx < items.length; idx++) {
+        if (items[idx].cantidad > 0 && productos[idx].modo === 'T') {
+          for (let t = 0; t < items[idx].cantidad; t++) {
+            const singleTiraItems: TicketItem[] = items.map((item, i) => ({
+              idProducto: item.idProducto,
+              cantidad: i === idx ? 1 : 0
+            }))
+
+            const singleTiraParams = {
+              fechaTicket,
+              modoTicket,
+              modelo1Ticket,
+              modelo2Ticket,
+              items: singleTiraItems,
+              idCliente: config.codigo.cliente,
+              nombreMaquina: config.codigo.maquina,
+              productos,
+              feria: ticketFeria,
+              lugar: ticketLugar,
+              empresa: config.ticket.empresa,
+              cif: config.ticket.cif,
+              cp: config.ticket.cp,
+              l1: config.ticket.l1,
+              l2: config.ticket.l2,
+              l3: config.ticket.l3,
+              currencySymbol,
+              codigoTicket
+            }
+            const singleTiraHeightMm = calcTicketHeightMm(countActiveItems(singleTiraItems))
+            const singleTiraBuffer = await genTicket(singleTiraParams)
+            pdfs.push({
+              buffer: singleTiraBuffer,
+              target: 'ticket',
+              pdfType: 'ticket',
+              description: `Ticket tira ${productos[idx].nombre_ticket} unidad ${t + 1}`,
+              ticketHeightMm: singleTiraHeightMm
+            })
+          }
+        }
+      }
+    }
 
     // Copy ticket (ticket caja) — when configured
     if (config.ticket.ImprimeCopiaTicket === 'S') {
@@ -1054,9 +1097,10 @@ export async function generateSalePdfs(
         feria: ticketFeria,
         modoTicket: config.ticket.tituloCopia || 'COPIA Factura Simplificada',
         modelo1Ticket,
-        modelo2Ticket
+        modelo2Ticket,
+        currencySymbol
       }
-      const ticketCajaHeightMm = calcActualTicketCajaHeight(ticketCajaParams)
+      const ticketCajaHeightMm = calcTicketCajaHeightMm(countActiveItems(items))
       const ticketCajaBuffer = await genTicketCaja(ticketCajaParams)
       pdfs.push({
         buffer: ticketCajaBuffer,
@@ -1085,7 +1129,8 @@ export async function generateSalePdfs(
         cp: config.ticket.cp,
         l1: config.ticket.l1,
         l2: config.ticket.l2,
-        l3: config.ticket.l3
+        l3: config.ticket.l3,
+        currencySymbol
       })
       pdfs.push({
         buffer: ticketMasterBuffer,
@@ -1094,56 +1139,6 @@ export async function generateSalePdfs(
         description: 'Ticket master set',
         ticketHeightMm: ticketMasterHeightMm
       })
-    }
-
-    // ─── Individual ticket per tira (strip) ─────────────────────────────────
-    // Legacy behavior: for each tira unit, generate an individual ticket showing
-    // only that single tira item (cantidad=1). This only applies when the machine
-    // mode is NOT "MD" or "FI".
-    const maquinaPrefix = config.codigo.maquina.substring(0, 2).toUpperCase()
-    if (maquinaPrefix !== 'MD' && maquinaPrefix !== 'FI') {
-      for (let idx = 0; idx < items.length; idx++) {
-        if (items[idx].cantidad > 0 && productos[idx].modo === 'T') {
-          // Generate one ticket per tira unit
-          for (let t = 0; t < items[idx].cantidad; t++) {
-            // Build items array with only this tira item set to cantidad=1
-            const singleTiraItems: TicketItem[] = items.map((item, i) => ({
-              idProducto: item.idProducto,
-              cantidad: i === idx ? 1 : 0
-            }))
-
-            const singleTiraParams = {
-              fechaTicket,
-              modoTicket,
-              modelo1Ticket,
-              modelo2Ticket,
-              items: singleTiraItems,
-              idCliente: config.codigo.cliente,
-              nombreMaquina: config.codigo.maquina,
-              productos,
-              feria: ticketFeria,
-              lugar: ticketLugar,
-              empresa: config.ticket.empresa,
-              cif: config.ticket.cif,
-              cp: config.ticket.cp,
-              l1: config.ticket.l1,
-              l2: config.ticket.l2,
-              l3: config.ticket.l3,
-              codigoFeria1: codigoFeria1 ?? '',
-              codigoFeria2: codigoFeria2 ?? ''
-            }
-            const singleTiraHeightMm = calcActualTicketHeight(singleTiraParams)
-            const singleTiraBuffer = await genTicket(singleTiraParams)
-            pdfs.push({
-              buffer: singleTiraBuffer,
-              target: 'ticket',
-              pdfType: 'ticket_tira',
-              description: `Ticket individual tira ${productos[idx].nombre_ticket} #${t + 1}`,
-              ticketHeightMm: singleTiraHeightMm
-            })
-          }
-        }
-      }
     }
   }
 

@@ -4,6 +4,7 @@ import { useConfigStore } from '@renderer/stores/config.store'
 import { usePrinterStore } from '@renderer/stores/printer.store'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import { LicenseBlockScreen } from '@renderer/components/LicenseBlockScreen'
+import { BlockedScreen } from '@renderer/components/BlockedScreen'
 import { router } from './router'
 
 function App(): JSX.Element {
@@ -49,6 +50,7 @@ function App(): JSX.Element {
   return (
     <>
       <LicenseBlockScreen />
+      <BlockedScreen />
       <RouterProvider router={router} />
     </>
   )

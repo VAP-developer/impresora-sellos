@@ -411,6 +411,29 @@ class ConfigRepository {
     config.settings = { ...config.settings, cutNumber: config.settings?.cutNumber ?? 4, language: value };
     this.set(config);
   }
+  /**
+   * Get the print rotation setting, returns default false if unset.
+   */
+  getPrintRotation() {
+    const config = this.get();
+    return config?.settings?.printRotation180 ?? false;
+  }
+  /**
+   * Set the print rotation setting (true = 180° rotation enabled).
+   */
+  setPrintRotation(value) {
+    const config = this.get();
+    if (!config) {
+      throw new Error("Config not initialized. Call initConfig() first.");
+    }
+    config.settings = {
+      ...config.settings,
+      cutNumber: config.settings?.cutNumber ?? 4,
+      language: config.settings?.language ?? "es",
+      printRotation180: value
+    };
+    this.set(config);
+  }
 }
 function registerConfigHandlers() {
   const repo = new ConfigRepository();
@@ -462,6 +485,12 @@ function registerConfigHandlers() {
   });
   handleIpc("config:setLanguage", (value) => {
     repo.setLanguage(value);
+  });
+  handleIpc("config:getPrintRotation", () => {
+    return repo.getPrintRotation();
+  });
+  handleIpc("config:setPrintRotation", (value) => {
+    repo.setPrintRotation(value);
   });
 }
 class OrdersRepository {
@@ -629,452 +658,175 @@ function registerOrdersHandlers() {
     return repo.exportCSV();
   });
 }
-class ImagesRepository {
+class StampsRepository {
   db;
   constructor(db2) {
     this.db = db2 ?? getDatabase();
   }
   /**
-   * Uploads (inserts or replaces) an image in the database.
-   * If an image with the same name already exists, it will be replaced.
-   *
-   * @param name - Unique name/identifier for the image
-   * @param dataUri - Base64-encoded data URI string
-   * @param type - MIME type of the image (e.g. "image/png")
-   * @param size - File size in bytes
-   */
-  upload(name, dataUri, type, size) {
-    this.db.prepare(
-      `INSERT OR REPLACE INTO images (name, type, size, data)
-         VALUES (@name, @type, @size, @data)`
-    ).run({
-      name,
-      type: type ?? null,
-      size: size ?? null,
-      data: dataUri
-    });
-  }
-  /**
-   * Removes an image from the database by name.
-   * No-op if the image does not exist.
-   *
-   * @param name - Name of the image to remove
-   * @returns true if an image was deleted, false if not found
-   */
-  remove(name) {
-    const result = this.db.prepare("DELETE FROM images WHERE name = ?").run(name);
-    return result.changes > 0;
-  }
-  /**
-   * Retrieves an image by its unique name.
-   * Returns the image record with name and data URI, or null if not found.
-   *
-   * @param name - Name of the image to retrieve
-   */
-  getByName(name) {
-    const row = this.db.prepare("SELECT * FROM images WHERE name = ?").get(name);
-    if (!row) {
-      return null;
-    }
-    return {
-      name: row.name,
-      url: row.data
-    };
-  }
-  /**
-   * Retrieves the full image record by name, including metadata.
-   *
-   * @param name - Name of the image to retrieve
-   */
-  getFullByName(name) {
-    const row = this.db.prepare("SELECT * FROM images WHERE name = ?").get(name);
-    if (!row) {
-      return null;
-    }
-    return this.rowToImageRecord(row);
-  }
-  /**
-   * Returns all images stored in the database.
+   * Returns all stamp records ordered by year DESC, stamp_name ASC.
    */
   getAll() {
-    const rows = this.db.prepare("SELECT * FROM images ORDER BY name ASC").all();
-    return rows.map(this.rowToImageRecord);
-  }
-  /**
-   * Returns the count of images in the database.
-   */
-  count() {
-    const row = this.db.prepare("SELECT COUNT(*) as cnt FROM images").get();
-    return row.cnt;
-  }
-  /**
-   * Converts a raw database row (snake_case) to an ImageRecord (camelCase).
-   */
-  rowToImageRecord(row) {
-    return {
-      id: row.id,
-      name: row.name,
-      type: row.type,
-      size: row.size,
-      data: row.data,
-      createdAt: row.created_at
-    };
-  }
-}
-class ImageSyncRepository {
-  db;
-  constructor(db2) {
-    this.db = db2 ?? getDatabase();
-  }
-  /**
-   * Returns all sync records.
-   */
-  getAll() {
-    const rows = this.db.prepare("SELECT * FROM image_sync ORDER BY year DESC, fair_name ASC").all();
+    const rows = this.db.prepare("SELECT * FROM stamps ORDER BY year DESC, stamp_name ASC").all();
     return rows.map(this.rowToRecord);
   }
   /**
-   * Retrieves a sync record by its file path.
-   * Returns null if no record exists for that path.
+   * Returns stamps for a given year, ordered by stamp_name ASC.
    */
-  getByFilePath(filePath) {
-    const row = this.db.prepare("SELECT * FROM image_sync WHERE file_path = ?").get(filePath);
-    if (!row) {
-      return null;
-    }
-    return this.rowToRecord(row);
-  }
-  /**
-   * Inserts or updates a sync record.
-   * Uses the UNIQUE(year, fair_name, image_type) constraint for conflict resolution.
-   */
-  upsert(record) {
-    this.db.prepare(
-      `INSERT INTO image_sync (year, fair_name, image_type, file_path, mtime, image_name, synced_at)
-         VALUES (@year, @fairName, @imageType, @filePath, @mtime, @imageName, datetime('now'))
-         ON CONFLICT(year, fair_name, image_type) DO UPDATE SET
-           file_path = @filePath,
-           mtime = @mtime,
-           image_name = @imageName,
-           synced_at = datetime('now')`
-    ).run({
-      year: record.year,
-      fairName: record.fairName,
-      imageType: record.imageType,
-      filePath: record.filePath,
-      mtime: record.mtime,
-      imageName: record.imageName
-    });
-  }
-  /**
-   * Deletes sync records whose file paths are NOT in the provided list.
-   * Used to clean up orphan records after a sync scan.
-   *
-   * @param validPaths - Array of file paths that still exist on disk
-   * @returns Number of records deleted
-   */
-  deleteOrphans(validPaths) {
-    if (validPaths.length === 0) {
-      const result2 = this.db.prepare("DELETE FROM image_sync").run();
-      return result2.changes;
-    }
-    const placeholders = validPaths.map(() => "?").join(", ");
-    const result = this.db.prepare(`DELETE FROM image_sync WHERE file_path NOT IN (${placeholders})`).run(...validPaths);
-    return result.changes;
-  }
-  /**
-   * Returns a list of unique fairs (year + name) from the sync records.
-   * Ordered by year descending, then fair name ascending.
-   */
-  getFairList() {
-    const rows = this.db.prepare(
-      `SELECT DISTINCT year, fair_name
-         FROM image_sync
-         ORDER BY year DESC, fair_name ASC`
-    ).all();
-    return rows.map((row) => ({
-      year: row.year,
-      fairName: row.fair_name
-    }));
-  }
-  /**
-   * Returns all sync records for a specific fair.
-   */
-  getByFair(year, fairName) {
-    const rows = this.db.prepare("SELECT * FROM image_sync WHERE year = ? AND fair_name = ?").all(year, fairName);
+  getByYear(year) {
+    const rows = this.db.prepare("SELECT * FROM stamps WHERE year = ? ORDER BY stamp_name ASC").all(year);
     return rows.map(this.rowToRecord);
   }
   /**
-   * Converts a raw database row (snake_case) to an ImageSyncRecord (camelCase).
+   * Inserts or replaces a stamp record.
+   * Uses stamp_id as the conflict key (UNIQUE constraint).
+   */
+  upsert(stamp) {
+    this.db.prepare(
+      `INSERT OR REPLACE INTO stamps (stamp_id, year, stamp_name, fondo_path, logo_path, status, synced_at)
+         VALUES (@stampId, @year, @stampName, @fondoPath, @logoPath, @status, @syncedAt)`
+    ).run({
+      stampId: stamp.stampId,
+      year: stamp.year,
+      stampName: stamp.stampName,
+      fondoPath: stamp.fondoPath,
+      logoPath: stamp.logoPath,
+      status: stamp.status,
+      syncedAt: stamp.syncedAt
+    });
+  }
+  /**
+   * Deletes a stamp by its stamp_id.
+   */
+  remove(stampId) {
+    this.db.prepare("DELETE FROM stamps WHERE stamp_id = ?").run(stampId);
+  }
+  /**
+   * Removes all records from the stamps table.
+   */
+  clear() {
+    this.db.prepare("DELETE FROM stamps").run();
+  }
+  /**
+   * Converts a raw database row (snake_case) to a StampRecord (camelCase).
    */
   rowToRecord(row) {
     return {
       id: row.id,
+      stampId: row.stamp_id,
       year: row.year,
-      fairName: row.fair_name,
-      imageType: row.image_type,
-      filePath: row.file_path,
-      mtime: row.mtime,
-      imageName: row.image_name,
-      syncedAt: row.synced_at
+      stampName: row.stamp_name,
+      fondoPath: row.fondo_path,
+      logoPath: row.logo_path,
+      status: row.status,
+      syncedAt: row.synced_at,
+      createdAt: row.created_at
     };
   }
 }
-const SUPPORTED_EXTENSIONS = /* @__PURE__ */ new Set([".jpg", ".jpeg", ".png"]);
-function classifyImageFile(fileName) {
-  const ext = path.extname(fileName).toLowerCase();
-  if (!SUPPORTED_EXTENSIONS.has(ext)) {
+function fileToDataUri$1(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return null;
+  try {
+    const buffer = fs.readFileSync(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeType = ext === ".png" ? "image/png" : "image/jpeg";
+    return `data:${mimeType};base64,${buffer.toString("base64")}`;
+  } catch {
     return null;
   }
-  const baseName = fileName.slice(0, fileName.length - ext.length);
-  if (baseName.endsWith("-fondo")) {
-    return "fondo";
-  }
-  if (baseName.endsWith("-sello")) {
-    return "sello";
-  }
-  return null;
 }
 function buildImageName(year, fairName, imageType) {
   return `${year}/${fairName}-${imageType}`;
 }
-function fileToDataUri(filePath) {
-  const ext = path.extname(filePath).toLowerCase();
-  const mimeType = ext === ".png" ? "image/png" : "image/jpeg";
-  const buffer = fs.readFileSync(filePath);
-  const base64 = buffer.toString("base64");
-  return `data:${mimeType};base64,${base64}`;
-}
-function scanFairFolders(basePath) {
-  const results = [];
-  if (!fs.existsSync(basePath)) {
-    return results;
-  }
-  let yearEntries;
-  try {
-    yearEntries = fs.readdirSync(basePath);
-  } catch {
-    return results;
-  }
-  for (const yearEntry of yearEntries) {
-    const yearPath = path.join(basePath, yearEntry);
-    try {
-      if (!fs.statSync(yearPath).isDirectory()) continue;
-    } catch {
-      continue;
-    }
-    let fairEntries;
-    try {
-      fairEntries = fs.readdirSync(yearPath);
-    } catch {
-      continue;
-    }
-    for (const fairEntry of fairEntries) {
-      const fairPath = path.join(yearPath, fairEntry);
-      try {
-        if (!fs.statSync(fairPath).isDirectory()) continue;
-      } catch {
-        continue;
-      }
-      let fileEntries;
-      try {
-        fileEntries = fs.readdirSync(fairPath);
-      } catch {
-        continue;
-      }
-      for (const fileEntry of fileEntries) {
-        const imageType = classifyImageFile(fileEntry);
-        if (!imageType) continue;
-        const filePath = path.join(fairPath, fileEntry);
-        try {
-          const stat = fs.statSync(filePath);
-          if (!stat.isFile()) continue;
-          results.push({
-            year: yearEntry,
-            fairName: fairEntry,
-            imageType,
-            filePath,
-            fileName: fileEntry,
-            mtime: stat.mtimeMs
-          });
-        } catch {
-          continue;
-        }
-      }
-    }
-  }
-  return results;
-}
-function syncImages(basePath) {
-  const syncRepo = new ImageSyncRepository();
-  const imagesRepo = new ImagesRepository();
-  const result = {
-    inserted: 0,
-    updated: 0,
-    deleted: 0,
-    unchanged: 0,
-    errors: []
-  };
-  const scannedFiles = scanFairFolders(basePath);
-  const existingRecords = syncRepo.getAll();
-  const recordsByPath = new Map(existingRecords.map((r) => [r.filePath, r]));
-  const diskPaths = /* @__PURE__ */ new Set();
-  for (const file of scannedFiles) {
-    diskPaths.add(file.filePath);
-    const existingRecord = recordsByPath.get(file.filePath);
-    const imageName = buildImageName(file.year, file.fairName, file.imageType);
-    if (!existingRecord) {
-      try {
-        const dataUri = fileToDataUri(file.filePath);
-        const ext = path.extname(file.fileName).toLowerCase();
-        const mimeType = ext === ".png" ? "image/png" : "image/jpeg";
-        const stat = fs.statSync(file.filePath);
-        imagesRepo.upload(imageName, dataUri, mimeType, stat.size);
-        syncRepo.upsert({
-          year: file.year,
-          fairName: file.fairName,
-          imageType: file.imageType,
-          filePath: file.filePath,
-          mtime: file.mtime,
-          imageName
-        });
-        result.inserted++;
-      } catch (err) {
-        result.errors.push({
-          path: file.filePath,
-          error: err instanceof Error ? err.message : String(err)
-        });
-      }
-    } else if (file.mtime > existingRecord.mtime) {
-      try {
-        const dataUri = fileToDataUri(file.filePath);
-        const ext = path.extname(file.fileName).toLowerCase();
-        const mimeType = ext === ".png" ? "image/png" : "image/jpeg";
-        const stat = fs.statSync(file.filePath);
-        imagesRepo.upload(imageName, dataUri, mimeType, stat.size);
-        syncRepo.upsert({
-          year: file.year,
-          fairName: file.fairName,
-          imageType: file.imageType,
-          filePath: file.filePath,
-          mtime: file.mtime,
-          imageName
-        });
-        result.updated++;
-      } catch (err) {
-        result.errors.push({
-          path: file.filePath,
-          error: err instanceof Error ? err.message : String(err)
-        });
-      }
-    } else {
-      const existingImage = imagesRepo.getByName(imageName);
-      if (!existingImage) {
-        try {
-          const dataUri = fileToDataUri(file.filePath);
-          const ext = path.extname(file.fileName).toLowerCase();
-          const mimeType = ext === ".png" ? "image/png" : "image/jpeg";
-          const stat = fs.statSync(file.filePath);
-          imagesRepo.upload(imageName, dataUri, mimeType, stat.size);
-          result.updated++;
-        } catch (err) {
-          result.errors.push({
-            path: file.filePath,
-            error: err instanceof Error ? err.message : String(err)
-          });
-        }
-      } else {
-        result.unchanged++;
-      }
-    }
-  }
-  const validPaths = Array.from(diskPaths);
-  const orphanedRecords = existingRecords.filter((r) => !diskPaths.has(r.filePath));
-  for (const orphan of orphanedRecords) {
-    try {
-      imagesRepo.remove(orphan.imageName);
-    } catch {
-    }
-  }
-  if (orphanedRecords.length > 0) {
-    const deletedCount = syncRepo.deleteOrphans(validPaths);
-    result.deleted = deletedCount;
-  }
-  return result;
-}
-let lastSyncResult = null;
-function setLastSyncResult(result) {
-  lastSyncResult = result;
-}
 function registerImagesHandlers() {
-  const repo = new ImagesRepository();
-  const syncRepo = new ImageSyncRepository();
-  handleIpc("images:upload", (name, dataUri, type, size) => {
-    repo.upload(name, dataUri, type, size);
+  const stampsRepo = new StampsRepository();
+  handleIpc("images:upload", () => {
+    console.warn("[images:upload] Disabled — images are managed via cloud sync only.");
   });
-  handleIpc("images:remove", (name) => {
-    repo.remove(name);
+  handleIpc("images:remove", () => {
+    console.warn("[images:remove] Disabled — images are managed via cloud sync only.");
   });
   handleIpc("images:getByName", (name) => {
     const imageName = name;
     if (!imageName) return null;
-    const directResult = repo.getByName(imageName);
-    if (directResult) return directResult;
-    const fairs = syncRepo.getFairList();
-    const matchedFair = fairs.find(
-      (f) => f.fairName.toLowerCase() === imageName.toLowerCase()
+    const allStamps = stampsRepo.getAll();
+    const exactMatch = allStamps.find(
+      (s) => s.stampName.toLowerCase() === imageName.toLowerCase()
     );
-    if (matchedFair) {
-      const fondoName = buildImageName(matchedFair.year, matchedFair.fairName, "fondo");
-      const fondoResult = repo.getByName(fondoName);
-      if (fondoResult) return fondoResult;
+    if (exactMatch && exactMatch.fondoPath) {
+      const url2 = fileToDataUri$1(exactMatch.fondoPath);
+      if (url2) return { name: exactMatch.stampName, url: url2 };
     }
-    const allImages = repo.getAll();
     const lowerName = imageName.toLowerCase();
-    const partialMatch = allImages.find(
-      (img) => img.name.toLowerCase().includes(lowerName) && img.name.toLowerCase().includes("fondo")
-    );
-    if (partialMatch) {
-      return { name: partialMatch.name, url: partialMatch.data };
+    for (const stamp of allStamps) {
+      const fondoKey = buildImageName(stamp.year, stamp.stampName, "fondo");
+      const selloKey = buildImageName(stamp.year, stamp.stampName, "sello");
+      if (fondoKey.toLowerCase() === lowerName) {
+        const url2 = fileToDataUri$1(stamp.fondoPath ?? "");
+        if (url2) return { name: fondoKey, url: url2 };
+      }
+      if (selloKey.toLowerCase() === lowerName) {
+        const url2 = fileToDataUri$1(stamp.logoPath ?? "");
+        if (url2) return { name: selloKey, url: url2 };
+      }
     }
-    const anyMatch = allImages.find(
-      (img) => img.name.toLowerCase().includes(lowerName)
+    const partialMatch = allStamps.find(
+      (s) => s.stampName.toLowerCase().includes(lowerName)
     );
-    if (anyMatch) {
-      return { name: anyMatch.name, url: anyMatch.data };
+    if (partialMatch && partialMatch.fondoPath) {
+      const url2 = fileToDataUri$1(partialMatch.fondoPath);
+      if (url2) return { name: partialMatch.stampName, url: url2 };
     }
     return null;
   });
   handleIpc("images:getFairList", () => {
-    return syncRepo.getFairList();
+    const stamps = stampsRepo.getAll();
+    const seen = /* @__PURE__ */ new Set();
+    const result = [];
+    for (const stamp of stamps) {
+      const key = `${stamp.year}#${stamp.stampName}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push({ year: stamp.year, fairName: stamp.stampName });
+      }
+    }
+    return result;
   });
   handleIpc("images:getByFair", (year, fairName) => {
     const y = year;
     const fn = fairName;
-    const fondoName = buildImageName(y, fn, "fondo");
-    const selloName = buildImageName(y, fn, "sello");
-    const fondoRecord = repo.getByName(fondoName);
-    const selloRecord = repo.getByName(selloName);
+    const stamps = stampsRepo.getAll();
+    const match = stamps.find(
+      (s) => s.year === y && s.stampName.toLowerCase() === fn.toLowerCase()
+    );
+    if (!match) {
+      return { fondo: null, sello: null };
+    }
     return {
-      fondo: fondoRecord?.url ?? null,
-      sello: selloRecord?.url ?? null
+      fondo: fileToDataUri$1(match.fondoPath ?? ""),
+      sello: fileToDataUri$1(match.logoPath ?? "")
     };
   });
   handleIpc("images:getSyncStatus", () => {
-    return lastSyncResult;
+    const stamps = stampsRepo.getAll();
+    return {
+      inserted: stamps.length,
+      updated: 0,
+      deleted: 0,
+      unchanged: 0,
+      errors: []
+    };
   });
   handleIpc("images:resync", () => {
-    let basePath;
-    if (electron.app.isPackaged) {
-      const exeDirPath = path.join(path.dirname(electron.app.getPath("exe")), "bbdd-ferias");
-      const resourcesPath = path.join(process.resourcesPath, "bbdd-ferias");
-      basePath = fs.existsSync(exeDirPath) ? exeDirPath : resourcesPath;
-    } else {
-      basePath = path.join(electron.app.getAppPath(), "bbdd-ferias");
-    }
-    const result = syncImages(basePath);
-    lastSyncResult = result;
-    return result;
+    console.warn("[images:resync] Disabled — use stamps:sync for cloud synchronization.");
+    const stamps = stampsRepo.getAll();
+    return {
+      inserted: stamps.length,
+      updated: 0,
+      deleted: 0,
+      unchanged: 0,
+      errors: []
+    };
   });
 }
 const execAsync = util.promisify(child_process.exec);
@@ -1121,6 +873,49 @@ async function discoverWindowsLocalPrinters(executor = defaultDiscoveryExecutor)
     console.warn("[PrinterDiscovery] PowerShell Get-Printer failed:", err);
   }
   return results;
+}
+const FALLBACK_DPI = { dpiX: 203, dpiY: 203 };
+class DpiCache {
+  cache = /* @__PURE__ */ new Map();
+  get(printerName) {
+    return this.cache.get(printerName);
+  }
+  set(printerName, dpi) {
+    this.cache.set(printerName, dpi);
+  }
+  delete(printerName) {
+    this.cache.delete(printerName);
+  }
+  clear() {
+    this.cache.clear();
+  }
+  get size() {
+    return this.cache.size;
+  }
+}
+class WmiDpiDetector {
+  executor;
+  constructor(executor) {
+    this.executor = executor;
+  }
+  async detect(printerName) {
+    try {
+      const escapedName = printerName.replace(/'/g, "''");
+      const command = `powershell -NoProfile -Command "Get-CimInstance -ClassName Win32_PrinterConfiguration -Filter \\"Name='${escapedName}'\\" | Select-Object XResolution, YResolution | ConvertTo-Json -Compress"`;
+      const { stdout } = await this.executor.exec(command, { timeout: 5e3 });
+      const parsed = JSON.parse(stdout.trim());
+      const dpiX = parsed.XResolution;
+      const dpiY = parsed.YResolution;
+      if (typeof dpiX === "number" && typeof dpiY === "number" && Number.isInteger(dpiX) && Number.isInteger(dpiY) && dpiX > 0 && dpiY > 0) {
+        return { dpiX, dpiY };
+      }
+      console.warn(`[DpiDetector] Invalid DPI values for "${printerName}": X=${dpiX}, Y=${dpiY}. Using fallback.`);
+      return FALLBACK_DPI;
+    } catch (error) {
+      console.warn(`[DpiDetector] Failed to detect DPI for "${printerName}". Using fallback.`, error);
+      return FALLBACK_DPI;
+    }
+  }
 }
 const defaultWindowsExecutor = {
   exec(command, options) {
@@ -1186,6 +981,38 @@ async function configurePrinterPaperSize(printerName, widthTenths, heightTenths,
   } catch {
   }
 }
+async function configureCutInterval(printerName, cutInterval, executor) {
+  const { join } = require("path");
+  const { existsSync } = require("fs");
+  let scriptPath = "";
+  if (process.resourcesPath) {
+    const packaged = join(process.resourcesPath, "set-cut-interval.ps1");
+    if (existsSync(packaged)) {
+      scriptPath = packaged;
+    }
+  }
+  if (!scriptPath) {
+    const devPath = join(__dirname, "..", "..", "resources", "set-cut-interval.ps1");
+    if (existsSync(devPath)) {
+      scriptPath = devPath;
+    }
+  }
+  if (!scriptPath) {
+    const deepPath = join(__dirname, "..", "..", "..", "resources", "set-cut-interval.ps1");
+    if (existsSync(deepPath)) {
+      scriptPath = deepPath;
+    }
+  }
+  if (!scriptPath) {
+    return;
+  }
+  const escapedPrinter = printerName.replace(/"/g, '`"');
+  const cmd = `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}" -PrinterName "${escapedPrinter}" -CutInterval ${cutInterval}`;
+  try {
+    await executor.exec(cmd, { timeout: 1e4 });
+  } catch {
+  }
+}
 function getSumatraPdfPath() {
   const { join } = require("path");
   let sumatraPath = join(
@@ -1200,8 +1027,10 @@ function getSumatraPdfPath() {
 }
 class WindowsBackend {
   cmd;
-  constructor(executor) {
+  dpiCache;
+  constructor(executor, dpiCache) {
     this.cmd = executor ?? defaultWindowsExecutor;
+    this.dpiCache = dpiCache;
   }
   /**
    * Prints a PDF by invoking SumatraPDF directly with:
@@ -1234,12 +1063,23 @@ class WindowsBackend {
         );
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
+      if (options.cutInterval && options.cutInterval > 0) {
+        try {
+          await configureCutInterval(printerName, options.cutInterval, this.cmd);
+          await new Promise((resolve) => setTimeout(resolve, 300));
+        } catch {
+        }
+      }
       const sumatraPath = getSumatraPdfPath();
+      const dpi = this.dpiCache?.get(printerName) ?? FALLBACK_DPI;
+      const renderDpiX = dpi.dpiX * 2;
+      const renderDpiY = dpi.dpiY * 2;
+      const resolvedDpi = `${renderDpiX}x${renderDpiY}dpi`;
       const args = [
         "-print-to",
         printerName,
         "-print-settings",
-        "noscale",
+        `noscale,${resolvedDpi}`,
         "-silent",
         tempFile
       ];
@@ -1343,10 +1183,14 @@ class PrinterManager {
   backend;
   assignments;
   paused;
-  constructor(backend, assignments) {
+  dpiDetector;
+  dpiCache;
+  constructor(backend, assignments, dpiDetector, dpiCache) {
     this.backend = backend;
     this.assignments = assignments ?? {};
     this.paused = /* @__PURE__ */ new Set();
+    this.dpiDetector = dpiDetector;
+    this.dpiCache = dpiCache;
   }
   /**
    * Returns the active backend instance.
@@ -1356,9 +1200,42 @@ class PrinterManager {
   }
   /**
    * Updates the printer assignments (target → URI mapping).
+   * Triggers fire-and-forget DPI detection for newly assigned printers.
    */
   setAssignments(assignments) {
+    const previousAssignments = { ...this.assignments };
     this.assignments = { ...this.assignments, ...assignments };
+    if (this.dpiDetector && this.dpiCache) {
+      const targets = ["printer1", "printer2", "ticket"];
+      const detector = this.dpiDetector;
+      const cache = this.dpiCache;
+      const detectionPromises = [];
+      for (const target of targets) {
+        const newUri = assignments[target];
+        if (!newUri) continue;
+        const printerName = getWindowsPrinterName(newUri);
+        const previousUri = previousAssignments[target];
+        if (previousUri) {
+          const previousName = getWindowsPrinterName(previousUri);
+          if (previousName !== printerName) {
+            cache.delete(previousName);
+          }
+        }
+        detectionPromises.push(
+          detector.detect(printerName).then(
+            (dpi) => {
+              cache.set(printerName, dpi);
+            },
+            () => {
+              cache.set(printerName, FALLBACK_DPI);
+            }
+          )
+        );
+      }
+      if (detectionPromises.length > 0) {
+        void Promise.allSettled(detectionPromises);
+      }
+    }
   }
   /**
    * Gets the current printer assignments.
@@ -1532,21 +1409,6 @@ class PrinterManager {
     if (!uri) return false;
     return this.backend.cancelJob(uri, jobId);
   }
-}
-function createPlatformBackend(platformOverride) {
-  return new WindowsBackend();
-}
-function createPrinterManager(backendOrAssignments, assignments) {
-  let backend;
-  let resolvedAssignments;
-  if (backendOrAssignments && "print" in backendOrAssignments) {
-    backend = backendOrAssignments;
-    resolvedAssignments = assignments;
-  } else {
-    backend = createPlatformBackend();
-    resolvedAssignments = backendOrAssignments;
-  }
-  return new PrinterManager(backend, resolvedAssignments);
 }
 class PrintQueueRepository {
   db;
@@ -2027,7 +1889,13 @@ function getPrinterManager() {
         printer2: DEFAULT_THERMAL_CONFIG
       }
     } : void 0;
-    printerManager = createPrinterManager(assignments);
+    const dpiCache = new DpiCache();
+    const dpiDetector = new WmiDpiDetector(defaultWindowsExecutor);
+    const backend = new WindowsBackend(defaultWindowsExecutor, dpiCache);
+    printerManager = new PrinterManager(backend, assignments, dpiDetector, dpiCache);
+    if (assignments) {
+      printerManager.setAssignments(assignments);
+    }
   }
   return printerManager;
 }
@@ -3172,6 +3040,20 @@ function formatCodigoLines(codigo) {
   const line2 = codigo.substring(spaceIdx + 1);
   return { line1, line2 };
 }
+function shouldRotate180() {
+  try {
+    const configRepo = new ConfigRepository();
+    return configRepo.getPrintRotation();
+  } catch {
+    return false;
+  }
+}
+const LABEL_HEIGHT_MM = 25;
+function applyRotation180(doc) {
+  const centerX = STAMP_WIDTH / 2;
+  const centerY = LABEL_HEIGHT_MM / 2 * MM_TO_PT$1;
+  doc.rotate(180, { origin: [centerX, centerY] });
+}
 function registerFonts$1(doc) {
   const fontsPath = getFontsPath();
   const regularPath = path.join(fontsPath, "franklin_gothic.ttf");
@@ -3204,14 +3086,37 @@ function drawTextLeft(doc, text, fontName, fontSize, x_mm, yBottom_mm) {
   const y = bottomToTop(yBottom_mm, fontSize);
   doc.text(text, x, y, { lineBreak: false });
 }
-function drawBackground(doc, imageSource) {
+function buildImageCache(stamps) {
+  const cache = /* @__PURE__ */ new Map();
+  for (const stamp of stamps) {
+    for (const src of [stamp.backgroundImage, stamp.overlayImage, stamp.logoPngImage]) {
+      if (!src || cache.has(src)) continue;
+      if (src.startsWith("data:")) {
+        const base64Data = src.split(",")[1];
+        if (base64Data) {
+          try {
+            cache.set(src, Buffer.from(base64Data, "base64"));
+          } catch {
+          }
+        }
+      }
+    }
+  }
+  return cache;
+}
+function drawBackground(doc, imageSource, imageCache) {
   if (!imageSource) return;
   try {
     if (imageSource.startsWith("data:")) {
-      const base64Data = imageSource.split(",")[1];
-      if (base64Data) {
-        const buffer = Buffer.from(base64Data, "base64");
-        doc.image(buffer, 0, 0, { width: STAMP_WIDTH, height: STAMP_HEIGHT });
+      const cached = imageCache?.get(imageSource);
+      if (cached) {
+        doc.image(cached, 0, 0, { width: STAMP_WIDTH, height: STAMP_HEIGHT });
+      } else {
+        const base64Data = imageSource.split(",")[1];
+        if (base64Data) {
+          const buffer = Buffer.from(base64Data, "base64");
+          doc.image(buffer, 0, 0, { width: STAMP_WIDTH, height: STAMP_HEIGHT });
+        }
       }
     } else if (fs.existsSync(imageSource)) {
       doc.image(imageSource, 0, 0, { width: STAMP_WIDTH, height: STAMP_HEIGHT });
@@ -3219,16 +3124,21 @@ function drawBackground(doc, imageSource) {
   } catch {
   }
 }
-function drawOverlay(doc, imageSource) {
+function drawOverlay(doc, imageSource, imageCache) {
   if (!imageSource) return;
   const overlayX = 27.5 * MM_TO_PT$1;
   const overlayWidth = 27.5 * MM_TO_PT$1;
   try {
     if (imageSource.startsWith("data:")) {
-      const base64Data = imageSource.split(",")[1];
-      if (base64Data) {
-        const buffer = Buffer.from(base64Data, "base64");
-        doc.image(buffer, overlayX, 0, { width: overlayWidth, height: STAMP_HEIGHT });
+      const cached = imageCache?.get(imageSource);
+      if (cached) {
+        doc.image(cached, overlayX, 0, { width: overlayWidth, height: STAMP_HEIGHT });
+      } else {
+        const base64Data = imageSource.split(",")[1];
+        if (base64Data) {
+          const buffer = Buffer.from(base64Data, "base64");
+          doc.image(buffer, overlayX, 0, { width: overlayWidth, height: STAMP_HEIGHT });
+        }
       }
     } else if (fs.existsSync(imageSource)) {
       doc.image(imageSource, overlayX, 0, { width: overlayWidth, height: STAMP_HEIGHT });
@@ -3248,7 +3158,7 @@ function computeLogoBox(doc, fecha, evento) {
   const width = 155;
   return { x, y, width, height };
 }
-function drawLogoPng(doc, imageSource, fecha, evento) {
+function drawLogoPng(doc, imageSource, fecha, evento, imageCache) {
   if (!imageSource) return;
   const box = computeLogoBox(doc, fecha, evento);
   if (!box) return;
@@ -3258,10 +3168,15 @@ function drawLogoPng(doc, imageSource, fecha, evento) {
   };
   try {
     if (imageSource.startsWith("data:")) {
-      const base64Data = imageSource.split(",")[1];
-      if (base64Data) {
-        const buffer = Buffer.from(base64Data, "base64");
-        doc.image(buffer, box.x, box.y, options);
+      const cached = imageCache?.get(imageSource);
+      if (cached) {
+        doc.image(cached, box.x, box.y, options);
+      } else {
+        const base64Data = imageSource.split(",")[1];
+        if (base64Data) {
+          const buffer = Buffer.from(base64Data, "base64");
+          doc.image(buffer, box.x, box.y, options);
+        }
       }
     } else if (fs.existsSync(imageSource)) {
       doc.image(imageSource, box.x, box.y, options);
@@ -3288,15 +3203,20 @@ async function renderStampMultiPage(stamps) {
   });
   const result = collectPdf$1(doc);
   registerFonts$1(doc);
+  const imageCache = buildImageCache(stamps);
+  const rotate180 = shouldRotate180();
   stamps.forEach((stamp, index) => {
     if (index > 0) {
       doc.addPage({ size: [STAMP_WIDTH, STAMP_HEIGHT], margin: 0 });
     }
-    drawBackground(doc, stamp.backgroundImage);
+    if (rotate180) {
+      applyRotation180(doc);
+    }
+    drawBackground(doc, stamp.backgroundImage, imageCache);
     if (stamp.printLogoPng && stamp.logoPngImage) {
-      drawLogoPng(doc, stamp.logoPngImage, stamp.fecha, stamp.evento);
+      drawLogoPng(doc, stamp.logoPngImage, stamp.fecha, stamp.evento, imageCache);
     } else {
-      drawOverlay(doc, stamp.overlayImage);
+      drawOverlay(doc, stamp.overlayImage, imageCache);
     }
     const { line1, line2 } = formatCodigoLines(stamp.codigo);
     const layout = stamp.layout ?? "derecha";
@@ -3341,28 +3261,45 @@ async function renderStampEspecialStrip(codigos, especial, tarifa) {
     info: { Title: "Tira Especial", Author: "Stamp Sales App" }
   });
   const result = collectPdf$1(doc);
+  registerFonts$1(doc);
   const pageWidth = doc.page.width;
   const pageHeight = doc.page.height;
+  const rotate180 = shouldRotate180();
   doc.save();
   doc.rotate(90, { origin: [pageWidth / 2, pageHeight / 2] });
+  if (rotate180) {
+    applyRotation180(doc);
+  }
   const imagesPath = getImagesPath();
   const bg1 = path.join(imagesPath, "TiraEspecial1.png");
   drawBackground(doc, fs.existsSync(bg1) ? bg1 : null);
   drawTextLeft(doc, codigos[0], FONTS.regular, 6, 1.5, 2);
   drawTextLeft(doc, especial, FONTS.regular, 6, 23.3, 2);
   doc.addPage({ size: [STAMP_WIDTH, STAMP_HEIGHT], margin: 0 });
+  doc.rotate(90, { origin: [pageWidth / 2, pageHeight / 2] });
+  if (rotate180) {
+    applyRotation180(doc);
+  }
   const bg2 = path.join(imagesPath, "TiraEspecial2.png");
   drawBackground(doc, fs.existsSync(bg2) ? bg2 : null);
   drawTextLeft(doc, tarifa, FONTS.regular, 12, 1.5, 19.5);
   drawTextLeft(doc, codigos[1], FONTS.regular, 6, 1.5, 2);
   drawTextLeft(doc, especial, FONTS.regular, 6, 23.3, 2);
   doc.addPage({ size: [STAMP_WIDTH, STAMP_HEIGHT], margin: 0 });
+  doc.rotate(90, { origin: [pageWidth / 2, pageHeight / 2] });
+  if (rotate180) {
+    applyRotation180(doc);
+  }
   const bg3 = path.join(imagesPath, "TiraEspecial3.png");
   drawBackground(doc, fs.existsSync(bg3) ? bg3 : null);
   drawTextLeft(doc, tarifa, FONTS.regular, 12, 1.5, 19.5);
   drawTextLeft(doc, codigos[2], FONTS.regular, 6, 1.5, 2);
   drawTextLeft(doc, especial, FONTS.regular, 6, 23.3, 2);
   doc.addPage({ size: [STAMP_WIDTH, STAMP_HEIGHT], margin: 0 });
+  doc.rotate(90, { origin: [pageWidth / 2, pageHeight / 2] });
+  if (rotate180) {
+    applyRotation180(doc);
+  }
   const bg4 = path.join(imagesPath, "TiraEspecial4.png");
   drawBackground(doc, fs.existsSync(bg4) ? bg4 : null);
   drawTextLeft(doc, codigos[3], FONTS.regular, 6, 1.5, 2);
@@ -3463,6 +3400,9 @@ function collectPdf(doc) {
     doc.on("error", reject);
   });
 }
+function calcTicketHeightMm(numItems) {
+  return TICKET_MARGIN_TOP + TICKET_LOGO_HEIGHT + TICKET_HEADER_HEIGHT + TICKET_COLUMNS_HEIGHT + numItems * TICKET_ITEM_ROW_HEIGHT + TICKET_TOTAL_HEIGHT + TICKET_FOOTER_HEIGHT + TICKET_MARGIN_BOTTOM;
+}
 function calcActualTicketHeight(params) {
   const tempDoc = new PDFDocument({ size: [TICKET_WIDTH, 1e3 * MM_TO_PT], margin: 0 });
   registerFonts(tempDoc);
@@ -3497,11 +3437,15 @@ function calcActualTicketHeight(params) {
 }
 const TICKET_MARGIN_TOP = 5;
 const TICKET_LOGO_HEIGHT = 24;
+const TICKET_HEADER_HEIGHT = 29;
 const TICKET_COLUMNS_HEIGHT = 5;
 const TICKET_ITEM_ROW_HEIGHT = 3.5;
 const TICKET_TOTAL_HEIGHT = 8;
 const TICKET_FOOTER_HEIGHT = 16;
 const TICKET_MARGIN_BOTTOM = 5;
+function calcTicketCajaHeightMm(numItems) {
+  return 5 + 14 + 38 + 5 + numItems * 3.5 + 8 + 16 + 5;
+}
 const MASTER_MARGIN_TOP = 5;
 const MASTER_LOGO_HEIGHT = 14;
 const MASTER_HEADER_HEIGHT = 36;
@@ -3562,7 +3506,7 @@ async function genTicket(params) {
   y += 4;
   drawCentered(doc, `Fecha ${fechaTicket}`, FONTS.condensed, 8, y * MM_TO_PT, pageWidth);
   y += 4;
-  const codigoFeriaDisplay = [params.codigoFeria1, params.codigoFeria2].filter(Boolean).join("-");
+  const codigoFeriaDisplay = params.codigoTicket || [params.codigoFeria1, params.codigoFeria2].filter(Boolean).join("-");
   const modoLine = codigoFeriaDisplay ? `${modoTicket}: ${codigoFeriaDisplay}` : modoTicket;
   drawLeft(doc, modoLine, FONTS.bold, 6.5, 5 * MM_TO_PT, y * MM_TO_PT);
   y += 6;
@@ -3917,7 +3861,8 @@ function buildLabelCode(config, productoId, codigoFeria1Override, codigoFeria2Ov
   const feria1 = codigoFeria1Override ?? codigo.codigo_feria_1 ?? "";
   const feria2 = codigoFeria2Override ?? codigo.codigo_feria_2 ?? "";
   if (feria1 || feria2) {
-    return `${feria1}-${feria2} ${cliente}-${producto}`;
+    const mes2 = formatMes(codigo.mes);
+    return `${feria1}-${mes2}${feria2} ${cliente}-${producto}`;
   }
   const modo = codigo.modo;
   const mes = formatMes(codigo.mes);
@@ -3940,74 +3885,64 @@ function getTicketDateTime(config) {
   const hora = ticket.hora === "auto" ? now.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : ticket.hora;
   return `${fecha} ${hora}`;
 }
-function getModelBackground(modelName, imagesRepo, syncRepo) {
+function fileToDataUri(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return null;
+  try {
+    const buffer = fs.readFileSync(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeType = ext === ".png" ? "image/png" : "image/jpeg";
+    return `data:${mimeType};base64,${buffer.toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
+function getModelBackground(modelName, stampsRepo) {
   if (!modelName) return null;
-  const image = imagesRepo.getByName(modelName);
-  if (image) return image.url;
-  if (syncRepo) {
-    const fairs = syncRepo.getFairList();
-    const matchedFair = fairs.find(
-      (f) => f.fairName.toLowerCase() === modelName.toLowerCase()
-    );
-    if (matchedFair) {
-      const fondoName = buildImageName(matchedFair.year, matchedFair.fairName, "fondo");
-      const fondoImage = imagesRepo.getByName(fondoName);
-      return fondoImage?.url ?? null;
-    }
+  const allStamps = stampsRepo.getAll();
+  const match = allStamps.find(
+    (s) => s.stampName.toLowerCase() === modelName.toLowerCase()
+  );
+  if (match && match.fondoPath) {
+    return fileToDataUri(match.fondoPath);
+  }
+  const lowerName = modelName.toLowerCase();
+  const partial = allStamps.find(
+    (s) => s.stampName.toLowerCase().includes(lowerName)
+  );
+  if (partial && partial.fondoPath) {
+    return fileToDataUri(partial.fondoPath);
   }
   return null;
 }
-function getModelLogoPng(modelName, imagesRepo, syncRepo, fallbackLogo) {
-  const isPng = (record) => {
-    if (!record) return false;
-    if (record.type) return record.type.toLowerCase() === "image/png";
-    return record.data.startsWith("data:image/png");
-  };
-  console.log(`[getModelLogoPng] modelName="${modelName}", syncRepo=${!!syncRepo}, fallbackLogo length=${fallbackLogo?.length ?? 0}`);
-  if (modelName && syncRepo) {
-    try {
-      const fairs = syncRepo.getFairList();
-      console.log(`[getModelLogoPng] Fair list: ${JSON.stringify(fairs.map((f) => f.fairName))}`);
-      const matchedFair = fairs.find(
-        (f) => f.fairName.toLowerCase() === modelName.toLowerCase()
-      );
-      if (matchedFair) {
-        const selloName = buildImageName(matchedFair.year, matchedFair.fairName, "sello");
-        const record = imagesRepo.getFullByName(selloName);
-        console.log(`[getModelLogoPng] Matched fair "${matchedFair.fairName}", selloName="${selloName}", record exists=${!!record}, isPng=${isPng(record)}`);
-        if (isPng(record)) return record.data;
-      } else {
-        console.log(`[getModelLogoPng] No fair matched for modelName="${modelName}"`);
-      }
-    } catch (err) {
-      console.log(`[getModelLogoPng] syncRepo error: ${err}`);
-    }
-  }
+function getModelLogoPng(modelName, stampsRepo, fallbackLogo) {
+  console.log(`[getModelLogoPng] modelName="${modelName}", fallbackLogo length=${fallbackLogo?.length ?? 0}`);
   if (modelName) {
-    try {
-      const direct = imagesRepo.getFullByName(modelName);
-      console.log(`[getModelLogoPng] Direct lookup "${modelName}": found=${!!direct}, isPng=${isPng(direct)}`);
-      if (isPng(direct)) return direct.data;
-    } catch {
+    const allStamps = stampsRepo.getAll();
+    const match = allStamps.find(
+      (s) => s.stampName.toLowerCase() === modelName.toLowerCase()
+    );
+    if (match && match.logoPath) {
+      const dataUri = fileToDataUri(match.logoPath);
+      if (dataUri) {
+        console.log(`[getModelLogoPng] Found stamp "${match.stampName}", logo loaded`);
+        return dataUri;
+      }
+    }
+    const lowerName = modelName.toLowerCase();
+    const partial = allStamps.find(
+      (s) => s.stampName.toLowerCase().includes(lowerName)
+    );
+    if (partial && partial.logoPath) {
+      const dataUri = fileToDataUri(partial.logoPath);
+      if (dataUri) {
+        console.log(`[getModelLogoPng] Partial match "${partial.stampName}", logo loaded`);
+        return dataUri;
+      }
     }
   }
   if (fallbackLogo) {
     console.log(`[getModelLogoPng] Returning fallback (length=${fallbackLogo.length})`);
     return fallbackLogo;
-  }
-  if (syncRepo) {
-    try {
-      const fairs = syncRepo.getFairList();
-      for (const fair of fairs) {
-        const selloName = buildImageName(fair.year, fair.fairName, "sello");
-        const record = imagesRepo.getFullByName(selloName);
-        if (record) {
-          console.log(`[getModelLogoPng] Last resort: using sello from fair "${fair.fairName}" (${record.data.length} chars)`);
-          return record.data;
-        }
-      }
-    } catch {
-    }
   }
   console.log(`[getModelLogoPng] Returning null — no logo found`);
   return null;
@@ -4063,8 +3998,8 @@ const TARIFF_DEFS = [
   { qtyKey: "tarifaAT2", label: "Tarifa A", isTira: true, model: 2, target: "printer2" },
   { qtyKey: "tarifa4T2", label: "Tira 4 Tarifas", isTira: true, model: 2, target: "printer2" }
 ];
-async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLayerOptions, dynamicTariffCtx) {
-  const repo = new ImagesRepository();
+async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageLayerOptions, dynamicTariffCtx) {
+  const stampsRepo = new StampsRepository();
   const pdfs = [];
   const notifications = [];
   let cutNumber;
@@ -4123,22 +4058,12 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
     notifications.push(...layerResult.notifications);
     printLogoPng = imageLayerOptions.printLogoPng ?? false;
     if (printLogoPng) {
-      let syncRepo;
-      try {
-        syncRepo = new ImageSyncRepository();
-      } catch {
-      }
-      logoPng1 = getModelLogoPng(model1Name, repo, syncRepo, imageLayerOptions.selloImage);
-      logoPng2 = getModelLogoPng(model2Name, repo, syncRepo, imageLayerOptions.selloImage);
+      logoPng1 = getModelLogoPng(model1Name, stampsRepo, imageLayerOptions.selloImage);
+      logoPng2 = getModelLogoPng(model2Name, stampsRepo, imageLayerOptions.selloImage);
     }
   } else {
-    let syncRepo;
-    try {
-      syncRepo = new ImageSyncRepository();
-    } catch {
-    }
-    bg1 = getModelBackground(model1Name, repo, syncRepo);
-    bg2 = getModelBackground(model2Name, repo, syncRepo);
+    bg1 = getModelBackground(model1Name, stampsRepo);
+    bg2 = getModelBackground(model2Name, stampsRepo);
   }
   const usesBlankBackground = config.codigo.modo === "MD" || config.codigo.modo === "FI";
   if (dynamicTariffCtx) {
@@ -4220,9 +4145,9 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
         const logo = model === 1 ? logoPng1 : logoPng2;
         const target = model === 1 ? "printer1" : "printer2";
         for (let i = 0; i < qty; i++) {
-          const stamps = [];
+          const stripStamps = [];
           for (const stripTariff of stripTariffs) {
-            stamps.push({
+            stripStamps.push({
               tarifa: stripTariff.name,
               tarifaDescripcion: stripTariff.description,
               fecha: stampFecha,
@@ -4236,12 +4161,12 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
             });
             productoCounter++;
           }
-          const pdfBuffer = await renderStampMultiPage(stamps);
+          const pdfBuffer = await renderStampMultiPage(stripStamps);
           pdfs.push({
             buffer: pdfBuffer,
             target,
             pdfType: "stamp_tira",
-            description: `Tira ${strip.name} modelo${model} #${i + 1} x${stamps.length}`
+            description: `Tira ${strip.name} modelo${model} unidad ${i + 1}/${qty} (${stripStamps.length} sellos)`
           });
         }
       }
@@ -4256,11 +4181,11 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
       const logo = tariff.model === 1 ? logoPng1 : logoPng2;
       if (tariff.isTira) {
         for (let i = 0; i < qty; i++) {
-          const stamps = [];
+          const stripStamps = [];
           if (tariff.qtyKey.startsWith("tarifa4T")) {
             const tariffLabels = ["Tarifa AJ", "Tarifa A2J", "Tarifa BJ", "Tarifa CJ"];
             for (const tLabel of tariffLabels) {
-              stamps.push({
+              stripStamps.push({
                 tarifa: tLabel,
                 fecha: stampFecha,
                 evento: stampEvento,
@@ -4275,7 +4200,7 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
             }
           } else {
             for (let j = 0; j < 4; j++) {
-              stamps.push({
+              stripStamps.push({
                 tarifa: tariff.label,
                 fecha: stampFecha,
                 evento: stampEvento,
@@ -4289,12 +4214,12 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
               productoCounter++;
             }
           }
-          const pdfBuffer = await renderStampMultiPage(stamps);
+          const pdfBuffer = await renderStampMultiPage(stripStamps);
           pdfs.push({
             buffer: pdfBuffer,
             target: tariff.target,
             pdfType: "stamp_tira",
-            description: `Tira ${tariff.label} modelo${tariff.model} #${i + 1}`
+            description: `Tira ${tariff.label} modelo${tariff.model} unidad ${i + 1}/${qty} (${stripStamps.length} sellos)`
           });
         }
       } else {
@@ -4319,7 +4244,7 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
           pdfs.push({
             buffer: pdfBuffer,
             target: tariff.target,
-            pdfType: "SELLO_simple",
+            pdfType: "stamp_simple",
             description: `${tariff.label} modelo${tariff.model} x${group.length}`
           });
         }
@@ -4369,12 +4294,12 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
   const hasAnyItems = items.some((item) => item.cantidad > 0);
   if (hasAnyItems) {
     const fechaTicket = getTicketDateTime(config);
-    const baseTitle = buildTicketTitle(profile, config.ticket.titulo);
+    const baseTitle = buildTicketTitle(profile, config.ticket.eltitulo || config.ticket.titulo);
     const modoTicket = baseTitle;
     const modelo1Ticket = model1Name || "Modelo 1";
     const modelo2Ticket = model2Name || "Modelo 2";
     const ticketFeria = dynamicTariffCtx ? dynamicTariffCtx.eventName || dynamicTariffCtx.title || config.ticket.feria : config.ticket.feria;
-    const ticketLugar = dynamicTariffCtx ? config.sello.eventos?.[0]?.localidad || config.ticket.lugar : config.ticket.lugar;
+    const ticketLugar = dynamicTariffCtx ? dynamicTariffCtx.eventNlugar || config.ticket.lugar : config.ticket.lugar;
     if (imageLayerOptions?.useSecondaryPrice && dynamicTariffCtx) {
       for (const producto of productos) {
         const tariffId = parseInt(producto.idProducto.replace(/^D/, "").replace(/S[12]$/, ""), 10);
@@ -4390,6 +4315,15 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
       }
     }
     const ticketMasterHeightMm = calcTicketMasterHeightMm(countActiveItems(items));
+    const currencySymbol = imageLayerOptions?.useSecondaryPrice && dynamicTariffCtx?.complementaryCurrencySymbol ? dynamicTariffCtx.complementaryCurrencySymbol : dynamicTariffCtx?.currencySymbol ?? "€";
+    const feria1ForTicket = codigoFeria1 ?? "";
+    const feria2ForTicket = codigoFeria2 ?? "";
+    let codigoTicket = "";
+    if (feria1ForTicket || feria2ForTicket) {
+      const mes = formatMes(config.codigo.mes);
+      const cliente = formatCliente(config.codigo.cliente);
+      codigoTicket = `${feria1ForTicket}-${mes}${feria2ForTicket} ${cliente}`;
+    }
     const mainTicketParams = {
       fechaTicket,
       modoTicket,
@@ -4407,65 +4341,18 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
       l1: config.ticket.l1,
       l2: config.ticket.l2,
       l3: config.ticket.l3,
-      codigoFeria1: codigoFeria1 ?? "",
-      codigoFeria2: codigoFeria2 ?? ""
+      currencySymbol,
+      codigoTicket
     };
-    const ticketHeightMm = calcActualTicketHeight(mainTicketParams);
+    const ticketHeightMm = calcTicketHeightMm(countActiveItems(items));
     const ticketBuffer = await genTicket(mainTicketParams);
     pdfs.push({
       buffer: ticketBuffer,
       target: "ticket",
       pdfType: "ticket",
-      description: "Ticket principal (Factura Simplificada)",
+      description: "Ticket principal",
       ticketHeightMm
     });
-    if (config.ticket.ImprimeCopiaTicket === "S") {
-      const ticketCajaParams = {
-        items,
-        idCliente: config.codigo.cliente,
-        nombreMaquina: config.codigo.maquina,
-        productos,
-        feria: ticketFeria,
-        modoTicket: config.ticket.tituloCopia || "COPIA Factura Simplificada",
-        modelo1Ticket,
-        modelo2Ticket
-      };
-      const ticketCajaHeightMm = calcActualTicketCajaHeight(ticketCajaParams);
-      const ticketCajaBuffer = await genTicketCaja(ticketCajaParams);
-      pdfs.push({
-        buffer: ticketCajaBuffer,
-        target: "ticket",
-        pdfType: "ticket_caja",
-        description: "Ticket copia (caja)",
-        ticketHeightMm: ticketCajaHeightMm
-      });
-    }
-    if (config.ticket.ImprimeMasterTicket === "S") {
-      const ticketMasterBuffer = await genTicketMaster({
-        fechaTicket,
-        modoTicket: "Master Set",
-        modelo1Ticket,
-        modelo2Ticket,
-        items,
-        idCliente: config.codigo.cliente,
-        nombreMaquina: config.codigo.maquina,
-        feria: ticketFeria,
-        lugar: ticketLugar,
-        empresa: config.ticket.empresa,
-        cif: config.ticket.cif,
-        cp: config.ticket.cp,
-        l1: config.ticket.l1,
-        l2: config.ticket.l2,
-        l3: config.ticket.l3
-      });
-      pdfs.push({
-        buffer: ticketMasterBuffer,
-        target: "ticket",
-        pdfType: "ticket_master",
-        description: "Ticket master set",
-        ticketHeightMm: ticketMasterHeightMm
-      });
-    }
     const maquinaPrefix = config.codigo.maquina.substring(0, 2).toUpperCase();
     if (maquinaPrefix !== "MD" && maquinaPrefix !== "FI") {
       for (let idx = 0; idx < items.length; idx++) {
@@ -4492,21 +4379,70 @@ async function generateSalePdfs(config, quantities, profile, imagesRepo, imageLa
               l1: config.ticket.l1,
               l2: config.ticket.l2,
               l3: config.ticket.l3,
-              codigoFeria1: codigoFeria1 ?? "",
-              codigoFeria2: codigoFeria2 ?? ""
+              currencySymbol,
+              codigoTicket
             };
-            const singleTiraHeightMm = calcActualTicketHeight(singleTiraParams);
+            const singleTiraHeightMm = calcTicketHeightMm(countActiveItems(singleTiraItems));
             const singleTiraBuffer = await genTicket(singleTiraParams);
             pdfs.push({
               buffer: singleTiraBuffer,
               target: "ticket",
-              pdfType: "ticket_tira",
-              description: `Ticket individual tira ${productos[idx].nombre_ticket} #${t + 1}`,
+              pdfType: "ticket",
+              description: `Ticket tira ${productos[idx].nombre_ticket} unidad ${t + 1}`,
               ticketHeightMm: singleTiraHeightMm
             });
           }
         }
       }
+    }
+    if (config.ticket.ImprimeCopiaTicket === "S") {
+      const ticketCajaParams = {
+        items,
+        idCliente: config.codigo.cliente,
+        nombreMaquina: config.codigo.maquina,
+        productos,
+        feria: ticketFeria,
+        modoTicket: config.ticket.tituloCopia || "COPIA Factura Simplificada",
+        modelo1Ticket,
+        modelo2Ticket,
+        currencySymbol
+      };
+      const ticketCajaHeightMm = calcTicketCajaHeightMm(countActiveItems(items));
+      const ticketCajaBuffer = await genTicketCaja(ticketCajaParams);
+      pdfs.push({
+        buffer: ticketCajaBuffer,
+        target: "ticket",
+        pdfType: "ticket_caja",
+        description: "Ticket copia (caja)",
+        ticketHeightMm: ticketCajaHeightMm
+      });
+    }
+    if (config.ticket.ImprimeMasterTicket === "S") {
+      const ticketMasterBuffer = await genTicketMaster({
+        fechaTicket,
+        modoTicket: "Master Set",
+        modelo1Ticket,
+        modelo2Ticket,
+        items,
+        idCliente: config.codigo.cliente,
+        nombreMaquina: config.codigo.maquina,
+        feria: ticketFeria,
+        lugar: ticketLugar,
+        empresa: config.ticket.empresa,
+        cif: config.ticket.cif,
+        cp: config.ticket.cp,
+        l1: config.ticket.l1,
+        l2: config.ticket.l2,
+        l3: config.ticket.l3,
+        currencySymbol
+      });
+      pdfs.push({
+        buffer: ticketMasterBuffer,
+        target: "ticket",
+        pdfType: "ticket_master",
+        description: "Ticket master set",
+        ticketHeightMm: ticketMasterHeightMm
+      });
     }
   }
   const stampCount = pdfs.filter(
@@ -4628,6 +4564,8 @@ function registerSaleHandlers() {
                 title: group.title,
                 eventName: evento?.nferia,
                 // Add event name for ticket header
+                eventNlugar: evento?.nlugar,
+                // Event lugar for ticket header
                 eventFecha: evento?.fecha,
                 // Add event date for stamp labels
                 eventLocalidad: evento?.localidad,
@@ -4643,6 +4581,8 @@ function registerSaleHandlers() {
                 currency: group.local_currency,
                 currencySymbol: getCurrencySymbol(group.local_currency),
                 // Add currency symbol
+                complementaryCurrencySymbol: getCurrencySymbol(group.complementary_currency),
+                // Complementary currency symbol
                 tariffs: group.tariffs.map((t) => ({
                   id: t.id,
                   name: t.name,
@@ -4684,34 +4624,50 @@ function registerSaleHandlers() {
       };
       let imageLayerOptions;
       if (typedImageFlags) {
-        const imagesRepo = new ImagesRepository();
+        const stampsRepo = new StampsRepository();
         const imagenesConfig = configRepo.getImagenes();
         let fondoImage = null;
         let selloImage = null;
         if (imagenesConfig.activeFair) {
           const { year, fairName } = imagenesConfig.activeFair;
-          const fondoName = buildImageName(year, fairName, "fondo");
-          const selloName = buildImageName(year, fairName, "sello");
-          const fondoRecord = imagesRepo.getByName(fondoName);
-          const selloRecord = imagesRepo.getByName(selloName);
-          fondoImage = fondoRecord?.url ?? null;
-          selloImage = selloRecord?.url ?? null;
-          console.log(`[Sale:LogoPng] activeFair: ${year}/${fairName}, selloName: ${selloName}, selloRecord exists: ${!!selloRecord}, selloImage length: ${selloImage?.length ?? 0}`);
+          const allStamps = stampsRepo.getAll();
+          const match = allStamps.find(
+            (s) => s.year === year && s.stampName.toLowerCase() === fairName.toLowerCase()
+          );
+          if (match) {
+            const { readFileSync, existsSync } = require("fs");
+            const { extname } = require("path");
+            if (match.fondoPath && existsSync(match.fondoPath)) {
+              const buf = readFileSync(match.fondoPath);
+              const ext = extname(match.fondoPath).toLowerCase();
+              const mime = ext === ".png" ? "image/png" : "image/jpeg";
+              fondoImage = `data:${mime};base64,${buf.toString("base64")}`;
+            }
+            if (match.logoPath && existsSync(match.logoPath)) {
+              const buf = readFileSync(match.logoPath);
+              const ext = extname(match.logoPath).toLowerCase();
+              const mime = ext === ".png" ? "image/png" : "image/jpeg";
+              selloImage = `data:${mime};base64,${buf.toString("base64")}`;
+            }
+          }
+          console.log(`[Sale:LogoPng] activeFair: ${year}/${fairName}, fondoImage: ${!!fondoImage}, selloImage length: ${selloImage?.length ?? 0}`);
         } else {
-          console.log("[Sale:LogoPng] WARNING: No activeFair configured — attempting to load sello from first synced fair");
+          console.log("[Sale:LogoPng] WARNING: No activeFair configured — attempting to load sello from first synced stamp");
           if (typedImageFlags.printLogoPng) {
-            try {
-              const syncRepo = new ImageSyncRepository();
-              const fairs = syncRepo.getFairList();
-              if (fairs.length > 0) {
-                const { year, fairName } = fairs[0];
-                const selloName = buildImageName(year, fairName, "sello");
-                const selloRecord = imagesRepo.getByName(selloName);
-                selloImage = selloRecord?.url ?? null;
-                console.log(`[Sale:LogoPng] Loaded sello from first fair: ${year}/${fairName}, selloImage length: ${selloImage?.length ?? 0}`);
+            const allStamps = stampsRepo.getAll();
+            if (allStamps.length > 0) {
+              const first = allStamps[0];
+              if (first.logoPath) {
+                const { readFileSync, existsSync } = require("fs");
+                const { extname } = require("path");
+                if (existsSync(first.logoPath)) {
+                  const buf = readFileSync(first.logoPath);
+                  const ext = extname(first.logoPath).toLowerCase();
+                  const mime = ext === ".png" ? "image/png" : "image/jpeg";
+                  selloImage = `data:${mime};base64,${buf.toString("base64")}`;
+                  console.log(`[Sale:LogoPng] Loaded sello from first stamp: ${first.stampName}, selloImage length: ${selloImage?.length ?? 0}`);
+                }
               }
-            } catch (err) {
-              console.log(`[Sale:LogoPng] Could not load from sync: ${err}`);
             }
           }
         }
@@ -5023,7 +4979,7 @@ async function activateLicense() {
     return licenseStatus;
   }
   try {
-    const result = await httpPost(`${API_BASE}/activate`, {
+    const result = await httpPost$1(`${API_BASE}/activate`, {
       machineId,
       apiKey
     });
@@ -5081,7 +5037,7 @@ async function deactivateLicense() {
     return { ok: false, error: "No hay apiKey configurada" };
   }
   try {
-    const result = await httpPost(`${API_BASE}/deactivate`, {
+    const result = await httpPost$1(`${API_BASE}/deactivate`, {
       machineId,
       apiKey
     });
@@ -5159,7 +5115,7 @@ function removeActivationTicket() {
     console.error("[license] Failed to remove activation ticket:", err);
   }
 }
-function httpPost(url$1, body) {
+function httpPost$1(url$1, body) {
   return new Promise((resolve, reject) => {
     const bodyStr = JSON.stringify(body);
     const parsedUrl = new url.URL(url$1);
@@ -5208,6 +5164,267 @@ function registerLicenseHandlers() {
     return getMachineId();
   });
 }
+class AppStateRepository {
+  db;
+  constructor(db2) {
+    this.db = db2 ?? getDatabase();
+  }
+  /**
+   * Returns the value for a given key, or null if not found.
+   */
+  get(key) {
+    const row = this.db.prepare("SELECT value FROM app_state WHERE key = ?").get(key);
+    return row?.value ?? null;
+  }
+  /**
+   * Inserts or replaces a key-value pair.
+   */
+  set(key, value) {
+    this.db.prepare(
+      `INSERT OR REPLACE INTO app_state (key, value, updated_at)
+         VALUES (?, ?, datetime('now'))`
+    ).run(key, value);
+  }
+  /**
+   * Deletes a key from the app_state table.
+   */
+  delete(key) {
+    this.db.prepare("DELETE FROM app_state WHERE key = ?").run(key);
+  }
+  /**
+   * Returns true if the 'blocked' key has value 'true'.
+   */
+  isBlocked() {
+    return this.get("blocked") === "true";
+  }
+  /**
+   * Sets or clears the blocked state.
+   * When blocking, also stores related metadata (machineId, apiKey).
+   * When unblocking, removes metadata keys.
+   */
+  setBlocked(blocked, details) {
+    if (blocked) {
+      this.set("blocked", "true");
+      if (details) {
+        this.set("blocked_machine_id", details.machineId);
+        this.set("blocked_api_key", details.apiKey);
+      }
+    } else {
+      this.set("blocked", "false");
+      this.delete("blocked_machine_id");
+      this.delete("blocked_api_key");
+    }
+  }
+}
+const API_URL = "https://md6oe7qpfk.execute-api.eu-west-1.amazonaws.com/prod/api/stamps/sync";
+async function syncStamps() {
+  const config = getUserConfig();
+  const apiKey = config.license?.apiKey || "";
+  const machineId = getMachineId();
+  if (!apiKey) {
+    return { ok: false, added: 0, removed: 0, total: 0, error: "No se encontró apiKey en la configuración" };
+  }
+  let response;
+  try {
+    response = await httpPost(API_URL, { apiKey, machineId });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Error de conexión";
+    return { ok: false, added: 0, removed: 0, total: 0, error: message };
+  }
+  if (!response.ok && response.error === "AUTH_FAILED") {
+    console.error("[stamp-sync] AUTH_FAILED:", response.reason);
+    blockApplication(apiKey, machineId);
+    return { ok: false, added: 0, removed: 0, total: 0, error: "AUTH_FAILED", blocked: true };
+  }
+  if (!response.ok) {
+    return { ok: false, added: 0, removed: 0, total: 0, error: response.error || "Error desconocido del servidor" };
+  }
+  const catalog = response.catalog || [];
+  const stampsRepo = new StampsRepository();
+  const stampsDir = path.join(electron.app.getPath("userData"), "stamps");
+  if (!fs.existsSync(stampsDir)) {
+    fs.mkdirSync(stampsDir, { recursive: true });
+  }
+  const localStamps = stampsRepo.getAll();
+  const localStampIds = new Set(localStamps.map((s) => s.stampId));
+  const remoteStampIds = new Set(catalog.map((c) => c.stampId));
+  const newItems = catalog.filter((c) => !localStampIds.has(c.stampId));
+  const removedItems = localStamps.filter((s) => !remoteStampIds.has(s.stampId));
+  for (const item of newItems) {
+    const stampDir = path.join(stampsDir, item.year, item.stampName);
+    if (!fs.existsSync(stampDir)) {
+      fs.mkdirSync(stampDir, { recursive: true });
+    }
+    const fondoPath = path.join(stampDir, `${item.stampName}-fondo.jpg`);
+    const logoPath = path.join(stampDir, `${item.stampName}-sello.png`);
+    try {
+      await downloadFile(item.fondoUrl, fondoPath);
+      await downloadFile(item.logoUrl, logoPath);
+    } catch (err) {
+      console.error(`[stamp-sync] Error downloading images for ${item.stampId}:`, err);
+      try {
+        if (fs.existsSync(stampDir)) {
+          fs.rmSync(stampDir, { recursive: true, force: true });
+        }
+      } catch {
+      }
+      return {
+        ok: false,
+        added: 0,
+        removed: 0,
+        total: localStamps.length,
+        error: `Error descargando imágenes para "${item.stampName}": ${err instanceof Error ? err.message : "Error desconocido"}`
+      };
+    }
+  }
+  for (const removed2 of removedItems) {
+    const stampDir = path.join(stampsDir, removed2.year, removed2.stampName);
+    try {
+      if (fs.existsSync(stampDir)) {
+        fs.rmSync(stampDir, { recursive: true, force: true });
+      }
+    } catch (err) {
+      console.error(`[stamp-sync] Error removing stamp folder ${removed2.stampId}:`, err);
+    }
+    stampsRepo.remove(removed2.stampId);
+  }
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  for (const item of catalog) {
+    const stampDir = path.join(stampsDir, item.year, item.stampName);
+    const fondoPath = path.join(stampDir, `${item.stampName}-fondo.jpg`);
+    const logoPath = path.join(stampDir, `${item.stampName}-sello.png`);
+    stampsRepo.upsert({
+      stampId: item.stampId,
+      year: item.year,
+      stampName: item.stampName,
+      fondoPath,
+      logoPath,
+      status: item.status,
+      syncedAt: now
+    });
+  }
+  const total = catalog.length;
+  const added = newItems.length;
+  const removed = removedItems.length;
+  console.log(`[stamp-sync] Sync complete: ${added} added, ${removed} removed, ${total} total`);
+  return { ok: true, added, removed, total };
+}
+function blockApplication(apiKey, machineId) {
+  console.error(`[stamp-sync] BLOCKING APPLICATION — apiKey: ${apiKey.slice(0, 8)}..., machineId: ${machineId.slice(0, 8)}...`);
+  const stampsRepo = new StampsRepository();
+  stampsRepo.clear();
+  const stampsDir = path.join(electron.app.getPath("userData"), "stamps");
+  try {
+    if (fs.existsSync(stampsDir)) {
+      fs.rmSync(stampsDir, { recursive: true, force: true });
+    }
+  } catch (err) {
+    console.error("[stamp-sync] Error removing stamps folder:", err);
+  }
+  const ticketPath = path.join(electron.app.getPath("userData"), ".license-ticket");
+  try {
+    if (fs.existsSync(ticketPath)) {
+      fs.unlinkSync(ticketPath);
+    }
+  } catch (err) {
+    console.error("[stamp-sync] Error removing license ticket:", err);
+  }
+  const appStateRepo = new AppStateRepository();
+  appStateRepo.setBlocked(true, { machineId, apiKey });
+  appStateRepo.set("blocked_at", (/* @__PURE__ */ new Date()).toISOString());
+}
+function httpPost(url$1, body) {
+  return new Promise((resolve, reject) => {
+    const bodyStr = JSON.stringify(body);
+    const parsedUrl = new url.URL(url$1);
+    const options = {
+      hostname: parsedUrl.hostname,
+      port: 443,
+      path: parsedUrl.pathname + parsedUrl.search,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(bodyStr)
+      }
+    };
+    const req = https__namespace.request(options, (res) => {
+      let responseData = "";
+      res.on("data", (chunk) => {
+        responseData += chunk.toString();
+      });
+      res.on("end", () => {
+        try {
+          const parsed = JSON.parse(responseData);
+          resolve(parsed);
+        } catch {
+          reject(new Error(`Respuesta inválida del servidor: ${responseData.slice(0, 200)}`));
+        }
+      });
+    });
+    req.on("error", (err) => {
+      reject(err);
+    });
+    req.write(bodyStr);
+    req.end();
+  });
+}
+function downloadFile(url$1, destPath) {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new url.URL(url$1);
+    const originEnd = url$1.indexOf("/", url$1.indexOf("://") + 3);
+    const rawPathAndSearch = originEnd !== -1 ? url$1.slice(originEnd) : parsedUrl.pathname + parsedUrl.search;
+    const options = {
+      hostname: parsedUrl.hostname,
+      port: 443,
+      path: rawPathAndSearch,
+      method: "GET"
+    };
+    const req = https__namespace.request(options, (res) => {
+      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        downloadFile(res.headers.location, destPath).then(resolve).catch(reject);
+        return;
+      }
+      if (res.statusCode && res.statusCode !== 200) {
+        reject(new Error(`HTTP ${res.statusCode} descargando ${parsedUrl.pathname}`));
+        return;
+      }
+      const fileStream = fs.createWriteStream(destPath);
+      res.pipe(fileStream);
+      fileStream.on("finish", () => {
+        fileStream.close();
+        resolve();
+      });
+      fileStream.on("error", (err) => {
+        fileStream.close();
+        reject(err);
+      });
+    });
+    req.on("error", (err) => {
+      reject(err);
+    });
+    req.end();
+  });
+}
+function registerStampsHandlers() {
+  handleIpc("stamps:sync", async () => {
+    return await syncStamps();
+  });
+  handleIpc("stamps:getAll", () => {
+    const repo = new StampsRepository();
+    return repo.getAll();
+  });
+  handleIpc("stamps:getStatus", () => {
+    const stampsRepo = new StampsRepository();
+    const appStateRepo = new AppStateRepository();
+    const stamps = stampsRepo.getAll();
+    const lastSync = stamps.length > 0 ? stamps[0].syncedAt : null;
+    return {
+      totalStamps: stamps.length,
+      lastSyncAt: lastSync,
+      isBlocked: appStateRepo.isBlocked()
+    };
+  });
+}
 function registerAllHandlers() {
   registerConfigHandlers();
   registerOrdersHandlers();
@@ -5219,6 +5436,7 @@ function registerAllHandlers() {
   registerTariffGroupsHandlers();
   registerUserConfigHandlers();
   registerLicenseHandlers();
+  registerStampsHandlers();
 }
 function notifyConfigChanged(config) {
   const windows = electron.BrowserWindow.getAllWindows();
@@ -5290,29 +5508,22 @@ Revisa el archivo startup-error.log junto al ejecutable.`);
     electron.app.quit();
     return;
   }
-  try {
-    let basePath;
-    if (electron.app.isPackaged) {
-      const exeDirPath = path.join(path.dirname(electron.app.getPath("exe")), "bbdd-ferias");
-      const resourcesPath = path.join(process.resourcesPath, "bbdd-ferias");
-      basePath = fs.existsSync(exeDirPath) ? exeDirPath : resourcesPath;
-    } else {
-      basePath = path.join(electron.app.getAppPath(), "bbdd-ferias");
+  const appStateRepo = new AppStateRepository();
+  if (appStateRepo.isBlocked()) {
+    const blockedMachineId = getMachineId();
+    console.error(`[startup] Application is BLOCKED. MachineId: ${blockedMachineId}`);
+    registerAllHandlers();
+    createWindow();
+    const win = electron.BrowserWindow.getAllWindows()[0];
+    if (win) {
+      win.webContents.on("did-finish-load", () => {
+        win.webContents.send("app:blocked", { machineId: blockedMachineId });
+      });
     }
-    console.log("[sync-images] Starting image synchronization from:", basePath);
-    const syncResult = syncImages(basePath);
-    setLastSyncResult(syncResult);
-    console.log(
-      `[sync-images] Sync complete — inserted: ${syncResult.inserted}, updated: ${syncResult.updated}, deleted: ${syncResult.deleted}, unchanged: ${syncResult.unchanged}`
-    );
-    if (syncResult.errors.length > 0) {
-      console.warn(`[sync-images] Sync finished with ${syncResult.errors.length} error(s):`);
-      for (const err of syncResult.errors) {
-        console.warn(`  - ${err.path}: ${err.error}`);
-      }
-    }
-  } catch (err) {
-    console.error("[sync-images] Image synchronization failed (non-blocking):", err);
+    electron.app.on("activate", function() {
+      if (electron.BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+    return;
   }
   try {
     registerAllHandlers();

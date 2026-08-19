@@ -16,6 +16,7 @@ export type AppLanguage = 'es' | 'en'
 export interface SettingsState {
   cutNumber: number
   language: AppLanguage
+  printRotation180: boolean
   loading: boolean
   error: string | null
 
@@ -23,6 +24,7 @@ export interface SettingsState {
   loadSettings(): Promise<void>
   setCutNumber(value: number): Promise<void>
   setLanguage(value: AppLanguage): Promise<void>
+  setPrintRotation(value: boolean): Promise<void>
 }
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
@@ -42,6 +44,7 @@ function getAPI() {
 export const useSettingsStore = create<SettingsState>((set) => ({
   cutNumber: 4,
   language: 'es',
+  printRotation180: false,
   loading: false,
   error: null,
 
@@ -49,14 +52,15 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     set({ loading: true, error: null })
 
     try {
-      const [cutNumber, language] = await Promise.all([
+      const [cutNumber, language, printRotation180] = await Promise.all([
         getAPI().config.getCutNumber(),
-        getAPI().config.getLanguage()
+        getAPI().config.getLanguage(),
+        getAPI().config.getPrintRotation()
       ])
 
       const validLanguage: AppLanguage = language === 'en' ? 'en' : 'es'
 
-      set({ cutNumber, language: validLanguage, loading: false })
+      set({ cutNumber, language: validLanguage, printRotation180: !!printRotation180, loading: false })
 
       // Sync i18n with the persisted language
       await i18n.changeLanguage(validLanguage)
@@ -88,6 +92,19 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       await i18n.changeLanguage(value)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to set language'
+      set({ error: message })
+      throw err
+    }
+  },
+
+  setPrintRotation: async (value: boolean) => {
+    set({ error: null })
+
+    try {
+      await getAPI().config.setPrintRotation(value)
+      set({ printRotation180: value })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to set print rotation'
       set({ error: message })
       throw err
     }

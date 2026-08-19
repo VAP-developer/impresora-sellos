@@ -9,6 +9,7 @@ import { registerEventosHandlers } from './eventos.handlers'
 import { registerTariffGroupsHandlers } from './tariff-groups.handlers'
 import { registerUserConfigHandlers } from './user-config.handlers'
 import { registerLicenseHandlers } from './license.handlers'
+import { registerStampsHandlers } from './stamps.handlers'
 
 /**
  * Centralized IPC handler registry.
@@ -33,6 +34,7 @@ export function registerAllHandlers(): void {
   registerTariffGroupsHandlers()
   registerUserConfigHandlers()
   registerLicenseHandlers()
+  registerStampsHandlers()
 }
 
 /**

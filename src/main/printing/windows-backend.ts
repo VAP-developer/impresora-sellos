@@ -21,6 +21,7 @@ import type {
   DiscoveredPrinter
 } from './printer-manager'
 import { discoverWindowsLocalPrinters, type DiscoveryCommandExecutor } from './printer-discovery'
+import { DpiCache, FALLBACK_DPI } from './dpi-detector'
 
 // ─── Command Executor Interface (for testability) ─────────────────────────────
 
@@ -43,6 +44,8 @@ export const defaultWindowsExecutor: WindowsCommandExecutor = {
     return execFileAsync(file, args, { timeout: options?.timeout ?? 30000 })
   }
 }
+
+
 
 // ─── URI Helpers ──────────────────────────────────────────────────────────────
 
@@ -135,6 +138,59 @@ async function configurePrinterPaperSize(
 }
 
 /**
+ * Configures the Brother TD printer driver to cut every N labels.
+ * Uses a PowerShell script (resources/set-cut-interval.ps1) that modifies
+ * the driver's private DEVMODE section.
+ */
+async function configureCutInterval(
+  printerName: string,
+  cutInterval: number,
+  executor: WindowsCommandExecutor
+): Promise<void> {
+  const { join } = require('path')
+  const { existsSync } = require('fs')
+
+  let scriptPath = ''
+
+  // Packaged app: extraResources
+  if (process.resourcesPath) {
+    const packaged = join(process.resourcesPath, 'set-cut-interval.ps1')
+    if (existsSync(packaged)) {
+      scriptPath = packaged
+    }
+  }
+
+  // Dev mode: resources folder
+  if (!scriptPath) {
+    const devPath = join(__dirname, '..', '..', 'resources', 'set-cut-interval.ps1')
+    if (existsSync(devPath)) {
+      scriptPath = devPath
+    }
+  }
+
+  if (!scriptPath) {
+    const deepPath = join(__dirname, '..', '..', '..', 'resources', 'set-cut-interval.ps1')
+    if (existsSync(deepPath)) {
+      scriptPath = deepPath
+    }
+  }
+
+  if (!scriptPath) {
+    // Script not found — skip silently
+    return
+  }
+
+  const escapedPrinter = printerName.replace(/"/g, '`"')
+  const cmd = `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}" -PrinterName "${escapedPrinter}" -CutInterval ${cutInterval}`
+
+  try {
+    await executor.exec(cmd, { timeout: 10000 })
+  } catch {
+    // Non-fatal: if we can't configure cut interval, print still works
+  }
+}
+
+/**
  * Resolves the path to SumatraPDF executable bundled with pdf-to-printer.
  * In an Electron packaged app, the path needs to account for asar unpacking.
  */
@@ -160,9 +216,11 @@ function getSumatraPdfPath(): string {
 
 export class WindowsBackend implements PrinterBackend {
   private cmd: WindowsCommandExecutor
+  private dpiCache?: DpiCache
 
-  constructor(executor?: WindowsCommandExecutor) {
+  constructor(executor?: WindowsCommandExecutor, dpiCache?: DpiCache) {
     this.cmd = executor ?? defaultWindowsExecutor
+    this.dpiCache = dpiCache
   }
 
   /**
@@ -203,14 +261,35 @@ export class WindowsBackend implements PrinterBackend {
         await new Promise((resolve) => setTimeout(resolve, 500))
       }
 
+      // Configure cut interval if specified (Brother TD-4100N "cut every N labels")
+      if (options.cutInterval && options.cutInterval > 0) {
+        try {
+          await configureCutInterval(printerName, options.cutInterval, this.cmd)
+          // Wait for the driver to apply the cut setting
+          await new Promise((resolve) => setTimeout(resolve, 300))
+        } catch {
+          // Non-fatal: if we can't set cut interval, print will still work
+          // but may cut at wrong intervals
+        }
+      }
+
       // Invoke SumatraPDF directly
       const sumatraPath = getSumatraPdfPath()
       
+      // Resolve DPI: use cached value for this printer, or fallback.
+      // Use 2x DPI for rasterization to improve image quality (especially logos/overlays).
+      // SumatraPDF renders at the higher resolution and the printer's native dithering
+      // produces sharper output than rasterizing at native DPI directly.
+      const dpi = this.dpiCache?.get(printerName) ?? FALLBACK_DPI
+      const renderDpiX = dpi.dpiX * 2
+      const renderDpiY = dpi.dpiY * 2
+      const resolvedDpi = `${renderDpiX}x${renderDpiY}dpi`
+
       // Build print-settings: noscale prints at 100% original size.
       // The printer driver's paper size must be pre-configured to match the PDF page.
       const args = [
         '-print-to', printerName,
-        '-print-settings', 'noscale',
+        '-print-settings', `noscale,${resolvedDpi}`,
         '-silent',
         tempFile
       ]

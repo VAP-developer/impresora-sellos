@@ -5,11 +5,13 @@
  * These codes (codigo_feria_1 and codigo_feria_2) are stored in the general
  * configuration and are used instead of the event codes when selling via Oficina.
  *
- * Format: {codigo_feria_1}-{codigo_feria_2} (e.g., "JC26-VAP")
+ * Format: {codigo_feria_1}-{mes}{codigo_feria_2} (e.g., "ABCD-8EF")
+ * The month char is prepended automatically from the pestaña Máquina config.
  */
 
 import { useCallback, useEffect, useState } from 'react'
 import { useConfigStore } from '@renderer/stores/config.store'
+import { formatMes } from '@renderer/lib/code-formatter'
 
 export function CodigoEspecialSection(): JSX.Element {
   const { config, updateMaquina } = useConfigStore()
@@ -81,24 +83,25 @@ export function CodigoEspecialSection(): JSX.Element {
 
         <div className="flex flex-col">
           <label htmlFor="settings-codigo-feria-2" className="text-xs text-gray-700 font-bold">
-            Código Pais (max 3 chars)
+            Código País (max 2 chars)
           </label>
           <input
             id="settings-codigo-feria-2"
             type="text"
             value={codigoFeria2}
-            onChange={(e) => setCodigoFeria2(e.target.value.slice(0, 3).toUpperCase())}
-            maxLength={3}
+            onChange={(e) => setCodigoFeria2(e.target.value.slice(0, 2).toUpperCase())}
+            maxLength={2}
             className="w-20 border border-gray-300 rounded p-2 font-mono text-lg text-red-600"
-            placeholder="VAP"
+            placeholder="EF"
           />
-          <span className="text-[10px] text-gray-500 mt-0.5">Max 3 caracteres</span>
+          <span className="text-[10px] text-gray-500 mt-0.5">Max 2 caracteres</span>
         </div>
 
         {(codigoFeria1 || codigoFeria2) && (
           <div className="flex flex-col pb-3">
-            <span className="text-xs text-gray-500">Vista previa:</span>
-            <span className="font-mono text-lg font-bold">{codigoFeria1}-{codigoFeria2}</span>
+            <span className="text-xs text-gray-500">Vista previa (en sello):</span>
+            <span className="font-mono text-lg font-bold">{codigoFeria1}-{formatMes(config?.codigo.mes ?? 0)}{codigoFeria2}</span>
+            <span className="text-[10px] text-gray-400 mt-0.5">Ej: PM26-<em>m</em>ES → la <em>m</em> es el mes de pestaña Máquina</span>
           </div>
         )}
 

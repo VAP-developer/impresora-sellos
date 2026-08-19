@@ -21,6 +21,8 @@ import { CutNumberSection } from '@renderer/components/settings/CutNumberSection
 import { LanguageSection } from '@renderer/components/settings/LanguageSection'
 import { CodigoEspecialSection } from '@renderer/components/settings/CodigoEspecialSection'
 import { LicenseSection } from '@renderer/components/settings/LicenseSection'
+import { PrintRotationSection } from '@renderer/components/settings/PrintRotationSection'
+import { StampDatabaseSection } from '@renderer/components/settings/StampDatabaseSection'
 
 export default function SettingsView(): JSX.Element {
   const { t } = useTranslation()
@@ -31,6 +33,8 @@ export default function SettingsView(): JSX.Element {
   const [langOpen, setLangOpen] = useState(false)
   const [codigoOpen, setCodigoOpen] = useState(true)
   const [licenseOpen, setLicenseOpen] = useState(false)
+  const [stampDbOpen, setStampDbOpen] = useState(false)
+  const [printRotOpen, setPrintRotOpen] = useState(false)
 
   useEffect(() => {
     loadSettings()
@@ -190,7 +194,41 @@ export default function SettingsView(): JSX.Element {
             )}
           </div>
 
-          {/* Section 4: License */}
+          {/* Section 4: Print Rotation */}
+          <div>
+            <button
+              type="button"
+              className="w-full bg-[rgb(255,192,0)] p-2 rounded cursor-pointer flex items-center gap-2
+                         text-left focus:outline-none focus:ring-2 focus:ring-yellow-500"
+              onClick={() => setPrintRotOpen(!printRotOpen)}
+              aria-expanded={printRotOpen}
+              aria-controls="settings-print-rotation-content"
+            >
+              <input
+                type="checkbox"
+                checked={printRotOpen}
+                readOnly
+                className="cursor-pointer"
+                tabIndex={-1}
+                aria-hidden="true"
+              />
+              <h3 className="text-lg font-bold m-0">
+                ROTACIÓN DE IMPRESIÓN
+              </h3>
+            </button>
+            {printRotOpen && (
+              <div
+                id="settings-print-rotation-content"
+                className="border border-gray-200 rounded-b p-4 bg-white"
+                role="region"
+                aria-label="Rotación de impresión"
+              >
+                <PrintRotationSection />
+              </div>
+            )}
+          </div>
+
+          {/* Section 5: License */}
           <div>
             <button
               type="button"
@@ -220,6 +258,40 @@ export default function SettingsView(): JSX.Element {
                 aria-label="Licencia"
               >
                 <LicenseSection />
+              </div>
+            )}
+          </div>
+
+          {/* Section 5: Stamp Database */}
+          <div>
+            <button
+              type="button"
+              className="w-full bg-[rgb(255,192,0)] p-2 rounded cursor-pointer flex items-center gap-2
+                         text-left focus:outline-none focus:ring-2 focus:ring-yellow-500"
+              onClick={() => setStampDbOpen(!stampDbOpen)}
+              aria-expanded={stampDbOpen}
+              aria-controls="settings-stamp-db-content"
+            >
+              <input
+                type="checkbox"
+                checked={stampDbOpen}
+                readOnly
+                className="cursor-pointer"
+                tabIndex={-1}
+                aria-hidden="true"
+              />
+              <h3 className="text-lg font-bold m-0">
+                BASE DE DATOS SELLOS
+              </h3>
+            </button>
+            {stampDbOpen && (
+              <div
+                id="settings-stamp-db-content"
+                className="border border-gray-200 rounded-b p-4 bg-white"
+                role="region"
+                aria-label="Base de datos sellos"
+              >
+                <StampDatabaseSection />
               </div>
             )}
           </div>

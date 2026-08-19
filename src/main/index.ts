@@ -6,10 +6,9 @@ import { initDatabase, closeDatabase } from './database/connection'
 import { ConfigRepository } from './database/repositories/config.repository'
 import { registerAllHandlers } from './ipc/handlers'
 import { initServices, shutdownServices } from './services'
-import { syncImages } from './images/sync-images'
-import { setLastSyncResult } from './ipc/images.handlers'
 import { loadUserConfig } from './user-config'
-import { setAuthToken, activateLicense } from './license'
+import { setAuthToken, activateLicense, getMachineId } from './license'
+import { AppStateRepository } from './database/repositories/app-state.repository'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -70,33 +69,29 @@ app.whenReady().then(async () => {
     return
   }
 
-  // Synchronize fair images from bbdd-ferias/ folder into SQLite
-  try {
-    let basePath: string
-    if (app.isPackaged) {
-      // In packaged mode, check first next to the executable (user-managed),
-      // then fall back to extraResources inside the package
-      const exeDirPath = join(dirname(app.getPath('exe')), 'bbdd-ferias')
-      const resourcesPath = join(process.resourcesPath, 'bbdd-ferias')
-      basePath = existsSync(exeDirPath) ? exeDirPath : resourcesPath
-    } else {
-      // Dev mode: use project root
-      basePath = join(app.getAppPath(), 'bbdd-ferias')
+  // Check if app is blocked (stamp sync auth failure)
+  const appStateRepo = new AppStateRepository()
+  if (appStateRepo.isBlocked()) {
+    const blockedMachineId = getMachineId()
+    console.error(`[startup] Application is BLOCKED. MachineId: ${blockedMachineId}`)
+
+    registerAllHandlers() // Register minimal handlers so IPC works
+
+    createWindow()
+
+    // Notify renderer of blocked state
+    const win = BrowserWindow.getAllWindows()[0]
+    if (win) {
+      win.webContents.on('did-finish-load', () => {
+        win.webContents.send('app:blocked', { machineId: blockedMachineId })
+      })
     }
-    console.log('[sync-images] Starting image synchronization from:', basePath)
-    const syncResult = syncImages(basePath)
-    setLastSyncResult(syncResult)
-    console.log(
-      `[sync-images] Sync complete — inserted: ${syncResult.inserted}, updated: ${syncResult.updated}, deleted: ${syncResult.deleted}, unchanged: ${syncResult.unchanged}`
-    )
-    if (syncResult.errors.length > 0) {
-      console.warn(`[sync-images] Sync finished with ${syncResult.errors.length} error(s):`)
-      for (const err of syncResult.errors) {
-        console.warn(`  - ${err.path}: ${err.error}`)
-      }
-    }
-  } catch (err) {
-    console.error('[sync-images] Image synchronization failed (non-blocking):', err)
+
+    app.on('activate', function () {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    })
+
+    return // Skip all other initialization
   }
 
   // Register all IPC handlers for renderer communication

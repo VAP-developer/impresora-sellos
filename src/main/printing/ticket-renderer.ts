@@ -113,6 +113,8 @@ export interface GenTicketParams {
   codigoFeria1?: string
   /** Fair code part 2 (e.g. "VAP") — displayed in ticket header */
   codigoFeria2?: string
+  /** Pre-formatted ticket code (e.g. "GI26-8GI 0367") — overrides codigoFeria1/2 display */
+  codigoTicket?: string
 }
 
 /** Parameters for genTicketCaja (cash register copy) */
@@ -631,7 +633,7 @@ export async function genTicket(params: GenTicketParams): Promise<Buffer> {
   drawCentered(doc, `Fecha ${fechaTicket}`, FONTS.condensed, 8, y * MM_TO_PT, pageWidth)
   y += 4
   // Draw modoTicket with feria code appended if available
-  const codigoFeriaDisplay = [params.codigoFeria1, params.codigoFeria2].filter(Boolean).join('-')
+  const codigoFeriaDisplay = params.codigoTicket || [params.codigoFeria1, params.codigoFeria2].filter(Boolean).join('-')
   const modoLine = codigoFeriaDisplay ? `${modoTicket}: ${codigoFeriaDisplay}` : modoTicket
   drawLeft(doc, modoLine, FONTS.bold, 6.5, 5 * MM_TO_PT, y * MM_TO_PT)
   y += 6 // Remaining space to complete TICKET_HEADER_HEIGHT

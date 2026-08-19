@@ -252,7 +252,7 @@ describe('Property 7: Generación correcta de PDFs por venta', () => {
       expect(result.stampCount).toBe(0)
     })
 
-    it('for simple tariffs: generates PDFs grouped by cutNumber per tariff/model with qty > 0', async () => {
+    it('for simple tariffs: generates exactly one PDF per tariff/model with qty > 0', async () => {
       await fc.assert(
         fc.asyncProperty(
           fc.record({
@@ -274,10 +274,9 @@ describe('Property 7: Generación correcta de PDFs por venta', () => {
 
             const simplePdfs = result.pdfs.filter((p) => p.pdfType === 'stamp_simple')
 
-            // With cutNumber=4, each tariff/model produces ⌈qty/4⌉ PDFs
-            const cutNumber = 4
+            // After removing groupLabels, each tariff/model with qty > 0 produces exactly 1 PDF
             const expectedSimpleCount = SIMPLE_KEYS.reduce(
-              (sum, key) => sum + (quantities[key] > 0 ? Math.ceil(quantities[key] / cutNumber) : 0),
+              (sum, key) => sum + (quantities[key] > 0 ? 1 : 0),
               0
             )
             expect(simplePdfs).toHaveLength(expectedSimpleCount)

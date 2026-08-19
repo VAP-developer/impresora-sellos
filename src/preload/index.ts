@@ -365,6 +365,8 @@ export interface ElectronAPI {
     setCutNumber(value: number): Promise<void>
     getLanguage(): Promise<string>
     setLanguage(value: string): Promise<void>
+    getPrintRotation(): Promise<boolean>
+    setPrintRotation(value: boolean): Promise<void>
     onChange(callback: (config: AppConfig) => void): () => void
   }
   orders: {
@@ -448,6 +450,11 @@ export interface ElectronAPI {
     machineId(): Promise<string>
     onBlocked(callback: (reason: string) => void): () => void
   }
+  stamps: {
+    sync(): Promise<{ ok: boolean; added: number; removed: number; total: number; error?: string; blocked?: boolean }>
+    getAll(): Promise<Array<{ id: number; stampId: string; year: string; stampName: string; fondoPath: string | null; logoPath: string | null; status: string; syncedAt: string; createdAt: string }>>
+    getStatus(): Promise<{ totalStamps: number; lastSyncAt: string | null; isBlocked: boolean }>
+  }
 }
 
 // === IPC API Implementation ===
@@ -475,6 +482,8 @@ const api: ElectronAPI = {
     setCutNumber: (value) => ipcRenderer.invoke('config:setCutNumber', value),
     getLanguage: () => ipcRenderer.invoke('config:getLanguage'),
     setLanguage: (value) => ipcRenderer.invoke('config:setLanguage', value),
+    getPrintRotation: () => ipcRenderer.invoke('config:getPrintRotation'),
+    setPrintRotation: (value) => ipcRenderer.invoke('config:setPrintRotation', value),
     onChange: (callback) => {
       const handler = (_event: Electron.IpcRendererEvent, config: AppConfig): void => {
         callback(config)
@@ -550,6 +559,11 @@ const api: ElectronAPI = {
       ipcRenderer.on('license:blocked', handler)
       return () => { ipcRenderer.removeListener('license:blocked', handler) }
     }
+  },
+  stamps: {
+    sync: () => ipcRenderer.invoke('stamps:sync'),
+    getAll: () => ipcRenderer.invoke('stamps:getAll'),
+    getStatus: () => ipcRenderer.invoke('stamps:getStatus')
   }
 }
 

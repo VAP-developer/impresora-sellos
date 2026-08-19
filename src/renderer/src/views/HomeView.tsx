@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useState, useEffect } from 'react'
+import logoSvvs from '@renderer/assets/logo-gibraltar.svg'
 
 
 
@@ -124,11 +125,9 @@ function NavigationCard({ onClick, icon, title, description, ariaLabel }: Naviga
 function SettingsLogo(): JSX.Element {
   return (
     <img
-    //src="E:\_SvvS Kiosko\v6-imp\dist\stamp-sales-app-1.0.0-x64.nsis\resources\images\logo-svvs.svg"
-      src="E:\_SvvS Kiosko\v6-imp\dist\stamp-sales-app-1.0.0-x64.nsis\resources\images\logo-svvs.svg"
+      src={logoSvvs}
       alt="Logo SvvS"
-      className="w-50 h-20"
-      //viewBox="0 0 24 24"
+      className="w-50 h-40"
     />
   )
 }

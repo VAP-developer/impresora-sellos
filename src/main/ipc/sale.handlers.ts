@@ -14,13 +14,12 @@
 
 import { handleIpc, notifyConfigChanged } from './handlers'
 import { ConfigRepository } from '../database/repositories/config.repository'
-import { ImagesRepository } from '../database/repositories/images.repository'
-import { ImageSyncRepository } from '../database/repositories/image-sync.repository'
+import { StampsRepository } from '../database/repositories/stamps.repository'
 import { TariffGroupsRepository } from '../database/repositories/tariff-groups.repository'
 import { EventosRepository } from '../database/repositories/eventos.repository'
 import { executeSale, cancelSale } from '../sales/sale.service'
 import { generateSalePdfs } from '../printing/pdf-generator'
-import { buildImageName } from '../images/sync-images'
+import { buildImageName } from './images.handlers'
 import { getPrintQueueService } from '../services'
 import type { GeneratedPdf, SaleGenerationResult, ImageLayerOptions, DynamicTariffContext } from '../printing/pdf-generator'
 import type { AppConfig } from '../database/repositories/config.repository'
@@ -147,6 +146,7 @@ export function registerSaleHandlers(): void {
                 groupId: group.id,
                 title: group.title,
                 eventName: evento?.nferia, // Add event name for ticket header
+                eventNlugar: evento?.nlugar, // Event lugar for ticket header
                 eventFecha: evento?.fecha, // Add event date for stamp labels
                 eventLocalidad: evento?.localidad, // Add event locality for stamp labels
                 eventCodigoFeria1: evento?.codigo_feria_1, // Fair code part 1 for stamp labels
@@ -155,6 +155,7 @@ export function registerSaleHandlers(): void {
                 eventLayoutModelo2: evento?.layout_modelo2, // Layout template for modelo2
                 currency: group.local_currency,
                 currencySymbol: getCurrencySymbol(group.local_currency), // Add currency symbol
+                complementaryCurrencySymbol: getCurrencySymbol(group.complementary_currency), // Complementary currency symbol
                 tariffs: group.tariffs.map((t) => ({
                   id: t.id!,
                   name: t.name,
@@ -210,39 +211,53 @@ export function registerSaleHandlers(): void {
       // Step 3b: Build ImageLayerOptions if image flags were provided
       let imageLayerOptions: ImageLayerOptions | undefined
       if (typedImageFlags) {
-        const imagesRepo = new ImagesRepository()
+        const stampsRepo = new StampsRepository()
         const imagenesConfig = configRepo.getImagenes()
         let fondoImage: string | null = null
         let selloImage: string | null = null
 
         if (imagenesConfig.activeFair) {
           const { year, fairName } = imagenesConfig.activeFair
-          const fondoName = buildImageName(year, fairName, 'fondo')
-          const selloName = buildImageName(year, fairName, 'sello')
-
-          const fondoRecord = imagesRepo.getByName(fondoName)
-          const selloRecord = imagesRepo.getByName(selloName)
-
-          fondoImage = fondoRecord?.url ?? null
-          selloImage = selloRecord?.url ?? null
-
-          console.log(`[Sale:LogoPng] activeFair: ${year}/${fairName}, selloName: ${selloName}, selloRecord exists: ${!!selloRecord}, selloImage length: ${selloImage?.length ?? 0}`)
+          // Find the stamp record matching this fair
+          const allStamps = stampsRepo.getAll()
+          const match = allStamps.find(
+            (s) => s.year === year && s.stampName.toLowerCase() === fairName.toLowerCase()
+          )
+          if (match) {
+            const { readFileSync, existsSync } = require('fs')
+            const { extname } = require('path')
+            if (match.fondoPath && existsSync(match.fondoPath)) {
+              const buf = readFileSync(match.fondoPath)
+              const ext = extname(match.fondoPath).toLowerCase()
+              const mime = ext === '.png' ? 'image/png' : 'image/jpeg'
+              fondoImage = `data:${mime};base64,${buf.toString('base64')}`
+            }
+            if (match.logoPath && existsSync(match.logoPath)) {
+              const buf = readFileSync(match.logoPath)
+              const ext = extname(match.logoPath).toLowerCase()
+              const mime = ext === '.png' ? 'image/png' : 'image/jpeg'
+              selloImage = `data:${mime};base64,${buf.toString('base64')}`
+            }
+          }
+          console.log(`[Sale:LogoPng] activeFair: ${year}/${fairName}, fondoImage: ${!!fondoImage}, selloImage length: ${selloImage?.length ?? 0}`)
         } else {
-          console.log('[Sale:LogoPng] WARNING: No activeFair configured — attempting to load sello from first synced fair')
-          // Attempt to load sello from the first available synced fair
+          console.log('[Sale:LogoPng] WARNING: No activeFair configured — attempting to load sello from first synced stamp')
+          // Attempt to load sello from the first available synced stamp
           if (typedImageFlags.printLogoPng) {
-            try {
-              const syncRepo = new ImageSyncRepository()
-              const fairs = syncRepo.getFairList()
-              if (fairs.length > 0) {
-                const { year, fairName } = fairs[0]
-                const selloName = buildImageName(year, fairName, 'sello')
-                const selloRecord = imagesRepo.getByName(selloName)
-                selloImage = selloRecord?.url ?? null
-                console.log(`[Sale:LogoPng] Loaded sello from first fair: ${year}/${fairName}, selloImage length: ${selloImage?.length ?? 0}`)
+            const allStamps = stampsRepo.getAll()
+            if (allStamps.length > 0) {
+              const first = allStamps[0]
+              if (first.logoPath) {
+                const { readFileSync, existsSync } = require('fs')
+                const { extname } = require('path')
+                if (existsSync(first.logoPath)) {
+                  const buf = readFileSync(first.logoPath)
+                  const ext = extname(first.logoPath).toLowerCase()
+                  const mime = ext === '.png' ? 'image/png' : 'image/jpeg'
+                  selloImage = `data:${mime};base64,${buf.toString('base64')}`
+                  console.log(`[Sale:LogoPng] Loaded sello from first stamp: ${first.stampName}, selloImage length: ${selloImage?.length ?? 0}`)
+                }
               }
-            } catch (err) {
-              console.log(`[Sale:LogoPng] Could not load from sync: ${err}`)
             }
           }
         }

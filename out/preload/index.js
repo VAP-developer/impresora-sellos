@@ -20,6 +20,8 @@ const api = {
     setCutNumber: (value) => electron.ipcRenderer.invoke("config:setCutNumber", value),
     getLanguage: () => electron.ipcRenderer.invoke("config:getLanguage"),
     setLanguage: (value) => electron.ipcRenderer.invoke("config:setLanguage", value),
+    getPrintRotation: () => electron.ipcRenderer.invoke("config:getPrintRotation"),
+    setPrintRotation: (value) => electron.ipcRenderer.invoke("config:setPrintRotation", value),
     onChange: (callback) => {
       const handler = (_event, config) => {
         callback(config);
@@ -97,6 +99,11 @@ const api = {
         electron.ipcRenderer.removeListener("license:blocked", handler);
       };
     }
+  },
+  stamps: {
+    sync: () => electron.ipcRenderer.invoke("stamps:sync"),
+    getAll: () => electron.ipcRenderer.invoke("stamps:getAll"),
+    getStatus: () => electron.ipcRenderer.invoke("stamps:getStatus")
   }
 };
 if (process.contextIsolated) {

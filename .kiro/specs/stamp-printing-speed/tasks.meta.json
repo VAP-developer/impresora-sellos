@@ -1,0 +1,213 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Add `buildImageCache()` function": [
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048016038
+      },
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048024393
+      },
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048095731
+      }
+    ],
+    "1.2 Modify `drawBackground()` to accept optional `imageCache` parameter": [
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048016087
+      },
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048100408
+      },
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048181532
+      }
+    ],
+    "1.3 Modify `drawOverlay()` to accept optional `imageCache` parameter": [
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048016125
+      },
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048101207
+      },
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048182314
+      }
+    ],
+    "1.4 Modify `drawLogoPng()` to accept optional `imageCache` parameter": [
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048016162
+      },
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048102116
+      },
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048183126
+      }
+    ],
+    "1.5 Update `renderStampMultiPage()` to build and use image cache": [
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048016202
+      },
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048202990
+      },
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048305778
+      }
+    ],
+    "2. Checkpoint - Verify stamp-renderer changes": [
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048016268
+      },
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048316651
+      },
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048472649
+      }
+    ],
+    "3.1 Remove `groupLabels()` in the dynamic tariff path (model 1 and model 2)": [
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048016300
+      },
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048484842
+      },
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048602468
+      }
+    ],
+    "3.2 Remove `groupLabels()` in the legacy static tariff path": [
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048016338
+      },
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048485717
+      },
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048603424
+      }
+    ],
+    "4. Final checkpoint - Ensure all tests pass": [
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048016374
+      },
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048631886
+      },
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787049070023
+      }
+    ],
+    "5.1 Add exported PRINT_DPI constant": [
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048016410
+      },
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787049075237
+      },
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787049120762
+      }
+    ],
+    "5.2 Update SumatraPDF print-settings to include DPI": [
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048016447
+      },
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787049125155
+      },
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787049184267
+      }
+    ],
+    "1. Implement image cache in stamp-renderer.ts": [
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048305821
+      }
+    ],
+    "3. Remove `groupLabels()` calls for simple stamps in pdf-generator.ts": [
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787048603472
+      }
+    ],
+    "5. Add DPI configuration to windows-backend.ts for crisp print quality": [
+      {
+        "executionId": "35d57ef9-6ffa-41c7-9de1-8c736b0be0d6",
+        "chatSessionId": "sess_5a5f4d51-96ac-4ef6-9c9c-0adf9f235435",
+        "timestamp": 1787049184307
+      }
+    ]
+  }
+}

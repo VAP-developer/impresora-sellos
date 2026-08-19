@@ -107,11 +107,12 @@ Necesitarás añadir estos permisos adicionales respecto a la versión básica:
 ## Paso 1: Desplegar la infraestructura
 
 El template de CloudFormation crea:
-- 2 Buckets S3 (web + releases)
+- 3 Buckets S3 (web + releases + stamps)
 - Distribución CloudFront con HTTPS
 - Cognito User Pool (autenticación)
 - DynamoDB tabla `users` (datos por usuario)
-- API Gateway + 2 Lambdas (login + download)
+- DynamoDB tabla `stamp-catalog` (catálogo de sellos por usuario)
+- API Gateway + 3 Lambdas (login + download + sync-stamps)
 
 ```powershell
 aws cloudformation deploy `
@@ -239,12 +240,16 @@ aws/
 │   ├── login/
 │   │   ├── index.js              ← Lambda: autenticación con Cognito
 │   │   └── package.json
-│   └── download/
-│       ├── index.js              ← Lambda: genera config + presigned URL
+│   ├── download/
+│   │   ├── index.js              ← Lambda: genera config + presigned URL
+│   │   └── package.json
+│   └── sync-stamps/
+│       ├── index.js              ← Lambda: sincronización de sellos (scan S3 + DynamoDB)
 │       └── package.json
 ├── scripts/
 │   ├── deploy-web.ps1            ← Sube la web a S3
 │   ├── upload-release.ps1        ← Sube un .exe nuevo
+│   ├── upload-stamps.ps1         ← Sube imágenes de sellos al bucket de un usuario
 │   └── setup-users.ps1           ← Crea usuarios en Cognito + DynamoDB
 └── web/
     ├── index.html                ← Página con login + descarga
@@ -267,12 +272,12 @@ Electron (cambios en la app):
 
 | Servicio | Uso | Coste/mes (sin free tier) |
 |----------|-----|--------------------------|
-| S3 | Web + releases | < 0.50€ |
+| S3 | Web + releases + stamps | < 1€ |
 | CloudFront | CDN + HTTPS | < 1€ |
 | Cognito | Autenticación | < 0.30€ (50 usuarios) |
-| DynamoDB | Datos usuarios | < 0.01€ |
-| Lambda | Login + download | < 0.01€ |
-| API Gateway | 2 endpoints | < 0.01€ |
+| DynamoDB | Datos usuarios + stamp-catalog | < 0.02€ |
+| Lambda | Login + download + sync-stamps | < 0.01€ |
+| API Gateway | 3 endpoints | < 0.01€ |
 | **Total** | | **~1-2€/mes** |
 
 ---
@@ -300,10 +305,106 @@ Electron (cambios en la app):
 
 ---
 
+## Procedimiento: Dar de alta sellos a un usuario
+
+Guía operativa para añadir, verificar y eliminar sellos de un usuario en el bucket S3.
+
+### 1. Preparar las imágenes
+
+Cada sello requiere exactamente dos archivos con el nombre del sello como prefijo:
+
+| Archivo | Formato | Tamaño recomendado | Ejemplo |
+|---------|---------|--------------------|---------| 
+| `{nombre-sello}-fondo.jpg` | JPG | ~200-500 KB | `Boston 2026-fondo.jpg` |
+| `{nombre-sello}-sello.png` | PNG | ~50-200 KB | `Boston 2026-sello.png` |
+
+> **Importante:** El nombre del archivo debe coincidir con el nombre de la carpeta en S3.
+
+### 2. Subir al bucket S3
+
+#### Opción A: Usando el script `upload-stamps.ps1`
+
+```powershell
+# Archivos individuales
+.\aws\scripts\upload-stamps.ps1 -Username "admin.svvs" -Year "2026" -StampName "Boston 2026" `
+  -FondoPath ".\images\Boston 2026-fondo.jpg" `
+  -LogoPath ".\images\Boston 2026-sello.png"
+
+# Desde una carpeta (modo bulk)
+.\aws\scripts\upload-stamps.ps1 -Username "admin.svvs" -Year "2026" -StampName "Boston 2026" `
+  -BulkFolder ".\bbdd-ferias\2026\Boston 2026"
+```
+
+#### Opción B: Manualmente con AWS CLI
+
+```powershell
+aws s3 cp ".\Boston 2026-fondo.jpg" "s3://svvs-kiosko-stamps/admin.svvs/2026/Boston 2026/Boston 2026-fondo.jpg" --region eu-west-1
+aws s3 cp ".\Boston 2026-sello.png" "s3://svvs-kiosko-stamps/admin.svvs/2026/Boston 2026/Boston 2026-sello.png" --region eu-west-1
+```
+
+### 3. Verificar la estructura
+
+Listar el contenido del bucket para confirmar que los archivos están correctos:
+
+```powershell
+aws s3 ls "s3://svvs-kiosko-stamps/admin.svvs/" --recursive --region eu-west-1
+```
+
+Deberías ver algo como:
+```
+2026/Boston 2026/Boston 2026-fondo.jpg
+2026/Boston 2026/Boston 2026-sello.png
+2026/Diwali 2026/Diwali 2026-fondo.jpg
+2026/Diwali 2026/Diwali 2026-sello.png
+...
+```
+
+### 4. Sincronizar desde la app
+
+Una vez subidos los archivos, el usuario debe:
+
+1. Abrir la aplicación en su equipo.
+2. Ir a **Configuración** → sección **"Base de datos sellos"**.
+3. Pulsar el botón **"Sincronizar con la nube"**.
+
+La app verificará la identidad del usuario, escaneará su carpeta en S3, actualizará el catálogo en DynamoDB y descargará las imágenes nuevas. Al finalizar mostrará un resumen con los sellos añadidos/eliminados.
+
+### 5. Eliminar un sello
+
+Para eliminar un sello, borra la carpeta completa del bucket:
+
+```powershell
+aws s3 rm "s3://svvs-kiosko-stamps/admin.svvs/2026/Boston 2026/" --recursive --region eu-west-1
+```
+
+Después, el usuario debe sincronizar de nuevo desde la app para que el sello desaparezca de su catálogo local.
+
+### 6. Notas importantes
+
+- **Ambos archivos obligatorios**: El fondo (`.jpg`) y el logo (`.png`) deben estar presentes para que el sello se considere "completo". Si falta alguno, la Lambda lo marcará como `incomplete` y no se descargará.
+- **Coincidencia de nombres**: El nombre de la carpeta en S3 debe coincidir con el prefijo del nombre de los archivos. Ejemplo: carpeta `Boston 2026/` contiene `Boston 2026-fondo.jpg` y `Boston 2026-sello.png`.
+- **Sincronización manual**: Los cambios en S3 no son instantáneos en la app. El usuario debe pulsar "Sincronizar con la nube" para obtener los cambios.
+- **DynamoDB se actualiza automáticamente**: No es necesario tocar la base de datos manualmente. La Lambda de sincronización escanea el bucket y actualiza el catálogo en DynamoDB durante cada sincronización.
+- **Estructura por usuario**: Cada usuario tiene su propia carpeta raíz (`{username}/`). Los sellos de un usuario no son visibles para otro.
+
+---
+
+## Fases diferidas
+
+Las siguientes mejoras quedan fuera de la entrega actual:
+
+- **Sincronización automática al arranque**: Actualmente es solo bajo demanda (botón). Se podría añadir una sincronización silenciosa al iniciar la app si hay conexión.
+- **S3 Event Notifications**: Para volúmenes grandes, se podría reaccionar a cambios en S3 en tiempo real en lugar de escanear on-demand.
+- **Caché de miniaturas**: Generar thumbnails optimizados en lugar de cargar las imágenes completas en la lista.
+- **Sincronización selectiva por año**: Permitir al usuario elegir qué años descargar.
+- **Versionado de imágenes**: Detectar si una imagen se ha actualizado (no solo alta/baja de carpetas).
+
+---
+
 ## Próximos pasos
 
-- [ ] **Fase 2:** Sistema de licencias (validar licencia al arrancar, limitar por máquina)
-- [ ] **Fase 3:** Base de datos por usuario (sync de ferias/sellos desde AWS)
+- [x] **Fase 2:** Sistema de licencias (validar licencia al arrancar, limitar por máquina)
+- [x] **Fase 3:** Base de datos por usuario (sync de ferias/sellos desde AWS)
 - [ ] **Fase 4:** Panel admin web (gestionar usuarios, licencias, ferias)
 - [ ] **Fase 5:** Auto-update con electron-updater apuntando a CloudFront
 
@@ -454,13 +555,164 @@ npm run build:win
 .\aws\scripts\upload-release.ps1 -Version "1.1.0" -ExePath ".\dist\svvs-app.exe"
 ```
 
-## Fase 4: Base de datos
-La app sincroniza ferias/sellos/logos desde AWS. Cada usuario tiene sus propios datos.
+## Fase 4: Base de datos de sellos
+La app sincroniza los sellos/fondos/logos desde un bucket S3 en AWS. Cada usuario tiene sus propios sellos organizados por año.
 
-Endpoint GET /api/sync — devuelve ferias asignadas al usuario + presigned URLs de imágenes
-Botón "Actualizar" en la app → descarga imágenes nuevas → actualiza SQLite local
-Audit log: cada sync registra usuario + machineId + timestamp
-Validación: si machineId no es válido → deniega + te alerta
+### Bucket S3: `svvs-kiosko-stamps`
+
+Almacena las imágenes de sellos de todos los usuarios. Es un bucket privado con cifrado SSE-S3.
+
+**Estructura de carpetas:**
+```
+svvs-kiosko-stamps/
+├── {username}/
+│   ├── {año}/
+│   │   ├── {nombre-sello}/
+│   │   │   ├── {nombre}-fondo.jpg
+│   │   │   └── {nombre}-sello.png
+│   │   └── ...
+│   └── ...
+└── {otro-usuario}/
+    └── ...
+```
+
+Ejemplo real:
+```
+svvs-kiosko-stamps/
+├── admin.svvs/
+│   ├── 2026/
+│   │   ├── Boston 2026/
+│   │   │   ├── Boston 2026-fondo.jpg
+│   │   │   └── Boston 2026-sello.png
+│   │   ├── Diwali 2026/
+│   │   │   ├── Diwali 2026-fondo.jpg
+│   │   │   └── Diwali 2026-sello.png
+│   │   └── ...
+│   └── ...
+```
+
+### DynamoDB: tabla `svvs-kiosko-stamp-catalog`
+
+Catálogo de sellos disponibles por usuario. Se actualiza automáticamente durante la sincronización al escanear el bucket.
+
+| Atributo | Tipo | Descripción |
+|----------|------|-------------|
+| `username` (PK) | String | Nombre de usuario |
+| `stampId` (SK) | String | `{año}#{nombre-sello}` (ej: `2026#Boston 2026`) |
+| `year` | String | Año del sello |
+| `stampName` | String | Nombre del sello |
+| `fondoKey` | String | Ruta S3 al archivo de fondo |
+| `logoKey` | String | Ruta S3 al archivo de logo |
+| `status` | String | `complete` / `incomplete` |
+| `createdAt` | String | ISO 8601 fecha de alta |
+| `updatedAt` | String | ISO 8601 última actualización |
+
+Modo de facturación: **PAY_PER_REQUEST** (bajo demanda).
+
+### Lambda: `svvs-kiosko-sync-stamps`
+
+Endpoint: **POST /api/stamps/sync**
+
+Verifica la identidad del usuario, escanea su carpeta en S3, actualiza el catálogo en DynamoDB y devuelve el catálogo completo con URLs prefirmadas para descargar las imágenes.
+
+**Request body:**
+```json
+{
+  "apiKey": "ak_xxxxxxxxxxxxxxxx",
+  "machineId": "abc123def456..."
+}
+```
+
+**Respuesta exitosa (200):**
+```json
+{
+  "ok": true,
+  "catalog": [
+    {
+      "stampId": "2026#Boston 2026",
+      "year": "2026",
+      "stampName": "Boston 2026",
+      "fondoUrl": "https://svvs-kiosko-stamps.s3.eu-west-1.amazonaws.com/...?X-Amz-...",
+      "logoUrl": "https://svvs-kiosko-stamps.s3.eu-west-1.amazonaws.com/...?X-Amz-...",
+      "status": "complete"
+    }
+  ],
+  "summary": {
+    "total": 15,
+    "added": 2,
+    "removed": 1
+  }
+}
+```
+
+**Respuesta error autenticación (401):**
+```json
+{
+  "ok": false,
+  "error": "AUTH_FAILED",
+  "reason": "machineId no registrado para este usuario"
+}
+```
+
+> Las presigned URLs expiran en **5 minutos**.
+
+### Despliegue de la Lambda sync-stamps
+
+```powershell
+# Instalar dependencias
+cd aws\lambdas\sync-stamps; npm install; cd ..\..\..
+
+# Empaquetar
+Compress-Archive -Path "aws\lambdas\sync-stamps\*" -DestinationPath "aws\lambdas\sync-stamps.zip" -Force
+
+# Subir a AWS
+aws lambda update-function-code --function-name svvs-kiosko-sync-stamps --zip-file fileb://aws/lambdas/sync-stamps.zip --region eu-west-1 --no-cli-pager
+```
+
+### Flujo de sincronización
+
+```
+1. Usuario pulsa "Sincronizar con la nube" en Configuración
+2. App envía POST /api/stamps/sync con apiKey + machineId
+3. Lambda verifica identidad contra tabla svvs-kiosko-users
+4. Si falla → devuelve 401 → app se bloquea y borra datos locales
+5. Si OK → Lambda escanea S3 prefix {username}/
+6. Lambda compara con DynamoDB: detecta altas y bajas
+7. Lambda actualiza DynamoDB y genera presigned URLs
+8. Lambda devuelve catálogo completo + resumen de cambios
+9. App descarga imágenes nuevas vía presigned URLs
+10. App elimina imágenes de sellos borrados
+11. App actualiza SQLite local con el catálogo
+12. Se muestra resumen al usuario (añadidos/eliminados)
+```
+
+### Subir sellos al bucket de un usuario
+
+```powershell
+.\aws\scripts\upload-stamps.ps1 -Username "admin.svvs" -SourceFolder ".\bbdd-ferias\2026"
+
+# Ejemplo serpiente
+.\aws\scripts\upload-stamps.ps1 -Username "vjc.home" -Year "2026" -StampName "Diwali 2026" `
+  -BulkFolder ".\bbdd-ferias\2026\Diwali 2026"
+
+.\aws\scripts\upload-stamps.ps1 -Username "vjc.home" -Year "2026" -StampName "Gibraltar" `
+  -BulkFolder ".\bbdd-ferias\2026\Gibraltar"
+
+# Borrar
+aws s3 rm "s3://svvs-kiosko-stamps/vjc.home/2026/Boston 2026/" --recursive --region eu-west-1
+
+```
+
+Para subirlo manualmente:
+
+``` bash
+s3://svvs-kiosko-stamps/{username}/{año}/{nombre-sello}/{nombre-sello}-fondo.jpg
+s3://svvs-kiosko-stamps/{username}/{año}/{nombre-sello}/{nombre-sello}-sello.png
+
+aws s3 cp ".\bbdd-ferias\2026\Boston 2026\Boston 2026-fondo.jpg" "s3://svvs-kiosko-stamps/admin.svvs/2026/Boston 2026/Boston 2026-fondo.jpg" --region eu-west-1
+aws s3 cp ".\bbdd-ferias\2026\Boston 2026\Boston 2026-sello.png" "s3://svvs-kiosko-stamps/admin.svvs/2026/Boston 2026/Boston 2026-sello.png" --region eu-west-1
+
+```
 
 ## Fase 5: Panel admin web
 Una web separada (protegida con Cognito + MFA) para que tú puedas:

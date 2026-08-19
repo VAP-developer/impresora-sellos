@@ -1,0 +1,9 @@
+[
+  {
+    "ResourceType": "AWS::Lambda::Function",
+    "LogicalResourceId": "SyncStampsFunction",
+    "ResourceIdentifier": {
+      "FunctionName": "svvs-kiosko-sync-stamps"
+    }
+  }
+]

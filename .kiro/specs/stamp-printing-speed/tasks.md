@@ -8,31 +8,31 @@ Optimización de la velocidad de generación de PDFs de sellos simples mediante 
 
 ## Tasks
 
-- [ ] 1. Implement image cache in stamp-renderer.ts
-  - [ ] 1.1 Add `buildImageCache()` function
+- [x] 1. Implement image cache in stamp-renderer.ts
+  - [x] 1.1 Add `buildImageCache()` function
     - Create function `buildImageCache(stamps: StampRenderParams[]): Map<string, Buffer>` that iterates all stamps and pre-decodes unique base64 data URIs into Buffers
     - Handle malformed base64 gracefully with try/catch (skip entry, don't abort)
     - Skip file paths (PDFKit reads them directly from FS)
     - Cache key is the full data URI string; value is the decoded Buffer
     - _Requirements: 2.1, 2.2, 2.3, 2.4_
 
-  - [ ] 1.2 Modify `drawBackground()` to accept optional `imageCache` parameter
+  - [x] 1.2 Modify `drawBackground()` to accept optional `imageCache` parameter
     - Add optional parameter `imageCache?: Map<string, Buffer>` to `drawBackground`
     - When cache contains the imageSource key, use cached Buffer instead of re-decoding
     - Fallback to inline decode when cache miss (preserves backward compatibility for callers without cache)
     - _Requirements: 2.1, 2.4_
 
-  - [ ] 1.3 Modify `drawOverlay()` to accept optional `imageCache` parameter
+  - [x] 1.3 Modify `drawOverlay()` to accept optional `imageCache` parameter
     - Same pattern as drawBackground: add `imageCache?: Map<string, Buffer>` parameter
     - Use cached Buffer when available, fallback to inline decode on miss
     - _Requirements: 2.2, 2.4_
 
-  - [ ] 1.4 Modify `drawLogoPng()` to accept optional `imageCache` parameter
+  - [x] 1.4 Modify `drawLogoPng()` to accept optional `imageCache` parameter
     - Add `imageCache?: Map<string, Buffer>` as last parameter (after `evento`)
     - Use cached Buffer when available, fallback to inline decode on miss
     - _Requirements: 2.3, 2.4_
 
-  - [ ] 1.5 Update `renderStampMultiPage()` to build and use image cache
+  - [x] 1.5 Update `renderStampMultiPage()` to build and use image cache
     - Call `buildImageCache(stamps)` before the page loop
     - Pass the cache to `drawBackground`, `drawOverlay`, and `drawLogoPng` within the loop
     - Font registration remains once before the loop (already correct, Requirement 3.1, 3.2)
@@ -49,18 +49,18 @@ Optimización de la velocidad de generación de PDFs de sellos simples mediante 
     - For any stamp batch with malformed base64 data URIs, `renderStampMultiPage` still returns a valid non-empty Buffer without throwing
     - **Validates: Requirements 2.4**
 
-- [ ] 2. Checkpoint - Verify stamp-renderer changes
+- [x] 2. Checkpoint - Verify stamp-renderer changes
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 3. Remove `groupLabels()` calls for simple stamps in pdf-generator.ts
-  - [ ] 3.1 Remove `groupLabels()` in the dynamic tariff path (model 1 and model 2)
+- [x] 3. Remove `groupLabels()` calls for simple stamps in pdf-generator.ts
+  - [x] 3.1 Remove `groupLabels()` in the dynamic tariff path (model 1 and model 2)
     - Replace the `groupLabels(stamps, cutNumber)` + loop pattern with a direct call: `const pdfBuffer = await renderStampMultiPage(stamps)`
     - Push a single GeneratedPdf entry per tariff/model with pdfType `stamp_simple`
     - Update description to reflect total count: `${tariff.name} modelo${model} x${stamps.length}`
     - Do NOT remove the `groupLabels` import or `cutNumber` variable (Requirement 5.2)
     - _Requirements: 1.1, 1.3, 5.1, 7.1_
 
-  - [ ] 3.2 Remove `groupLabels()` in the legacy static tariff path
+  - [x] 3.2 Remove `groupLabels()` in the legacy static tariff path
     - Replace the `groupLabels(stamps, cutNumber)` + loop pattern with a direct call: `const pdfBuffer = await renderStampMultiPage(stamps)`
     - Push a single GeneratedPdf entry with pdfType `SELLO_simple` per tariff/model
     - Update description to reflect total count
@@ -87,16 +87,16 @@ Optimización de la velocidad de generación de PDFs de sellos simples mediante 
     - For any sale, `SaleGenerationResult.stampCount` equals the total count of GeneratedPdf entries whose pdfType starts with `stamp_`
     - **Validates: Requirements 6.3**
 
-- [ ] 4. Final checkpoint - Ensure all tests pass
+- [x] 4. Final checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 5. Add DPI configuration to windows-backend.ts for crisp print quality
-  - [ ] 5.1 Add exported PRINT_DPI constant
+- [x] 5. Add DPI configuration to windows-backend.ts for crisp print quality
+  - [x] 5.1 Add exported PRINT_DPI constant
     - Add `export const PRINT_DPI = '300x300dpi'` to windows-backend.ts near the top constants section
     - Add JSDoc comment explaining this controls SumatraPDF's rasterization resolution
     - _Requirements: 9.1, 9.2_
 
-  - [ ] 5.2 Update SumatraPDF print-settings to include DPI
+  - [x] 5.2 Update SumatraPDF print-settings to include DPI
     - In the `print()` method, change `-print-settings` from `'noscale'` to `` `noscale,${PRINT_DPI}` ``
     - This applies to ALL print jobs (stamps and tickets alike)
     - The `noscale` parameter is preserved — only DPI is added

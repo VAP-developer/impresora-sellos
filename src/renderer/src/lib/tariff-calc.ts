@@ -364,7 +364,8 @@ export function validateSale(
   precios: PreciosConfig,
   ticket: TicketConfig,
   sello: SelloConfig,
-  clienteId: number
+  clienteId: number,
+  skipBudgetCheck?: boolean
 ): string | null {
   const sellos1 = calcUsedRollo1(q)
   const sellos2 = calcUsedRollo2(q)
@@ -393,8 +394,8 @@ export function validateSale(
     return 'No hay suficientes sellos del segundo motivo'
   }
 
-  // Check spending limit
-  if (total > limite) {
+  // Check spending limit (skip for Oficina/filatelia profile)
+  if (!skipBudgetCheck && total > limite) {
     return `Ha excedido el límite de compra de ${limite}€`
   }
 

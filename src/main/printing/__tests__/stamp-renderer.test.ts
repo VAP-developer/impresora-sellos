@@ -60,13 +60,13 @@ describe('stamp-renderer', () => {
   describe('Constants', () => {
     it('should define correct stamp dimensions in mm', () => {
       expect(STAMP_WIDTH_MM).toBe(55)
-      expect(STAMP_HEIGHT_MM).toBe(25)
+      expect(STAMP_HEIGHT_MM).toBe(55)
     })
 
     it('should convert mm to points correctly', () => {
       const MM_TO_PT = 72 / 25.4
       expect(STAMP_WIDTH).toBeCloseTo(55 * MM_TO_PT, 2)
-      expect(STAMP_HEIGHT).toBeCloseTo(25 * MM_TO_PT, 2)
+      expect(STAMP_HEIGHT).toBeCloseTo(55 * MM_TO_PT, 2)
     })
   })
 

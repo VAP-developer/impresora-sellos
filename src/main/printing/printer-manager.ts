@@ -15,7 +15,8 @@
  * Correctness Property: 9 (deterministic routing based on target)
  */
 
-import { WindowsBackend } from './windows-backend'
+import { WindowsBackend, getWindowsPrinterName } from './windows-backend'
+import { DpiDetector, DpiCache, FALLBACK_DPI } from './dpi-detector'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -51,6 +52,9 @@ export interface PrintOptions {
   jobName?: string
   /** Thermal printer configuration (when target is a thermal label printer) */
   thermalConfig?: ThermalPrinterConfig
+  /** Cut interval: number of pages after which the printer should auto-cut.
+   * Used to configure the Brother driver's "cut every N labels" setting. */
+  cutInterval?: number
 }
 
 /** Result from submitting a print job */
@@ -225,11 +229,20 @@ export class PrinterManager {
   private backend: PrinterBackend
   private assignments: PrinterAssignments
   private paused: Set<PrinterTarget>
+  private dpiDetector?: DpiDetector
+  private dpiCache?: DpiCache
 
-  constructor(backend: PrinterBackend, assignments?: PrinterAssignments) {
+  constructor(
+    backend: PrinterBackend,
+    assignments?: PrinterAssignments,
+    dpiDetector?: DpiDetector,
+    dpiCache?: DpiCache
+  ) {
     this.backend = backend
     this.assignments = assignments ?? {}
     this.paused = new Set()
+    this.dpiDetector = dpiDetector
+    this.dpiCache = dpiCache
   }
 
   /**
@@ -241,9 +254,52 @@ export class PrinterManager {
 
   /**
    * Updates the printer assignments (target → URI mapping).
+   * Triggers fire-and-forget DPI detection for newly assigned printers.
    */
   setAssignments(assignments: PrinterAssignments): void {
+    // Store previous assignments for cache invalidation
+    const previousAssignments = { ...this.assignments }
+
+    // Keep existing merge logic
     this.assignments = { ...this.assignments, ...assignments }
+
+    // Fire-and-forget DPI detection if detector and cache are available
+    if (this.dpiDetector && this.dpiCache) {
+      const targets: PrinterTarget[] = ['printer1', 'printer2', 'ticket']
+      const detector = this.dpiDetector
+      const cache = this.dpiCache
+
+      const detectionPromises: Promise<void>[] = []
+
+      for (const target of targets) {
+        const newUri = assignments[target]
+        if (!newUri) continue
+
+        const printerName = getWindowsPrinterName(newUri)
+
+        // Invalidate old cache entry if the target had a different printer before
+        const previousUri = previousAssignments[target]
+        if (previousUri) {
+          const previousName = getWindowsPrinterName(previousUri)
+          if (previousName !== printerName) {
+            cache.delete(previousName)
+          }
+        }
+
+        // Detect DPI for the new printer (store fallback on failure)
+        detectionPromises.push(
+          detector.detect(printerName).then(
+            (dpi) => { cache.set(printerName, dpi) },
+            () => { cache.set(printerName, FALLBACK_DPI) }
+          )
+        )
+      }
+
+      // Non-blocking: intentionally not awaited
+      if (detectionPromises.length > 0) {
+        void Promise.allSettled(detectionPromises)
+      }
+    }
   }
 
   /**

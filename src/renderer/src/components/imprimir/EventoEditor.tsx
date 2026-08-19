@@ -23,6 +23,8 @@ import {
   getImageByName
 } from '@renderer/lib/ipc-client'
 import { useTariffGroupsStore } from '@renderer/stores/tariff-groups.store'
+import { useConfigStore } from '@renderer/stores/config.store'
+import { formatMes } from '@renderer/lib/code-formatter'
 import { CURRENCIES } from '../settings/CurrencySelector'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -74,6 +76,7 @@ export default function EventoEditor({
   onEventosChanged
 }: EventoEditorProps): JSX.Element {
   const [expanded, setExpanded] = useState(false)
+  const { config } = useConfigStore()
 
   // Year navigation
   const [years, setYears] = useState<number[]>([])
@@ -495,7 +498,7 @@ export default function EventoEditor({
                     >
                       <span className="font-bold text-blue-700">{ev.nevento || '(sin nombre)'}</span>
                       {(ev.codigo_feria_1 || ev.codigo_feria_2) && (
-                        <span className="ml-2 text-xs font-mono bg-gray-100 px-1 rounded">{ev.codigo_feria_1}-{ev.codigo_feria_2}</span>
+                        <span className="ml-2 text-xs font-mono bg-gray-100 px-1 rounded">{ev.codigo_feria_1}-{formatMes(config?.codigo.mes ?? 0)}{ev.codigo_feria_2}</span>
                       )}
                       <span className="block text-sm text-gray-500">
                         {ev.nferia} — {ev.nlugar} — {ev.fecha}
@@ -543,19 +546,28 @@ export default function EventoEditor({
                       </div>
                       <div className="flex-1">
                         <label htmlFor="ev-codigo-feria-2" className="block text-sm text-gray-600">
-                          Código Pais (max 3 chars)
+                          Código País (max 2 chars)
                         </label>
                         <input
                           id="ev-codigo-feria-2"
                           type="text"
                           value={form.codigo_feria_2}
-                          onChange={(e) => handleFieldChange('codigo_feria_2', e.target.value.slice(0, 3).toUpperCase())}
-                          maxLength={3}
+                          onChange={(e) => handleFieldChange('codigo_feria_2', e.target.value.slice(0, 2).toUpperCase())}
+                          maxLength={2}
                           className="w-full border border-gray-300 rounded p-2 font-mono"
-                          placeholder="Ej: VAP"
+                          placeholder="Ej: EF"
                         />
                       </div>
                     </div>
+
+                    {/* Vista previa del código con mes */}
+                    {(form.codigo_feria_1 || form.codigo_feria_2) && (
+                      <div className="text-xs text-gray-500">
+                        <span>Vista previa (en sello): </span>
+                        <span className="font-mono font-bold">{form.codigo_feria_1}-{formatMes(config?.codigo.mes ?? 0)}{form.codigo_feria_2}</span>
+                        <span className="ml-2 text-gray-400">Ej: PM26-<em>m</em>ES → la <em>m</em> es el mes de pestaña Máquina</span>
+                      </div>
+                    )}
 
                     {/* Nombre evento */}
                     <div>

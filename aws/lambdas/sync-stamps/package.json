@@ -1,0 +1,11 @@
+{
+  "name": "svvs-kiosko-sync-stamps",
+  "version": "1.0.0",
+  "description": "Lambda de sincronización de sellos para SvvS Kiosko",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.600.0",
+    "@aws-sdk/client-dynamodb": "^3.600.0",
+    "@aws-sdk/s3-request-presigner": "^3.600.0"
+  }
+}
