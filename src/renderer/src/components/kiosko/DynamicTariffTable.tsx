@@ -14,6 +14,7 @@ import { useMemo, useCallback } from 'react'
 import { useKioskoStore, buildQuantityKey } from '@renderer/stores/kiosko.store'
 import { useConfigStore } from '@renderer/stores/config.store'
 import { calcDynamicLimits } from '@renderer/lib/tariff-calc'
+import { getCurrencySymbol } from '@renderer/lib/currencies'
 import type { DynamicQuantities, DynamicLimits } from '@renderer/lib/tariff-calc'
 import type { Tariff, Strip } from '@renderer/lib/ipc-client'
 import TariffTableContent from './TariffTableContent'
@@ -102,8 +103,7 @@ export default function DynamicTariffTable(): JSX.Element {
 
   // Convert currency code to symbol
   const currencySymbol = useMemo(() => {
-    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', JPY: '¥', CHF: 'Fr' }
-    return symbols[activeCurrency] ?? activeCurrency
+    return getCurrencySymbol(activeCurrency)
   }, [activeCurrency])
 
   const togglePrice = useCallback(() => {

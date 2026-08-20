@@ -94,6 +94,8 @@ export interface PreciosConfig {
 /** Configuración de imágenes de ferias (persistida en SQLite config) */
 export interface ImagenesConfig {
   printSello: boolean
+  printLogoPng: boolean
+  useSecondaryPrice: boolean
   activeFair: { year: string; fairName: string } | null
 }
 

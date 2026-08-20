@@ -105,6 +105,8 @@ export interface PreciosConfig {
 
 export interface ImagenesConfig {
   printSello: boolean
+  printLogoPng: boolean
+  useSecondaryPrice: boolean
   activeFair: { year: string; fairName: string } | null
 }
 
@@ -364,7 +366,7 @@ export class ConfigRepository {
    */
   getImagenes(): ImagenesConfig {
     const config = this.get()
-    return config?.imagenes ?? { printSello: false, activeFair: null }
+    return config?.imagenes ?? { printSello: false, printLogoPng: false, useSecondaryPrice: false, activeFair: null }
   }
 
   /**

@@ -10,7 +10,6 @@
 
 import { useEffect, useState } from 'react'
 import { useConfigStore } from '@renderer/stores/config.store'
-import { formatLabelCode } from '@renderer/lib/code-formatter'
 import * as ipc from '@renderer/lib/ipc-client'
 
 interface StampModelSingleProps {
@@ -55,8 +54,8 @@ export default function StampModelSingle({ model }: StampModelSingleProps): JSX.
   const fecha = activeEvento?.fecha ?? ''
   const localidad = activeEvento?.localidad ?? ''
 
-  // Code
-  const codeStr = config?.codigo ? formatLabelCode(config.codigo) : null
+  // Code - use the active event's codigo (event code)
+  const codeStr = activeEvento?.codigo ?? null
   const codeLines = codeStr ? formatCodigoLines(codeStr) : null
 
   // Fecha formatted (month + year only)

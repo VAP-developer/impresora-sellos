@@ -28,6 +28,7 @@ import {
   buildTicketMedia
 } from './printer-manager'
 import { GeneratedPdf } from './pdf-generator'
+import { ConfigRepository } from '../database/repositories/config.repository'
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -213,8 +214,10 @@ export class PrintQueueService {
     if (job.printerTarget === 'ticket') {
       const cached = this.bufferCache.get(job.id)
       const heightMm = cached?.ticketHeightMm ?? this.options.defaultTicketHeightMm
+      const media = buildTicketMedia(heightMm)
+      console.log(`[PrintQueue] Ticket job ${job.id}: heightMm=${heightMm}, media=${media}, cached=${!!cached?.ticketHeightMm}`)
       return {
-        media: buildTicketMedia(heightMm),
+        media,
         orientation: TICKET_ORIENTATION,
         jobName: `${job.pdfType}_${job.id}`
       }
@@ -222,10 +225,24 @@ export class PrintQueueService {
 
     // Stamp printers (printer1, printer2) — all stamp PDFs use standard media.
     // Grouping by cutNumber is handled at PDF generation time (1 PDF per group).
+    // We also pass cutInterval so the Windows backend reconfigures the Brother
+    // driver's "cut every N labels" DEVMODE setting before each print job.
+    // This ensures the driver's cut interval always matches the app's cutNumber,
+    // regardless of what's manually configured in Windows printer properties.
+    let cutInterval: number | undefined
+    try {
+      const configRepo = new ConfigRepository()
+      cutInterval = configRepo.getCutNumber()
+    } catch {
+      // DB not available — don't pass cutInterval, driver defaults will apply
+      cutInterval = undefined
+    }
+
     return {
       media: STAMP_MEDIA,
       orientation: STAMP_ORIENTATION,
-      jobName: `${job.pdfType}_${job.id}`
+      jobName: `${job.pdfType}_${job.id}`,
+      cutInterval
     }
   }
 

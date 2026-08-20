@@ -345,7 +345,7 @@ class ConfigRepository {
    */
   getImagenes() {
     const config = this.get();
-    return config?.imagenes ?? { printSello: false, activeFair: null };
+    return config?.imagenes ?? { printSello: false, printLogoPng: false, useSecondaryPrice: false, activeFair: null };
   }
   /**
    * Updates only the imagenes section of the config.
@@ -917,6 +917,92 @@ class WmiDpiDetector {
     }
   }
 }
+function parseMediaToMm(media) {
+  const match = media.match(/^Custom\.(\d+)x(\d+)mm$/);
+  if (!match) return null;
+  return { widthMm: parseInt(match[1], 10), heightMm: parseInt(match[2], 10) };
+}
+class ElectronPrintBackend {
+  /**
+   * Prints a PDF buffer to the specified printer with custom paper size.
+   *
+   * @param printerName - Windows printer name (decoded from URI)
+   * @param pdfPath - Path to the PDF file on disk
+   * @param options - Print options including media (paper size) and orientation
+   * @returns Promise resolving to print result
+   */
+  async print(printerName, pdfPath, options) {
+    const jobName = options.jobName ?? `electron_print_${Date.now()}`;
+    const customSize = parseMediaToMm(options.media);
+    if (customSize) {
+      try {
+        const { execSync } = require("child_process");
+        const widthTenths = customSize.widthMm * 10;
+        const heightTenths = customSize.heightMm * 10;
+        const psScript = [
+          `$regPath = 'HKCU:\\Printers\\DevModePerUser'`,
+          `$pn = '${printerName.replace(/'/g, "''")}'`,
+          `$dm = (Get-ItemProperty $regPath).$pn`,
+          `if ($dm -and $dm.Length -gt 84) {`,
+          `  [BitConverter]::GetBytes([int16]256).CopyTo($dm, 78)`,
+          `  [BitConverter]::GetBytes([int16]${heightTenths}).CopyTo($dm, 80)`,
+          `  [BitConverter]::GetBytes([int16]${widthTenths}).CopyTo($dm, 82)`,
+          `  $f = [BitConverter]::ToInt32($dm, 72) -bor 0xE`,
+          `  [BitConverter]::GetBytes([int32]$f).CopyTo($dm, 72)`,
+          `  Set-ItemProperty -Path $regPath -Name $pn -Value $dm -Type Binary`,
+          `  Write-Host "OK:${heightTenths}"`,
+          `} else { Write-Host "SKIP:no-dm" }`
+        ].join("\n");
+        const encoded = Buffer.from(psScript, "utf16le").toString("base64");
+        const result = execSync(
+          `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encoded}`,
+          { timeout: 5e3, encoding: "utf8" }
+        );
+        console.log(`[ElectronPrintBackend] Registry update: ${result.trim()}`);
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      } catch (err) {
+        console.warn("[ElectronPrintBackend] Failed to set paper size in registry:", err);
+      }
+    }
+    const sumatraPath = this.getSumatraPdfPath();
+    if (!sumatraPath) {
+      return { success: false, error: "SumatraPDF not found" };
+    }
+    const { execFile } = require("child_process");
+    const { promisify } = require("util");
+    const execFileAsync = promisify(execFile);
+    const args = [
+      "-print-to",
+      printerName,
+      "-print-settings",
+      "noscale",
+      "-silent",
+      pdfPath
+    ];
+    try {
+      await execFileAsync(sumatraPath, args, { timeout: 3e4 });
+      console.log(`[ElectronPrintBackend] SumatraPDF printed successfully: ${pdfPath}`);
+      return { success: true, jobId: jobName };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { success: false, error: `SumatraPDF print failed: ${message}` };
+    }
+  }
+  getSumatraPdfPath() {
+    const { join } = require("path");
+    const { existsSync } = require("fs");
+    let sumatraPath = join(
+      require.resolve("pdf-to-printer"),
+      "..",
+      "SumatraPDF-3.4.6-32.exe"
+    );
+    if (sumatraPath.includes("app.asar")) {
+      sumatraPath = sumatraPath.replace("app.asar", "app.asar.unpacked");
+    }
+    if (existsSync(sumatraPath)) return sumatraPath;
+    return "";
+  }
+}
 const defaultWindowsExecutor = {
   exec(command, options) {
     const { exec: nodeExec } = require("child_process");
@@ -943,76 +1029,6 @@ function parseCustomMedia(media) {
   if (!match) return null;
   return { widthTenths: parseInt(match[1], 10) * 10, heightTenths: parseInt(match[2], 10) * 10 };
 }
-async function configurePrinterPaperSize(printerName, widthTenths, heightTenths, executor) {
-  let scriptPath = "";
-  const { join } = require("path");
-  const { existsSync } = require("fs");
-  if (process.resourcesPath) {
-    const packaged = join(process.resourcesPath, "set-paper-size.ps1");
-    if (existsSync(packaged)) {
-      scriptPath = packaged;
-    }
-  }
-  if (!scriptPath) {
-    const devPath = join(__dirname, "..", "..", "resources", "set-paper-size.ps1");
-    if (existsSync(devPath)) {
-      scriptPath = devPath;
-    }
-  }
-  if (!scriptPath) {
-    const testPath = join(__dirname, "..", "..", "scripts", "set-paper-size.ps1");
-    if (existsSync(testPath)) {
-      scriptPath = testPath;
-    }
-  }
-  if (!scriptPath) {
-    const deepPath = join(__dirname, "..", "..", "..", "resources", "set-paper-size.ps1");
-    if (existsSync(deepPath)) {
-      scriptPath = deepPath;
-    }
-  }
-  if (!existsSync(scriptPath)) {
-    return;
-  }
-  const escapedPrinter = printerName.replace(/"/g, '`"');
-  const command = `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}" -PrinterName "${escapedPrinter}" -WidthTenthsMm ${widthTenths} -HeightTenthsMm ${heightTenths}`;
-  try {
-    await executor.exec(command, { timeout: 1e4 });
-  } catch {
-  }
-}
-async function configureCutInterval(printerName, cutInterval, executor) {
-  const { join } = require("path");
-  const { existsSync } = require("fs");
-  let scriptPath = "";
-  if (process.resourcesPath) {
-    const packaged = join(process.resourcesPath, "set-cut-interval.ps1");
-    if (existsSync(packaged)) {
-      scriptPath = packaged;
-    }
-  }
-  if (!scriptPath) {
-    const devPath = join(__dirname, "..", "..", "resources", "set-cut-interval.ps1");
-    if (existsSync(devPath)) {
-      scriptPath = devPath;
-    }
-  }
-  if (!scriptPath) {
-    const deepPath = join(__dirname, "..", "..", "..", "resources", "set-cut-interval.ps1");
-    if (existsSync(deepPath)) {
-      scriptPath = deepPath;
-    }
-  }
-  if (!scriptPath) {
-    return;
-  }
-  const escapedPrinter = printerName.replace(/"/g, '`"');
-  const cmd = `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}" -PrinterName "${escapedPrinter}" -CutInterval ${cutInterval}`;
-  try {
-    await executor.exec(cmd, { timeout: 1e4 });
-  } catch {
-  }
-}
 function getSumatraPdfPath() {
   const { join } = require("path");
   let sumatraPath = join(
@@ -1033,11 +1049,17 @@ class WindowsBackend {
     this.dpiCache = dpiCache;
   }
   /**
-   * Prints a PDF by invoking SumatraPDF directly with:
-   *   SumatraPDF.exe -print-to "PrinterName" -print-settings "noscale" -silent file.pdf
+   * Prints a PDF using the best available method:
    *
-   * "noscale" = print at 100% original size, no fitting, no shrinking.
-   * The printer driver's paper size configuration determines the output.
+   * - For TICKETS (custom paper size): Uses Electron's webContents.print() API
+   *   which passes the page size per-job in the DEVMODE. This ensures the
+   *   correct paper height regardless of the Windows driver defaults.
+   *
+   * - For STAMPS (fixed 55x25mm): Uses SumatraPDF with the driver's configured
+   *   paper size. The cut interval is controlled by grouping stamps into
+   *   separate PDFs (one per cut group) — the driver just needs "cut at end".
+   *
+   * Fallback: if Electron print fails, falls back to SumatraPDF.
    */
   async print(printerUri, pdfBuffer, options) {
     const { writeFileSync, unlinkSync, mkdirSync } = require("fs");
@@ -1055,31 +1077,34 @@ class WindowsBackend {
       writeFileSync(tempFile, pdfBuffer);
       const customMedia = parseCustomMedia(options.media);
       if (customMedia) {
-        await configurePrinterPaperSize(
-          printerName,
-          customMedia.widthTenths,
-          customMedia.heightTenths,
-          this.cmd
-        );
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      }
-      if (options.cutInterval && options.cutInterval > 0) {
         try {
-          await configureCutInterval(printerName, options.cutInterval, this.cmd);
-          await new Promise((resolve) => setTimeout(resolve, 300));
-        } catch {
+          const electronBackend = new ElectronPrintBackend();
+          const result = await electronBackend.print(printerName, tempFile, options);
+          if (result.success) {
+            setTimeout(() => {
+              try {
+                unlinkSync(tempFile);
+              } catch {
+              }
+            }, 1e4);
+            return result;
+          }
+          console.warn("[WindowsBackend] Electron print failed, falling back to SumatraPDF:", result.error);
+        } catch (err) {
+          console.warn("[WindowsBackend] Electron print error, falling back to SumatraPDF:", err);
         }
       }
       const sumatraPath = getSumatraPdfPath();
       const dpi = this.dpiCache?.get(printerName) ?? FALLBACK_DPI;
       const renderDpiX = dpi.dpiX * 2;
       const renderDpiY = dpi.dpiY * 2;
-      const resolvedDpi = `${renderDpiX}x${renderDpiY}dpi`;
+      const dpiSetting = `${renderDpiX}x${renderDpiY}dpi`;
+      const printSettings = `noscale,${dpiSetting}`;
       const args = [
         "-print-to",
         printerName,
         "-print-settings",
-        `noscale,${resolvedDpi}`,
+        printSettings,
         "-silent",
         tempFile
       ];
@@ -1723,16 +1748,26 @@ class PrintQueueService {
     if (job.printerTarget === "ticket") {
       const cached = this.bufferCache.get(job.id);
       const heightMm = cached?.ticketHeightMm ?? this.options.defaultTicketHeightMm;
+      const media = buildTicketMedia(heightMm);
+      console.log(`[PrintQueue] Ticket job ${job.id}: heightMm=${heightMm}, media=${media}, cached=${!!cached?.ticketHeightMm}`);
       return {
-        media: buildTicketMedia(heightMm),
+        media,
         orientation: TICKET_ORIENTATION,
         jobName: `${job.pdfType}_${job.id}`
       };
     }
+    let cutInterval;
+    try {
+      const configRepo = new ConfigRepository();
+      cutInterval = configRepo.getCutNumber();
+    } catch {
+      cutInterval = void 0;
+    }
     return {
       media: STAMP_MEDIA,
       orientation: STAMP_ORIENTATION,
-      jobName: `${job.pdfType}_${job.id}`
+      jobName: `${job.pdfType}_${job.id}`,
+      cutInterval
     };
   }
   /**
@@ -1909,6 +1944,54 @@ function initServices() {
   const queue = getPrintQueueService();
   queue.start();
   console.log("[Services] Print queue background processing started");
+  configureCutAtEnd().catch((err) => {
+    console.warn("[Services] Failed to configure cut-at-end mode:", err);
+  });
+}
+async function configureCutAtEnd() {
+  const { existsSync } = require("fs");
+  const { join } = require("path");
+  let scriptPath = "";
+  const scriptName = "configure-cut-at-end.ps1";
+  if (process.resourcesPath) {
+    const packaged = join(process.resourcesPath, scriptName);
+    if (existsSync(packaged)) scriptPath = packaged;
+  }
+  if (!scriptPath) {
+    const devPath = join(__dirname, "..", "resources", scriptName);
+    if (existsSync(devPath)) scriptPath = devPath;
+  }
+  if (!scriptPath) {
+    const devPath2 = join(__dirname, "..", "..", "resources", scriptName);
+    if (existsSync(devPath2)) scriptPath = devPath2;
+  }
+  if (!scriptPath) {
+    console.log("[Services] configure-cut-at-end.ps1 not found, skipping");
+    return;
+  }
+  let savedAssignments = {};
+  try {
+    const assignmentsRepo = new PrinterAssignmentsRepository();
+    savedAssignments = assignmentsRepo.getAll();
+  } catch {
+    return;
+  }
+  const stampPrinters = [savedAssignments.printer1, savedAssignments.printer2].filter(Boolean);
+  if (stampPrinters.length === 0) return;
+  const { exec: nodeExec } = require("child_process");
+  const { promisify } = require("util");
+  const execAsync2 = promisify(nodeExec);
+  for (const uri of stampPrinters) {
+    const printerName = decodeURIComponent(uri.replace("win://", ""));
+    const escaped = printerName.replace(/"/g, '`"');
+    const cmd = `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}" -PrinterName "${escaped}"`;
+    try {
+      await execAsync2(cmd, { timeout: 1e4 });
+      console.log(`[Services] Configured cut-at-end for: ${printerName}`);
+    } catch (err) {
+      console.warn(`[Services] Failed to configure cut-at-end for ${printerName}:`, err);
+    }
+  }
 }
 function shutdownServices() {
   if (printQueueService) {
@@ -3401,41 +3484,9 @@ function collectPdf(doc) {
   });
 }
 function calcTicketHeightMm(numItems) {
-  return TICKET_MARGIN_TOP + TICKET_LOGO_HEIGHT + TICKET_HEADER_HEIGHT + TICKET_COLUMNS_HEIGHT + numItems * TICKET_ITEM_ROW_HEIGHT + TICKET_TOTAL_HEIGHT + TICKET_FOOTER_HEIGHT + TICKET_MARGIN_BOTTOM;
+  return TICKET_MARGIN_TOP + TICKET_LOGO_HEIGHT + TICKET_HEADER_HEIGHT + TICKET_COLUMNS_HEIGHT + numItems * TICKET_ITEM_ROW_HEIGHT + TICKET_TOTAL_HEIGHT + TICKET_FOOTER_HEIGHT + TICKET_MARGIN_BOTTOM + TICKET_HEIGHT_SAFETY_MARGIN;
 }
-function calcActualTicketHeight(params) {
-  const tempDoc = new PDFDocument({ size: [TICKET_WIDTH, 1e3 * MM_TO_PT], margin: 0 });
-  registerFonts(tempDoc);
-  const { items, productos, modelo1Ticket, modelo2Ticket, feria } = params;
-  let totalHeight = 0;
-  totalHeight += TICKET_MARGIN_TOP;
-  totalHeight += TICKET_LOGO_HEIGHT;
-  const titleMaxWidth = TICKET_WIDTH - 6 * MM_TO_PT;
-  tempDoc.font(FONTS.bold).fontSize(12);
-  const titleHeightPt = tempDoc.heightOfString(feria, { width: titleMaxWidth, align: "center" });
-  const titleHeightMm = titleHeightPt / MM_TO_PT;
-  totalHeight += Math.max(5, titleHeightMm + 1) + 24;
-  totalHeight += TICKET_COLUMNS_HEIGHT;
-  const itemNameMaxWidth = 40 * MM_TO_PT;
-  for (let index = 0; index < items.length; index++) {
-    const item = items[index];
-    if (item.cantidad > 0) {
-      const producto = productos[index];
-      const modeloTicket = item.idProducto.slice(-1) === "1" ? modelo1Ticket : modelo2Ticket;
-      const itemName = modeloTicket + " " + producto.nombre_ticket;
-      tempDoc.font(FONTS.condensed).fontSize(8);
-      const textHeight = tempDoc.heightOfString(itemName, { width: itemNameMaxWidth, lineBreak: true });
-      const textHeightMm = textHeight / MM_TO_PT;
-      totalHeight += Math.max(TICKET_ITEM_ROW_HEIGHT, textHeightMm + 0.5);
-    }
-  }
-  totalHeight += TICKET_TOTAL_HEIGHT;
-  totalHeight += TICKET_FOOTER_HEIGHT;
-  totalHeight += TICKET_MARGIN_BOTTOM;
-  tempDoc.end();
-  return totalHeight;
-}
-const TICKET_MARGIN_TOP = 5;
+const TICKET_MARGIN_TOP = 7;
 const TICKET_LOGO_HEIGHT = 24;
 const TICKET_HEADER_HEIGHT = 29;
 const TICKET_COLUMNS_HEIGHT = 5;
@@ -3443,8 +3494,9 @@ const TICKET_ITEM_ROW_HEIGHT = 3.5;
 const TICKET_TOTAL_HEIGHT = 8;
 const TICKET_FOOTER_HEIGHT = 16;
 const TICKET_MARGIN_BOTTOM = 5;
+const TICKET_HEIGHT_SAFETY_MARGIN = 8;
 function calcTicketCajaHeightMm(numItems) {
-  return 5 + 14 + 38 + 5 + numItems * 3.5 + 8 + 16 + 5;
+  return 5 + 14 + 38 + 5 + numItems * 3.5 + 8 + 16 + 5 + TICKET_HEIGHT_SAFETY_MARGIN;
 }
 const MASTER_MARGIN_TOP = 5;
 const MASTER_LOGO_HEIGHT = 14;
@@ -3455,7 +3507,7 @@ const MASTER_TOTAL_HEIGHT = 8;
 const MASTER_FOOTER_HEIGHT = 20;
 const MASTER_MARGIN_BOTTOM = 5;
 function calcTicketMasterHeightMm(numItems) {
-  return MASTER_MARGIN_TOP + MASTER_LOGO_HEIGHT + MASTER_HEADER_HEIGHT + MASTER_COLUMNS_HEIGHT + numItems * MASTER_ITEM_ROW_HEIGHT + MASTER_TOTAL_HEIGHT + MASTER_FOOTER_HEIGHT + MASTER_MARGIN_BOTTOM;
+  return MASTER_MARGIN_TOP + MASTER_LOGO_HEIGHT + MASTER_HEADER_HEIGHT + MASTER_COLUMNS_HEIGHT + numItems * MASTER_ITEM_ROW_HEIGHT + MASTER_TOTAL_HEIGHT + MASTER_FOOTER_HEIGHT + MASTER_MARGIN_BOTTOM + TICKET_HEIGHT_SAFETY_MARGIN;
 }
 async function genTicket(params) {
   const {
@@ -3477,7 +3529,8 @@ async function genTicket(params) {
     l3,
     currencySymbol = "€"
   } = params;
-  const pageHeightMm = calcActualTicketHeight(params);
+  const numItems = countActiveItems(items);
+  const pageHeightMm = calcTicketHeightMm(numItems);
   const pageHeight = pageHeightMm * MM_TO_PT;
   const doc = new PDFDocument({
     size: [TICKET_WIDTH, pageHeight],
@@ -3556,29 +3609,6 @@ async function genTicket(params) {
   doc.end();
   return result;
 }
-function calcActualTicketCajaHeight(params) {
-  const tempDoc = new PDFDocument({ size: [TICKET_WIDTH, 1e3 * MM_TO_PT], margin: 0 });
-  registerFonts(tempDoc);
-  const { items, productos, modelo1Ticket, modelo2Ticket } = params;
-  const HEADER_HEIGHT_MM = 72;
-  const FOOTER_HEIGHT_MM = 22;
-  const itemNameMaxWidth = 25 * MM_TO_PT;
-  let itemsHeight = 0;
-  for (let index = 0; index < items.length; index++) {
-    const item = items[index];
-    if (item.cantidad > 0) {
-      const producto = productos[index];
-      const modeloTicket = item.idProducto.slice(-1) === "1" ? modelo1Ticket : modelo2Ticket;
-      const itemName = modeloTicket + " " + producto.nombre_ticket;
-      tempDoc.font(FONTS.condensed).fontSize(8);
-      const textHeight = tempDoc.heightOfString(itemName, { width: itemNameMaxWidth, lineBreak: true });
-      const textHeightMm = textHeight / MM_TO_PT;
-      itemsHeight += Math.max(3.5, textHeightMm + 0.5);
-    }
-  }
-  tempDoc.end();
-  return HEADER_HEIGHT_MM + itemsHeight + FOOTER_HEIGHT_MM;
-}
 async function genTicketCaja(params) {
   const {
     items,
@@ -3591,7 +3621,8 @@ async function genTicketCaja(params) {
     modelo2Ticket,
     currencySymbol = "€"
   } = params;
-  const pageHeightMm = calcActualTicketCajaHeight(params);
+  const numItems = countActiveItems(items);
+  const pageHeightMm = calcTicketCajaHeightMm(numItems);
   const pageHeight = pageHeightMm * MM_TO_PT;
   const doc = new PDFDocument({
     size: [TICKET_WIDTH, pageHeight],
@@ -3601,7 +3632,7 @@ async function genTicketCaja(params) {
   const result = collectPdf(doc);
   registerFonts(doc);
   const pageWidth = TICKET_WIDTH;
-  let y = 2;
+  let y = 4;
   const logoWidth = 30 * MM_TO_PT;
   const logoHeight = 11 * MM_TO_PT;
   drawImageConstrained(doc, "image2.jpg", y * MM_TO_PT, logoWidth, logoHeight, pageWidth);
@@ -3676,28 +3707,6 @@ async function genTicketCaja(params) {
   doc.end();
   return result;
 }
-function calcActualTicketMasterHeight(params) {
-  const tempDoc = new PDFDocument({ size: [TICKET_WIDTH, 1e3 * MM_TO_PT], margin: 0 });
-  registerFonts(tempDoc);
-  const { items, modelo1Ticket, modelo2Ticket } = params;
-  const HEADER_HEIGHT_MM = 66;
-  const FOOTER_HEIGHT_MM = 30;
-  const itemNameMaxWidth = 40 * MM_TO_PT;
-  let itemsHeight = 0;
-  for (let index = 0; index < items.length; index++) {
-    const item = items[index];
-    if (item.cantidad > 0) {
-      const modeloTicket = item.idProducto.slice(-1) === "1" ? modelo1Ticket : modelo2Ticket;
-      const itemName = modeloTicket + " Master Set";
-      tempDoc.font(FONTS.condensed).fontSize(8);
-      const textHeight = tempDoc.heightOfString(itemName, { width: itemNameMaxWidth, lineBreak: true });
-      const textHeightMm = textHeight / MM_TO_PT;
-      itemsHeight += Math.max(3, textHeightMm + 0.5);
-    }
-  }
-  tempDoc.end();
-  return HEADER_HEIGHT_MM + itemsHeight + FOOTER_HEIGHT_MM;
-}
 async function genTicketMaster(params) {
   const {
     fechaTicket,
@@ -3717,7 +3726,8 @@ async function genTicketMaster(params) {
     l3,
     currencySymbol = "€"
   } = params;
-  const pageHeightMm = calcActualTicketMasterHeight(params);
+  const numItems = countActiveItems(items);
+  const pageHeightMm = calcTicketMasterHeightMm(numItems);
   const pageHeight = pageHeightMm * MM_TO_PT;
   const doc = new PDFDocument({
     size: [TICKET_WIDTH, pageHeight],
@@ -3727,7 +3737,7 @@ async function genTicketMaster(params) {
   const result = collectPdf(doc);
   registerFonts(doc);
   const pageWidth = TICKET_WIDTH;
-  let y = 2;
+  let y = 4;
   drawImageConstrained(doc, "image2.jpg", y * MM_TO_PT, 30 * MM_TO_PT, 11 * MM_TO_PT, pageWidth);
   y += 12;
   drawImage(doc, "fondoticketcop.png", 5 * MM_TO_PT, y * MM_TO_PT, 70 * MM_TO_PT);
@@ -3873,7 +3883,6 @@ function buildLabelCode(config, productoId, codigoFeria1Override, codigoFeria2Ov
 }
 function buildTicketTitle(profile, baseTitle) {
   const profileLower = profile.toLowerCase();
-  if (profileLower === "filatelia") return `Filatelia de: ${baseTitle}`;
   if (profileLower === "protocolo") return `Protocolo de: ${baseTitle}`;
   if (profileLower === "spde") return `SPDE de: ${baseTitle}`;
   return baseTitle;
@@ -4030,7 +4039,8 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
   let codigoFeria1;
   let codigoFeria2;
   const profileLower = profile.toLowerCase();
-  if (profileLower === "filatelia") {
+  const isNoLogoMode = imageLayerOptions ? !imageLayerOptions.printLogoPng : false;
+  if (profileLower === "filatelia" || isNoLogoMode) {
     codigoFeria1 = config.codigo.codigo_feria_1 ?? "";
     codigoFeria2 = config.codigo.codigo_feria_2 ?? "";
   } else if (dynamicTariffCtx) {
@@ -4294,7 +4304,8 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
   const hasAnyItems = items.some((item) => item.cantidad > 0);
   if (hasAnyItems) {
     const fechaTicket = getTicketDateTime(config);
-    const baseTitle = buildTicketTitle(profile, config.ticket.eltitulo || config.ticket.titulo);
+    const rawTitle = config.ticket.eltitulo || config.ticket.titulo;
+    const baseTitle = isNoLogoMode ? `Filatelia de: ${rawTitle}` : buildTicketTitle(profile, rawTitle);
     const modoTicket = baseTitle;
     const modelo1Ticket = model1Name || "Modelo 1";
     const modelo2Ticket = model2Name || "Modelo 2";
@@ -4320,9 +4331,8 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
     const feria2ForTicket = codigoFeria2 ?? "";
     let codigoTicket = "";
     if (feria1ForTicket || feria2ForTicket) {
-      const mes = formatMes(config.codigo.mes);
       const cliente = formatCliente(config.codigo.cliente);
-      codigoTicket = `${feria1ForTicket}-${mes}${feria2ForTicket} ${cliente}`;
+      codigoTicket = `${feria1ForTicket} ${cliente}`;
     }
     const mainTicketParams = {
       fechaTicket,
@@ -4354,7 +4364,7 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
       ticketHeightMm
     });
     const maquinaPrefix = config.codigo.maquina.substring(0, 2).toUpperCase();
-    if (maquinaPrefix !== "MD" && maquinaPrefix !== "FI") {
+    if (maquinaPrefix !== "MD" && maquinaPrefix !== "FI" && profile !== "filatelia" && !isNoLogoMode) {
       for (let idx = 0; idx < items.length; idx++) {
         if (items[idx].cantidad > 0 && productos[idx].modo === "T") {
           for (let t = 0; t < items[idx].cantidad; t++) {
@@ -4527,6 +4537,7 @@ function registerSaleHandlers() {
       const typedQuantities = quantities;
       const typedProfile = profile;
       const typedImageFlags = imageFlags;
+      const effectiveProfile = typedImageFlags && !typedImageFlags.printLogoPng ? "Oficina" : typedProfile;
       const quantityKeys = Object.keys(typedQuantities);
       const isDynamic = quantityKeys.some((key) => /^tariff_\d+_s[12]$/.test(key));
       let tariffGroupCtx;
@@ -4610,7 +4621,7 @@ function registerSaleHandlers() {
           error: "No se pudo cargar el grupo de tarifas del evento activo. Revise la configuración del evento."
         };
       }
-      const result = executeSale(typedConfig, typedQuantities, typedProfile, void 0, tariffGroupCtx);
+      const result = executeSale(typedConfig, typedQuantities, effectiveProfile, void 0, tariffGroupCtx);
       if (!result.success) {
         return result;
       }
@@ -4685,7 +4696,7 @@ function registerSaleHandlers() {
         const pdfResult = await generateSalePdfs(
           updatedConfig,
           typedQuantities,
-          typedProfile,
+          effectiveProfile,
           void 0,
           imageLayerOptions,
           dynamicTariffCtx

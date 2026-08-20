@@ -101,6 +101,9 @@ export function registerSaleHandlers(): void {
       const typedProfile = profile as string
       const typedImageFlags = imageFlags as { printFondo: boolean; printSello: boolean; printLogoPng?: boolean; useSecondaryPrice?: boolean } | undefined
 
+      // No-logo mode: override profile to 'Oficina' for reports/order categorization
+      const effectiveProfile = (typedImageFlags && !typedImageFlags.printLogoPng) ? 'Oficina' : typedProfile
+
       // Detect if this is a dynamic tariff sale by checking for dynamic keys (tariff_*_s*)
       const quantityKeys = Object.keys(typedQuantities)
       const isDynamic = quantityKeys.some((key) => /^tariff_\d+_s[12]$/.test(key))
@@ -188,7 +191,7 @@ export function registerSaleHandlers(): void {
         } as SaleOutcome
       }
 
-      const result = executeSale(typedConfig, typedQuantities, typedProfile, undefined, tariffGroupCtx)
+      const result = executeSale(typedConfig, typedQuantities, effectiveProfile, undefined, tariffGroupCtx)
 
       // If transaction failed, return error immediately (no PDFs generated per Req 11.3)
       if (!result.success) {
@@ -278,7 +281,7 @@ export function registerSaleHandlers(): void {
         const pdfResult: SaleGenerationResult = await generateSalePdfs(
           updatedConfig,
           typedQuantities,
-          typedProfile,
+          effectiveProfile,
           undefined,
           imageLayerOptions,
           dynamicTariffCtx

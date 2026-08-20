@@ -83,6 +83,8 @@ export interface PreciosConfig {
 
 export interface ImagenesConfig {
   printSello: boolean
+  printLogoPng: boolean
+  useSecondaryPrice: boolean
   activeFair: { year: string; fairName: string } | null
 }
 

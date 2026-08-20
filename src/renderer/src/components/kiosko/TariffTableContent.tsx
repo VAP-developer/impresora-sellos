@@ -75,7 +75,7 @@ export default function TariffTableContent({
           <button
             type="button"
             onClick={toggleSecondary}
-            className="cursor-pointer hover:text-blue-200 transition-colors"
+            className="cursor-pointer text-yellow-300 hover:text-yellow-100 transition-colors font-bold"
             aria-label={`Alternar precio: ${showSecondary ? 'secundario' : 'local'}`}
             title="Clic para alternar entre precio local y secundario"
           >

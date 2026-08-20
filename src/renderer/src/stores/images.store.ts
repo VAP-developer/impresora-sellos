@@ -11,6 +11,7 @@
 
 import { create } from 'zustand'
 import * as ipc from '@renderer/lib/ipc-client'
+import { useKioskoStore } from './kiosko.store'
 
 export interface ImagesState {
   /** List of available fairs synced from bbdd-ferias/ */
@@ -42,8 +43,8 @@ export interface ImagesState {
   setPrintFondo: (value: boolean) => void
   /** Toggle printSello (persisted via IPC) */
   setPrintSello: (value: boolean) => Promise<void>
-  /** Toggle printLogoPng (volatile, not persisted) */
-  setPrintLogoPng: (value: boolean) => void
+  /** Toggle printLogoPng (persisted via IPC) */
+  setPrintLogoPng: (value: boolean) => Promise<void>
 }
 
 export const useImagesStore = create<ImagesState>((set, get) => ({
@@ -72,10 +73,14 @@ export const useImagesStore = create<ImagesState>((set, get) => ({
       const updates: Partial<ImagesState> = {
         fairList,
         printSello: imagenesConfig.printSello,
+        printLogoPng: imagenesConfig.printLogoPng ?? false,
         loading: false
       }
 
       set(updates)
+
+      // Restore useSecondaryPrice in kiosko store
+      useKioskoStore.getState().setUseSecondaryPrice(imagenesConfig.useSecondaryPrice ?? false)
 
       // If there was a persisted activeFair, restore it and load its images
       if (imagenesConfig.activeFair) {
@@ -112,8 +117,9 @@ export const useImagesStore = create<ImagesState>((set, get) => ({
       })
 
       // Persist activeFair to config
-      const { printSello } = get()
-      await ipc.updateImagenesConfig({ printSello, activeFair: { year, fairName } })
+      const { printSello, printLogoPng } = get()
+      const useSecondaryPrice = useKioskoStore.getState().useSecondaryPrice
+      await ipc.updateImagenesConfig({ printSello, printLogoPng, useSecondaryPrice, activeFair: { year, fairName } })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load fair images'
       set({ error: message, loading: false })
@@ -128,11 +134,17 @@ export const useImagesStore = create<ImagesState>((set, get) => ({
     set({ printSello: value })
 
     // Persist printSello to config via IPC
-    const { activeFair } = get()
-    await ipc.updateImagenesConfig({ printSello: value, activeFair })
+    const { activeFair, printLogoPng } = get()
+    const useSecondaryPrice = useKioskoStore.getState().useSecondaryPrice
+    await ipc.updateImagenesConfig({ printSello: value, printLogoPng, useSecondaryPrice, activeFair })
   },
 
-  setPrintLogoPng: (value: boolean) => {
+  setPrintLogoPng: async (value: boolean) => {
     set({ printLogoPng: value })
+
+    // Persist printLogoPng to config via IPC
+    const { activeFair, printSello } = get()
+    const useSecondaryPrice = useKioskoStore.getState().useSecondaryPrice
+    await ipc.updateImagenesConfig({ printSello, printLogoPng: value, useSecondaryPrice, activeFair })
   }
 }))

@@ -425,6 +425,7 @@ export function calcTicketHeightMm(numItems: number): number {
     + TICKET_TOTAL_HEIGHT
     + TICKET_FOOTER_HEIGHT
     + TICKET_MARGIN_BOTTOM
+    + TICKET_HEIGHT_SAFETY_MARGIN
 }
 
 /**
@@ -485,7 +486,11 @@ export function calcActualTicketHeight(params: GenTicketParams): number {
 }
 
 // Section heights for genTicket (in mm)
-const TICKET_MARGIN_TOP = 5
+// TICKET_MARGIN_TOP doubles as the starting Y coordinate for content, so
+// increasing it pushes the content away from the printer's top edge (where
+// the thermal head can clip the first millimetres) and grows the page height
+// by the same amount.
+const TICKET_MARGIN_TOP = 7
 const TICKET_LOGO_HEIGHT = 24
 const TICKET_HEADER_HEIGHT = 29
 const TICKET_COLUMNS_HEIGHT = 5
@@ -493,6 +498,15 @@ const TICKET_ITEM_ROW_HEIGHT = 3.5
 const TICKET_TOTAL_HEIGHT = 8
 const TICKET_FOOTER_HEIGHT = 16
 const TICKET_MARGIN_BOTTOM = 5
+
+/**
+ * Extra safety margin (mm) added to the calculated ticket height.
+ * Accounts for text wrapping, font metric variations, and rounding differences
+ * between pdfkit's layout engine and the static height calculation.
+ * Without this, the last line(s) may be cut off by the printer when the
+ * paper size exactly matches the calculated content height.
+ */
+const TICKET_HEIGHT_SAFETY_MARGIN = 8
 
 /**
  * Calculates the page height for genTicketCaja/genTicketMaster (slightly different formula).
@@ -519,7 +533,7 @@ export function calcTicketCajaHeight(numItems: number): number {
  *   - Bottom margin: 5
  */
 export function calcTicketCajaHeightMm(numItems: number): number {
-  return 5 + 14 + 38 + 5 + (numItems * 3.5) + 8 + 16 + 5
+  return 5 + 14 + 38 + 5 + (numItems * 3.5) + 8 + 16 + 5 + TICKET_HEIGHT_SAFETY_MARGIN
 }
 
 // Section heights for genTicketMaster (in mm)
@@ -544,6 +558,7 @@ export function calcTicketMasterHeightMm(numItems: number): number {
     + MASTER_TOTAL_HEIGHT
     + MASTER_FOOTER_HEIGHT
     + MASTER_MARGIN_BOTTOM
+    + TICKET_HEIGHT_SAFETY_MARGIN
 }
 
 // ─────────────────────────────────────────────
@@ -588,8 +603,9 @@ export async function genTicket(params: GenTicketParams): Promise<Buffer> {
     currencySymbol = '€'
   } = params
 
-  // Calculate actual height based on content
-  const pageHeightMm = calcActualTicketHeight(params)
+  // Calculate page height using the legacy formula (based on number of active items)
+  const numItems = countActiveItems(items)
+  const pageHeightMm = calcTicketHeightMm(numItems)
   const pageHeight = pageHeightMm * MM_TO_PT
 
   const doc = new PDFDocument({
@@ -770,8 +786,9 @@ export async function genTicketCaja(params: GenTicketCajaParams): Promise<Buffer
     currencySymbol = '€'
   } = params
 
-  // Calculate actual height based on content
-  const pageHeightMm = calcActualTicketCajaHeight(params)
+  // Calculate page height using the legacy formula (based on number of active items)
+  const numItems = countActiveItems(items)
+  const pageHeightMm = calcTicketCajaHeightMm(numItems)
   const pageHeight = pageHeightMm * MM_TO_PT
 
   const doc = new PDFDocument({
@@ -786,7 +803,8 @@ export async function genTicketCaja(params: GenTicketCajaParams): Promise<Buffer
   const pageWidth = TICKET_WIDTH
 
   // ─── Top-down layout ───
-  let y = 2
+  // Starts at 4mm (not 0) to keep content clear of the thermal head's top edge
+  let y = 4
 
   // 1. Logo centered (constrained to prevent overlap)
   const logoWidth = 30 * MM_TO_PT
@@ -974,8 +992,9 @@ export async function genTicketMaster(params: GenTicketMasterParams): Promise<Bu
     currencySymbol = '€'
   } = params
 
-  // Calculate actual height based on content
-  const pageHeightMm = calcActualTicketMasterHeight(params)
+  // Calculate page height using the legacy formula (based on number of active items)
+  const numItems = countActiveItems(items)
+  const pageHeightMm = calcTicketMasterHeightMm(numItems)
   const pageHeight = pageHeightMm * MM_TO_PT
 
   const doc = new PDFDocument({
@@ -990,7 +1009,8 @@ export async function genTicketMaster(params: GenTicketMasterParams): Promise<Bu
   const pageWidth = TICKET_WIDTH
 
   // ─── Top-down layout ───
-  let y = 2
+  // Starts at 4mm (not 0) to keep content clear of the thermal head's top edge
+  let y = 4
 
   // 1. Logo centered (constrained to prevent overlap)
   drawImageConstrained(doc, 'image2.jpg', y * MM_TO_PT, 30 * MM_TO_PT, 11 * MM_TO_PT, pageWidth)

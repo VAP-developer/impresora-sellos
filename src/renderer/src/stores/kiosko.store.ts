@@ -17,6 +17,7 @@
 import { create } from 'zustand'
 import type { AppConfig, PreciosConfig, TicketConfig, SelloConfig } from '@renderer/types/config'
 import type { TariffGroup, EventoRow } from '@renderer/lib/ipc-client'
+import * as ipc from '@renderer/lib/ipc-client'
 import {
   normalizeQty,
   calcTotal,
@@ -469,6 +470,11 @@ export const useKioskoStore = create<KioskoState>((set, get) => ({
 
   setUseSecondaryPrice: (value) => {
     set({ useSecondaryPrice: value })
+
+    // Persist useSecondaryPrice to config via IPC (fire-and-forget)
+    ipc.getImagenesConfig().then((current) => {
+      ipc.updateImagenesConfig({ ...current, useSecondaryPrice: value })
+    })
   },
 
   validateSale: (config, skipBudgetCheck) => {

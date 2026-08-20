@@ -22,6 +22,7 @@ import type {
 } from './printer-manager'
 import { discoverWindowsLocalPrinters, type DiscoveryCommandExecutor } from './printer-discovery'
 import { DpiCache, FALLBACK_DPI } from './dpi-detector'
+import { ElectronPrintBackend } from './electron-print-backend'
 
 // ─── Command Executor Interface (for testability) ─────────────────────────────
 
@@ -79,7 +80,7 @@ function parseCustomMedia(media: string): { widthTenths: number; heightTenths: n
  * Uses the Win32 API (OpenPrinter, DocumentProperties, SetPrinter) via
  * an external PowerShell script (resources/set-paper-size.ps1).
  */
-async function configurePrinterPaperSize(
+export async function configurePrinterPaperSize(
   printerName: string,
   widthTenths: number,
   heightTenths: number,
@@ -142,7 +143,7 @@ async function configurePrinterPaperSize(
  * Uses a PowerShell script (resources/set-cut-interval.ps1) that modifies
  * the driver's private DEVMODE section.
  */
-async function configureCutInterval(
+export async function configureCutInterval(
   printerName: string,
   cutInterval: number,
   executor: WindowsCommandExecutor
@@ -212,6 +213,43 @@ function getSumatraPdfPath(): string {
   return sumatraPath
 }
 
+// ─── Script Path Resolution ──────────────────────────────────────────────────
+
+/**
+ * Finds a PowerShell script by name in the standard locations:
+ * - Packaged app: process.resourcesPath
+ * - Dev mode: resources/ folder relative to project root
+ * - Fallback: scripts/ folder
+ *
+ * Returns the full path or empty string if not found.
+ */
+export function findScript(scriptName: string): string {
+  const { join } = require('path')
+  const { existsSync } = require('fs')
+
+  const candidates: string[] = []
+
+  // Packaged app: extraResources
+  if (process.resourcesPath) {
+    candidates.push(join(process.resourcesPath, scriptName))
+  }
+
+  // Dev mode: resources folder relative to project root
+  candidates.push(join(__dirname, '..', '..', 'resources', scriptName))
+  candidates.push(join(__dirname, '..', '..', '..', 'resources', scriptName))
+
+  // Fallback: scripts folder
+  candidates.push(join(__dirname, '..', '..', 'scripts', scriptName))
+  candidates.push(join(__dirname, '..', '..', '..', 'scripts', scriptName))
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate
+    }
+  }
+
+  return ''
+}
 // ─── WindowsBackend Implementation ───────────────────────────────────────────
 
 export class WindowsBackend implements PrinterBackend {
@@ -224,11 +262,17 @@ export class WindowsBackend implements PrinterBackend {
   }
 
   /**
-   * Prints a PDF by invoking SumatraPDF directly with:
-   *   SumatraPDF.exe -print-to "PrinterName" -print-settings "noscale" -silent file.pdf
+   * Prints a PDF using the best available method:
    *
-   * "noscale" = print at 100% original size, no fitting, no shrinking.
-   * The printer driver's paper size configuration determines the output.
+   * - For TICKETS (custom paper size): Uses Electron's webContents.print() API
+   *   which passes the page size per-job in the DEVMODE. This ensures the
+   *   correct paper height regardless of the Windows driver defaults.
+   *
+   * - For STAMPS (fixed 55x25mm): Uses SumatraPDF with the driver's configured
+   *   paper size. The cut interval is controlled by grouping stamps into
+   *   separate PDFs (one per cut group) — the driver just needs "cut at end".
+   *
+   * Fallback: if Electron print fails, falls back to SumatraPDF.
    */
   async print(printerUri: string, pdfBuffer: Buffer, options: PrintOptions): Promise<PrintResult> {
     const { writeFileSync, unlinkSync, mkdirSync } = require('fs')
@@ -246,50 +290,47 @@ export class WindowsBackend implements PrinterBackend {
     try {
       writeFileSync(tempFile, pdfBuffer)
 
-      // For custom media sizes (tickets), configure the printer driver's paper size
-      // before printing. This is required for Brother TD-4100N and similar thermal
-      // printers that don't respond to SumatraPDF's paper= parameter.
+      // Parse custom media (tickets have variable height)
       const customMedia = parseCustomMedia(options.media)
-      if (customMedia) {
-        await configurePrinterPaperSize(
-          printerName,
-          customMedia.widthTenths,
-          customMedia.heightTenths,
-          this.cmd
-        )
-        // Wait for the driver to apply the new paper size before sending the print job
-        await new Promise((resolve) => setTimeout(resolve, 500))
-      }
 
-      // Configure cut interval if specified (Brother TD-4100N "cut every N labels")
-      if (options.cutInterval && options.cutInterval > 0) {
+      // ─── Primary method: Electron webContents.print() ───────────────────
+      // Used for tickets (custom paper size) — Chromium passes the pageSize
+      // directly in the print job's DEVMODE, overriding driver defaults.
+      if (customMedia) {
         try {
-          await configureCutInterval(printerName, options.cutInterval, this.cmd)
-          // Wait for the driver to apply the cut setting
-          await new Promise((resolve) => setTimeout(resolve, 300))
-        } catch {
-          // Non-fatal: if we can't set cut interval, print will still work
-          // but may cut at wrong intervals
+          const electronBackend = new ElectronPrintBackend()
+          const result = await electronBackend.print(printerName, tempFile, options)
+
+          if (result.success) {
+            // Clean up after delay
+            setTimeout(() => {
+              try { unlinkSync(tempFile) } catch { /* ignore */ }
+            }, 10000)
+            return result
+          }
+          // If Electron print failed, fall through to SumatraPDF
+          console.warn('[WindowsBackend] Electron print failed, falling back to SumatraPDF:', result.error)
+        } catch (err) {
+          console.warn('[WindowsBackend] Electron print error, falling back to SumatraPDF:', err)
         }
       }
 
-      // Invoke SumatraPDF directly
+      // ─── SumatraPDF method (stamps + fallback for tickets) ──────────────
+      // For stamps: paper size is fixed (configured in driver), SumatraPDF works fine.
+      // The "cut every N" is handled by generating separate PDFs per group.
+
       const sumatraPath = getSumatraPdfPath()
-      
-      // Resolve DPI: use cached value for this printer, or fallback.
-      // Use 2x DPI for rasterization to improve image quality (especially logos/overlays).
-      // SumatraPDF renders at the higher resolution and the printer's native dithering
-      // produces sharper output than rasterizing at native DPI directly.
+
+      // Resolve DPI for rendering
       const dpi = this.dpiCache?.get(printerName) ?? FALLBACK_DPI
       const renderDpiX = dpi.dpiX * 2
       const renderDpiY = dpi.dpiY * 2
-      const resolvedDpi = `${renderDpiX}x${renderDpiY}dpi`
+      const dpiSetting = `${renderDpiX}x${renderDpiY}dpi`
+      const printSettings = `noscale,${dpiSetting}`
 
-      // Build print-settings: noscale prints at 100% original size.
-      // The printer driver's paper size must be pre-configured to match the PDF page.
       const args = [
         '-print-to', printerName,
-        '-print-settings', `noscale,${resolvedDpi}`,
+        '-print-settings', printSettings,
         '-silent',
         tempFile
       ]

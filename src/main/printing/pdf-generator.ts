@@ -318,14 +318,12 @@ function buildLabelCode(config: AppConfig, productoId: number, codigoFeria1Overr
 
 /**
  * Determines the ticket title based on the active profile.
- * - Filatelia → "Filatelia de: {titulo}"
  * - Protocolo → "Protocolo de: {titulo}"
  * - SPDE → "SPDE de: {titulo}"
- * - Others → titulo as-is
+ * - Filatelia / Others → titulo as-is (no modification)
  */
 export function buildTicketTitle(profile: string, baseTitle: string): string {
   const profileLower = profile.toLowerCase()
-  if (profileLower === 'filatelia') return `Filatelia de: ${baseTitle}`
   if (profileLower === 'protocolo') return `Protocolo de: ${baseTitle}`
   if (profileLower === 'spde') return `SPDE de: ${baseTitle}`
   return baseTitle
@@ -599,14 +597,16 @@ export async function generateSalePdfs(
 
   // Determine which feria codes to use for the stamp label code (line 1).
   // - Profile 'filatelia' (Oficina button): uses codes from general config (config.codigo)
+  // - No-logo mode (printLogoPng=false): uses codes from general config (config.codigo)
   // - Profile 'normal' (cart button): uses codes from the active event (dynamicTariffCtx)
   // - Fallback: if no event codes available, uses config codes
   let codigoFeria1: string | undefined
   let codigoFeria2: string | undefined
 
   const profileLower = profile.toLowerCase()
-  if (profileLower === 'filatelia') {
-    // Oficina button: use general configuration codes
+  const isNoLogoMode = imageLayerOptions ? !imageLayerOptions.printLogoPng : false
+  if (profileLower === 'filatelia' || isNoLogoMode) {
+    // Oficina button or no-logo mode: use general configuration codes (office codes)
     codigoFeria1 = config.codigo.codigo_feria_1 ?? ''
     codigoFeria2 = config.codigo.codigo_feria_2 ?? ''
   } else if (dynamicTariffCtx) {
@@ -957,7 +957,11 @@ export async function generateSalePdfs(
   if (hasAnyItems) {
     const fechaTicket = getTicketDateTime(config)
     // Build ticket title: use eltitulo (user-editable field) when available, fallback to titulo
-    const baseTitle = buildTicketTitle(profile, config.ticket.eltitulo || config.ticket.titulo)
+    // In no-logo mode, prefix with "Filatelia de:" regardless of profile
+    const rawTitle = config.ticket.eltitulo || config.ticket.titulo
+    const baseTitle = isNoLogoMode
+      ? `Filatelia de: ${rawTitle}`
+      : buildTicketTitle(profile, rawTitle)
     const modoTicket = baseTitle
     const modelo1Ticket = model1Name || 'Modelo 1'
     const modelo2Ticket = model2Name || 'Modelo 2'
@@ -997,15 +1001,14 @@ export async function generateSalePdfs(
       ? dynamicTariffCtx.complementaryCurrencySymbol
       : (dynamicTariffCtx?.currencySymbol ?? '€')
 
-    // Build the ticket code: {feria1}-{mes}{feria2} {cliente4dígitos}
+    // Build the ticket code: {feria1} {cliente4dígitos}
     // This is the code displayed in the ticket header after "Factura Simplificada:"
     const feria1ForTicket = codigoFeria1 ?? ''
     const feria2ForTicket = codigoFeria2 ?? ''
     let codigoTicket = ''
     if (feria1ForTicket || feria2ForTicket) {
-      const mes = formatMes(config.codigo.mes)
       const cliente = formatCliente(config.codigo.cliente)
-      codigoTicket = `${feria1ForTicket}-${mes}${feria2ForTicket} ${cliente}`
+      codigoTicket = `${feria1ForTicket} ${cliente}`
     }
 
     const mainTicketParams = {
@@ -1043,8 +1046,10 @@ export async function generateSalePdfs(
     // ─── Individual ticket per tira (strip) ─────────────────────────────────
     // Generate one ticket per tira unit as a separate PDF (each with its own height).
     // This only applies when the machine mode is NOT "MD" or "FI".
+    // For 'filatelia' (Oficina / red cart) sales or no-logo mode, skip individual tira tickets
+    // — only the single general ticket above is printed.
     const maquinaPrefix = config.codigo.maquina.substring(0, 2).toUpperCase()
-    if (maquinaPrefix !== 'MD' && maquinaPrefix !== 'FI') {
+    if (maquinaPrefix !== 'MD' && maquinaPrefix !== 'FI' && profile !== 'filatelia' && !isNoLogoMode) {
       for (let idx = 0; idx < items.length; idx++) {
         if (items[idx].cantidad > 0 && productos[idx].modo === 'T') {
           for (let t = 0; t < items[idx].cantidad; t++) {

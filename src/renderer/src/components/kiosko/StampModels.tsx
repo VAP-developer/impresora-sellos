@@ -8,7 +8,6 @@
 
 import { useEffect, useState } from 'react'
 import { useConfigStore } from '@renderer/stores/config.store'
-import { formatLabelCode } from '@renderer/lib/code-formatter'
 import * as ipc from '@renderer/lib/ipc-client'
 
 // ─── Sub-component: Single Model Preview ──────────────────────────────────────
@@ -108,7 +107,7 @@ export default function StampModels(): JSX.Element {
   const activeEvento = config?.sello?.eventos?.[0]
   const fecha = activeEvento?.fecha ?? ''
   const localidad = activeEvento?.localidad ?? ''
-  const codePreview = config?.codigo ? formatLabelCode(config.codigo) : null
+  const codePreview = activeEvento?.codigo ?? null
 
   return (
     <div className="flex items-start justify-center gap-8 bg-white rounded px-4 py-2">

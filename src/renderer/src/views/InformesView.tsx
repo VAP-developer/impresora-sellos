@@ -39,7 +39,7 @@ export default function InformesView(): JSX.Element {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-full px-4 py-8 gap-8">
-      <h1 className="text-3xl font-bold text-[#212F5D]">{t('nav.reports').toUpperCase()}</h1>
+      <h1 className="text-3xl font-bold text-[#212F5D]">{t('nav.reports')}</h1>
 
       {/* Export CSV button */}
       <button

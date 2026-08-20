@@ -94,6 +94,81 @@ export function initServices(): void {
   const queue = getPrintQueueService()
   queue.start()
   console.log('[Services] Print queue background processing started')
+
+  // Configure stamp printers for "cut at end" mode (fire-and-forget).
+  // The application controls cut groups by generating separate PDFs,
+  // so the driver only needs to cut when each job ends.
+  configureCutAtEnd().catch((err) => {
+    console.warn('[Services] Failed to configure cut-at-end mode:', err)
+  })
+}
+
+/**
+ * Configures all assigned stamp printers (printer1, printer2) to use
+ * "Cut at End" mode only. This disables "Cut Every N" in the Brother driver
+ * so that the app's PDF grouping (via groupLabels/cutNumber) controls cutting.
+ *
+ * Modifies the per-user DevMode in HKCU registry directly because:
+ * - DocumentProperties API resets private DEVMODE fields
+ * - SetPrinter level 9 doesn't reliably propagate to per-user defaults
+ * - SumatraPDF reads from per-user defaults when creating print jobs
+ *
+ * This is idempotent — safe to call on every startup.
+ */
+async function configureCutAtEnd(): Promise<void> {
+  const { existsSync } = require('fs')
+  const { join } = require('path')
+
+  // Find the configure script
+  let scriptPath = ''
+  const scriptName = 'configure-cut-at-end.ps1'
+
+  if (process.resourcesPath) {
+    const packaged = join(process.resourcesPath, scriptName)
+    if (existsSync(packaged)) scriptPath = packaged
+  }
+  if (!scriptPath) {
+    const devPath = join(__dirname, '..', 'resources', scriptName)
+    if (existsSync(devPath)) scriptPath = devPath
+  }
+  if (!scriptPath) {
+    const devPath2 = join(__dirname, '..', '..', 'resources', scriptName)
+    if (existsSync(devPath2)) scriptPath = devPath2
+  }
+
+  if (!scriptPath) {
+    console.log('[Services] configure-cut-at-end.ps1 not found, skipping')
+    return
+  }
+
+  // Get assigned stamp printers
+  let savedAssignments: Record<string, string> = {}
+  try {
+    const assignmentsRepo = new PrinterAssignmentsRepository()
+    savedAssignments = assignmentsRepo.getAll()
+  } catch {
+    return
+  }
+
+  const stampPrinters = [savedAssignments.printer1, savedAssignments.printer2].filter(Boolean)
+  if (stampPrinters.length === 0) return
+
+  const { exec: nodeExec } = require('child_process')
+  const { promisify } = require('util')
+  const execAsync = promisify(nodeExec)
+
+  for (const uri of stampPrinters) {
+    // Decode win://PrinterName to plain printer name
+    const printerName = decodeURIComponent(uri.replace('win://', ''))
+    const escaped = printerName.replace(/"/g, '`"')
+    const cmd = `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}" -PrinterName "${escaped}"`
+    try {
+      await execAsync(cmd, { timeout: 10000 })
+      console.log(`[Services] Configured cut-at-end for: ${printerName}`)
+    } catch (err) {
+      console.warn(`[Services] Failed to configure cut-at-end for ${printerName}:`, err)
+    }
+  }
 }
 
 /**

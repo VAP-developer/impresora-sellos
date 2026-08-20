@@ -19,6 +19,12 @@ extraResources:
       - "**/*"
   - from: resources/set-paper-size.ps1
     to: set-paper-size.ps1
+  - from: resources/set-cut-interval.ps1
+    to: set-cut-interval.ps1
+  - from: resources/print-pdf.ps1
+    to: print-pdf.ps1
+  - from: resources/configure-cut-at-end.ps1
+    to: configure-cut-at-end.ps1
   - from: src/main/database/migrations
     to: migrations
     filter:

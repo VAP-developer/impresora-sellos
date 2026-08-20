@@ -21,6 +21,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { useConfigStore } from '@renderer/stores/config.store'
 import { useKioskoStore } from '@renderer/stores/kiosko.store'
 import { useImagesStore } from '@renderer/stores/images.store'
+import { getCurrencySymbol } from '@renderer/lib/currencies'
 import * as ipc from '@renderer/lib/ipc-client'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -65,8 +66,17 @@ export default function CartControls({
   const printLogoPng = useImagesStore((state) => state.printLogoPng)
   const setPrintLogoPng = useImagesStore((state) => state.setPrintLogoPng)
   const useSecondaryPrice = useKioskoStore((state) => state.useSecondaryPrice)
+  const activeTariffGroup = useKioskoStore((state) => state.activeTariffGroup)
 
   const [printing, setPrinting] = useState(false)
+
+  // Resolve active currency symbol based on tariff group and secondary toggle
+  const currencySymbol = useMemo(() => {
+    const localCurrency = activeTariffGroup?.local_currency ?? 'EUR'
+    const secondaryCurrency = activeTariffGroup?.complementary_currency ?? 'EUR'
+    const activeCurrency = useSecondaryPrice ? secondaryCurrency : localCurrency
+    return getCurrencySymbol(activeCurrency)
+  }, [activeTariffGroup, useSecondaryPrice])
 
   // Derive computed values from config
   const precios = config?.precios
@@ -125,8 +135,8 @@ export default function CartControls({
       if (!config || printing) return
 
       // 1. Validate the sale
-      // For 'filatelia' (red cart / Oficina), skip budget limit validation
-      const skipBudgetCheck = profile === 'filatelia'
+      // Skip budget limit validation in no-logo mode only
+      const skipBudgetCheck = !printLogoPng
       const error = validateSale(config, skipBudgetCheck)
       if (error) {
         // Empty basket: silent reject (legacy behavior)
@@ -187,14 +197,11 @@ export default function CartControls({
   }, [handlePrint, onPrintNormal])
 
   /**
-   * Handle "Imprimir Filatelia" button click.
-   * Triggers a sale with profile 'filatelia', which modifies the ticket title
-   * to "Filatelia de: {titulo_base}".
-   *
-   * Validates: Requirements 7.3, 13.4
+   * Handle "Oficina" button click (red cart).
+   * Triggers a sale identical to normal but records 'Oficina' as purchase category in reports.
    */
   const handlePrintFilatelia = useCallback(async () => {
-    await handlePrint('filatelia', onPrintFilatelia)
+    await handlePrint('oficina', onPrintFilatelia)
   }, [handlePrint, onPrintFilatelia])
 
 
@@ -297,21 +304,34 @@ export default function CartControls({
           </button>
         </div>
 
-        {/* Center column: Budget, Total, Mode */}
+        {/* Center column: Budget, Total, Mode — hidden in no-logo mode */}
         <div className="flex flex-col items-center gap-1 mx-6">
-          {/* Remaining budget */}
-          <p className="text-center text-gray-500 text-sm font-bold" aria-label="Presupuesto restante">
-            {budgetRemaining.toFixed(2)} €
-          </p>
+          {printLogoPng ? (
+            <>
+              {/* Remaining budget */}
+              <p className="text-center text-gray-500 text-sm font-bold" aria-label="Presupuesto restante">
+                {budgetRemaining.toFixed(2)} {currencySymbol}
+              </p>
 
-          {/* Basket total */}
-          <h2
-            className="text-center text-3xl font-bold"
-            aria-label="Total de la cesta"
-            aria-live="polite"
-          >
-            Cesta {total.toFixed(2)}€
-          </h2>
+              {/* Basket total */}
+              <h2
+                className="text-center text-3xl font-bold"
+                aria-label="Total de la cesta"
+                aria-live="polite"
+              >
+                Cesta {total.toFixed(2)}{currencySymbol}
+              </h2>
+            </>
+          ) : (
+            /* No-logo mode: show "Oficina" indicator instead of cart/total */
+            <h2
+              className="text-center text-2xl font-bold text-red-700"
+              aria-label="Modo Oficina activo"
+              aria-live="polite"
+            >
+              OFICINA
+            </h2>
+          )}
 
           {/* Active profile/mode */}
           {profileName && (
