@@ -17,6 +17,8 @@ export interface SettingsState {
   cutNumber: number
   language: AppLanguage
   printRotation180: boolean
+  virtualKeyboardEnabled: boolean
+  virtualKeyboardLanguage: AppLanguage
   loading: boolean
   error: string | null
 
@@ -25,6 +27,8 @@ export interface SettingsState {
   setCutNumber(value: number): Promise<void>
   setLanguage(value: AppLanguage): Promise<void>
   setPrintRotation(value: boolean): Promise<void>
+  setVirtualKeyboardEnabled(enabled: boolean): Promise<void>
+  setVirtualKeyboardLanguage(lang: AppLanguage): Promise<void>
 }
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
@@ -45,6 +49,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   cutNumber: 4,
   language: 'es',
   printRotation180: false,
+  virtualKeyboardEnabled: false,
+  virtualKeyboardLanguage: 'es',
   loading: false,
   error: null,
 
@@ -52,15 +58,25 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     set({ loading: true, error: null })
 
     try {
-      const [cutNumber, language, printRotation180] = await Promise.all([
+      const [cutNumber, language, printRotation180, virtualKeyboardEnabled, virtualKeyboardLanguage] = await Promise.all([
         getAPI().config.getCutNumber(),
         getAPI().config.getLanguage(),
-        getAPI().config.getPrintRotation()
+        getAPI().config.getPrintRotation(),
+        getAPI().config.getVirtualKeyboardEnabled(),
+        getAPI().config.getVirtualKeyboardLanguage()
       ])
 
       const validLanguage: AppLanguage = language === 'en' ? 'en' : 'es'
+      const validKeyboardLanguage: AppLanguage = virtualKeyboardLanguage === 'en' ? 'en' : 'es'
 
-      set({ cutNumber, language: validLanguage, printRotation180: !!printRotation180, loading: false })
+      set({
+        cutNumber,
+        language: validLanguage,
+        printRotation180: !!printRotation180,
+        virtualKeyboardEnabled: !!virtualKeyboardEnabled,
+        virtualKeyboardLanguage: validKeyboardLanguage,
+        loading: false
+      })
 
       // Sync i18n with the persisted language
       await i18n.changeLanguage(validLanguage)
@@ -105,6 +121,32 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       set({ printRotation180: value })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to set print rotation'
+      set({ error: message })
+      throw err
+    }
+  },
+
+  setVirtualKeyboardEnabled: async (enabled: boolean) => {
+    set({ error: null })
+
+    try {
+      await getAPI().config.setVirtualKeyboardEnabled(enabled)
+      set({ virtualKeyboardEnabled: enabled })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to set virtual keyboard enabled'
+      set({ error: message })
+      throw err
+    }
+  },
+
+  setVirtualKeyboardLanguage: async (lang: AppLanguage) => {
+    set({ error: null })
+
+    try {
+      await getAPI().config.setVirtualKeyboardLanguage(lang)
+      set({ virtualKeyboardLanguage: lang })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to set virtual keyboard language'
       set({ error: message })
       throw err
     }

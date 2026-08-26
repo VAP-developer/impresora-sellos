@@ -434,6 +434,58 @@ class ConfigRepository {
     };
     this.set(config);
   }
+  /**
+   * Get the virtual keyboard enabled setting, returns default false if unset.
+   */
+  getVirtualKeyboardEnabled() {
+    const config = this.get();
+    return config?.settings?.virtualKeyboardEnabled ?? false;
+  }
+  /**
+   * Set the virtual keyboard enabled setting (true = virtual keyboard active).
+   */
+  setVirtualKeyboardEnabled(value) {
+    const config = this.get();
+    if (!config) {
+      throw new Error("Config not initialized. Call initConfig() first.");
+    }
+    config.settings = {
+      ...config.settings,
+      cutNumber: config.settings?.cutNumber ?? 4,
+      language: config.settings?.language ?? "es",
+      printRotation180: config.settings?.printRotation180 ?? false,
+      virtualKeyboardEnabled: value
+    };
+    this.set(config);
+  }
+  /**
+   * Get the virtual keyboard language setting, returns default 'es' if unset.
+   */
+  getVirtualKeyboardLanguage() {
+    const config = this.get();
+    return config?.settings?.virtualKeyboardLanguage ?? "es";
+  }
+  /**
+   * Set the virtual keyboard language (validated 'es' | 'en').
+   */
+  setVirtualKeyboardLanguage(value) {
+    if (value !== "es" && value !== "en") {
+      throw new Error(CONFIG_ERRORS.INVALID_LANGUAGE);
+    }
+    const config = this.get();
+    if (!config) {
+      throw new Error("Config not initialized. Call initConfig() first.");
+    }
+    config.settings = {
+      ...config.settings,
+      cutNumber: config.settings?.cutNumber ?? 4,
+      language: config.settings?.language ?? "es",
+      printRotation180: config.settings?.printRotation180 ?? false,
+      virtualKeyboardEnabled: config.settings?.virtualKeyboardEnabled ?? false,
+      virtualKeyboardLanguage: value
+    };
+    this.set(config);
+  }
 }
 function registerConfigHandlers() {
   const repo = new ConfigRepository();
@@ -491,6 +543,18 @@ function registerConfigHandlers() {
   });
   handleIpc("config:setPrintRotation", (value) => {
     repo.setPrintRotation(value);
+  });
+  handleIpc("config:getVirtualKeyboardEnabled", () => {
+    return repo.getVirtualKeyboardEnabled();
+  });
+  handleIpc("config:setVirtualKeyboardEnabled", (value) => {
+    repo.setVirtualKeyboardEnabled(value);
+  });
+  handleIpc("config:getVirtualKeyboardLanguage", () => {
+    return repo.getVirtualKeyboardLanguage();
+  });
+  handleIpc("config:setVirtualKeyboardLanguage", (value) => {
+    repo.setVirtualKeyboardLanguage(value);
   });
 }
 class OrdersRepository {
@@ -5466,6 +5530,7 @@ function handleIpc(channel, handler) {
     }
   });
 }
+electron.app.commandLine.appendSwitch("disable-features", "InputPaneOnScreenKeyboard");
 function createWindow() {
   const mainWindow = new electron.BrowserWindow({
     width: 1280,

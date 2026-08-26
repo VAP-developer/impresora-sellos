@@ -11,6 +11,8 @@ export interface GlobalSettings {
   cutNumber: number        // 2-16, default 4
   language: AppLanguage    // 'es' | 'en', default 'es'
   printRotation180: boolean // true = rotate PDF 180° for special printers, default false
+  virtualKeyboardEnabled: boolean // true = virtual keyboard active, default false
+  virtualKeyboardLanguage: AppLanguage // 'es' | 'en', default 'es'
 }
 
 /** Error constants for config validation */
@@ -466,6 +468,65 @@ export class ConfigRepository {
       cutNumber: config.settings?.cutNumber ?? 4,
       language: config.settings?.language ?? 'es',
       printRotation180: value
+    }
+    this.set(config)
+  }
+
+  /**
+   * Get the virtual keyboard enabled setting, returns default false if unset.
+   */
+  getVirtualKeyboardEnabled(): boolean {
+    const config = this.get()
+    return config?.settings?.virtualKeyboardEnabled ?? false
+  }
+
+  /**
+   * Set the virtual keyboard enabled setting (true = virtual keyboard active).
+   */
+  setVirtualKeyboardEnabled(value: boolean): void {
+    const config = this.get()
+    if (!config) {
+      throw new Error('Config not initialized. Call initConfig() first.')
+    }
+
+    config.settings = {
+      ...config.settings,
+      cutNumber: config.settings?.cutNumber ?? 4,
+      language: config.settings?.language ?? 'es',
+      printRotation180: config.settings?.printRotation180 ?? false,
+      virtualKeyboardEnabled: value
+    }
+    this.set(config)
+  }
+
+  /**
+   * Get the virtual keyboard language setting, returns default 'es' if unset.
+   */
+  getVirtualKeyboardLanguage(): AppLanguage {
+    const config = this.get()
+    return config?.settings?.virtualKeyboardLanguage ?? 'es'
+  }
+
+  /**
+   * Set the virtual keyboard language (validated 'es' | 'en').
+   */
+  setVirtualKeyboardLanguage(value: AppLanguage): void {
+    if (value !== 'es' && value !== 'en') {
+      throw new Error(CONFIG_ERRORS.INVALID_LANGUAGE)
+    }
+
+    const config = this.get()
+    if (!config) {
+      throw new Error('Config not initialized. Call initConfig() first.')
+    }
+
+    config.settings = {
+      ...config.settings,
+      cutNumber: config.settings?.cutNumber ?? 4,
+      language: config.settings?.language ?? 'es',
+      printRotation180: config.settings?.printRotation180 ?? false,
+      virtualKeyboardEnabled: config.settings?.virtualKeyboardEnabled ?? false,
+      virtualKeyboardLanguage: value
     }
     this.set(config)
   }

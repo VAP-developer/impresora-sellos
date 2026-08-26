@@ -1,0 +1,21 @@
+2026-08-26T12:07:28.126Z
+[FATAL] Database initialization failed: The module '\\?\C:\Users\pache\Desktop\projects\svv_imp\node_modules\better-sqlite3\build\Release\better_sqlite3.node'
+was compiled against a different Node.js version using
+NODE_MODULE_VERSION 137. This version of Node.js requires
+NODE_MODULE_VERSION 123. Please try re-compiling or re-installing
+the module (for instance, using `npm rebuild` or `npm install`).
+Error: The module '\\?\C:\Users\pache\Desktop\projects\svv_imp\node_modules\better-sqlite3\build\Release\better_sqlite3.node'
+was compiled against a different Node.js version using
+NODE_MODULE_VERSION 137. This version of Node.js requires
+NODE_MODULE_VERSION 123. Please try re-compiling or re-installing
+the module (for instance, using `npm rebuild` or `npm install`).
+    at process.func [as dlopen] (node:electron/js2c/node_init:2:2214)
+    at Module._extensions..node (node:internal/modules/cjs/loader:1489:18)
+    at Object.func [as .node] (node:electron/js2c/node_init:2:2214)
+    at Module.load (node:internal/modules/cjs/loader:1214:32)
+    at Module._load (node:internal/modules/cjs/loader:1030:12)
+    at c._load (node:electron/js2c/node_init:2:13672)
+    at Module.require (node:internal/modules/cjs/loader:1242:19)
+    at require (node:internal/modules/helpers:176:18)
+    at bindings (C:\Users\pache\Desktop\projects\svv_imp\node_modules\bindings\bindings.js:112:48)
+    at new Database (C:\Users\pache\Desktop\projects\svv_imp\node_modules\better-sqlite3\lib\database.js:48:64)

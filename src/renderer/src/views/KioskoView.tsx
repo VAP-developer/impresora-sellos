@@ -90,7 +90,7 @@ export default function KioskoView(): JSX.Element {
   }, [activeEventId, setActiveTariffGroup, setActiveEvento])
 
   return (
-    <div className="flex flex-col h-full p-2 gap-2 overflow-auto">
+    <div className="flex flex-col p-2 gap-2">
       {/* Top: Roll1 counter | Sello A | Cart Controls | Sello B | Roll2 counter */}
       <div className="flex items-center justify-center gap-4 bg-white rounded px-8 py-3">
         {/* Roll 1 remaining - left of Sello A */}

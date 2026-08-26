@@ -1,0 +1,483 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Añadir campos en SQLite para configuración del teclado": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741812881
+      },
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741853546
+      },
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787742062738
+      }
+    ],
+    "1.2 Crear handlers IPC para configuración del teclado": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741813579
+      },
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787742066420
+      },
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787742247211
+      }
+    ],
+    "1.3 Exponer API en preload bridge": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741813665
+      },
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787742250732
+      },
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787742326761
+      }
+    ],
+    "1.4 Extender el settings store con estado del teclado virtual": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741813723
+      },
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787742330192
+      },
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787742434866
+      }
+    ],
+    "2.1 Crear componente VirtualKeyboardSection": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741813779
+      },
+      {
+        "executionId": "3454091d-7a01-47d4-8eb4-d9dde7d4016f",
+        "chatSessionId": "sess_eca87174-6a2f-4b6c-a090-30fb3685ff06",
+        "timestamp": 1787742501310
+      },
+      {
+        "executionId": "3454091d-7a01-47d4-8eb4-d9dde7d4016f",
+        "chatSessionId": "sess_eca87174-6a2f-4b6c-a090-30fb3685ff06",
+        "timestamp": 1787742942024
+      }
+    ],
+    "2.2 Integrar VirtualKeyboardSection en SettingsView": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741813842
+      },
+      {
+        "executionId": "3454091d-7a01-47d4-8eb4-d9dde7d4016f",
+        "chatSessionId": "sess_eca87174-6a2f-4b6c-a090-30fb3685ff06",
+        "timestamp": 1787742945671
+      }
+    ],
+    "2.3 Añadir traducciones i18n para la sección": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741813915
+      },
+      {
+        "executionId": "3454091d-7a01-47d4-8eb4-d9dde7d4016f",
+        "chatSessionId": "sess_eca87174-6a2f-4b6c-a090-30fb3685ff06",
+        "timestamp": 1787742946755
+      }
+    ],
+    "3. Checkpoint — Verificar persistencia y UI de configuración": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741813974
+      },
+      {
+        "executionId": "4f28728a-6d06-48f9-b65e-18bfea12e814",
+        "chatSessionId": "sess_b33b3993-3c9d-489a-b628-4c2809dade6b",
+        "timestamp": 1787747193559
+      }
+    ],
+    "4.1 Crear archivo de definición de layouts": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741814027
+      },
+      {
+        "executionId": "e5813cd5-52bf-45e2-a0cf-71219b8204aa",
+        "chatSessionId": "sess_cef48b5d-9bbb-40e5-ad2c-282aa219c8a0",
+        "timestamp": 1787746720710
+      },
+      {
+        "executionId": "e5813cd5-52bf-45e2-a0cf-71219b8204aa",
+        "chatSessionId": "sess_cef48b5d-9bbb-40e5-ad2c-282aa219c8a0",
+        "timestamp": 1787746996711
+      }
+    ],
+    "4.2 Crear utilidades de teclado": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741814100
+      },
+      {
+        "executionId": "e5813cd5-52bf-45e2-a0cf-71219b8204aa",
+        "chatSessionId": "sess_cef48b5d-9bbb-40e5-ad2c-282aa219c8a0",
+        "timestamp": 1787746721329
+      },
+      {
+        "executionId": "e5813cd5-52bf-45e2-a0cf-71219b8204aa",
+        "chatSessionId": "sess_cef48b5d-9bbb-40e5-ad2c-282aa219c8a0",
+        "timestamp": 1787746997490
+      }
+    ],
+    "5.1 Crear el context y provider": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741814147
+      },
+      {
+        "executionId": "4f28728a-6d06-48f9-b65e-18bfea12e814",
+        "chatSessionId": "sess_b33b3993-3c9d-489a-b628-4c2809dade6b",
+        "timestamp": 1787747198378
+      },
+      {
+        "executionId": "4f28728a-6d06-48f9-b65e-18bfea12e814",
+        "chatSessionId": "sess_b33b3993-3c9d-489a-b628-4c2809dade6b",
+        "timestamp": 1787749747760
+      }
+    ],
+    "5.2 Implementar detección de focus global": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741814222
+      },
+      {
+        "executionId": "4f28728a-6d06-48f9-b65e-18bfea12e814",
+        "chatSessionId": "sess_b33b3993-3c9d-489a-b628-4c2809dade6b",
+        "timestamp": 1787749751457
+      },
+      {
+        "executionId": "4f28728a-6d06-48f9-b65e-18bfea12e814",
+        "chatSessionId": "sess_b33b3993-3c9d-489a-b628-4c2809dade6b",
+        "timestamp": 1787749872567
+      }
+    ],
+    "5.3 Implementar lógica de pulsación de teclas": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741814276
+      },
+      {
+        "executionId": "4f28728a-6d06-48f9-b65e-18bfea12e814",
+        "chatSessionId": "sess_b33b3993-3c9d-489a-b628-4c2809dade6b",
+        "timestamp": 1787749876235
+      },
+      {
+        "executionId": "4f28728a-6d06-48f9-b65e-18bfea12e814",
+        "chatSessionId": "sess_b33b3993-3c9d-489a-b628-4c2809dade6b",
+        "timestamp": 1787750002013
+      }
+    ],
+    "5.4 Integrar Provider en App.tsx": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741814325
+      },
+      {
+        "executionId": "4f28728a-6d06-48f9-b65e-18bfea12e814",
+        "chatSessionId": "sess_b33b3993-3c9d-489a-b628-4c2809dade6b",
+        "timestamp": 1787750005399
+      },
+      {
+        "executionId": "4f28728a-6d06-48f9-b65e-18bfea12e814",
+        "chatSessionId": "sess_b33b3993-3c9d-489a-b628-4c2809dade6b",
+        "timestamp": 1787750076984
+      }
+    ],
+    "6.1 Crear componente NumericKeypad": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741814375
+      },
+      {
+        "executionId": "1455b679-3a1a-49eb-84d1-5b29368cc3ba",
+        "chatSessionId": "sess_3b0cb566-e80a-4688-a730-4294442861e7",
+        "timestamp": 1787750126500
+      },
+      {
+        "executionId": "1455b679-3a1a-49eb-84d1-5b29368cc3ba",
+        "chatSessionId": "sess_3b0cb566-e80a-4688-a730-4294442861e7",
+        "timestamp": 1787751897158
+      }
+    ],
+    "6.2 Crear componente FullKeyboard": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741814427
+      },
+      {
+        "executionId": "1455b679-3a1a-49eb-84d1-5b29368cc3ba",
+        "chatSessionId": "sess_3b0cb566-e80a-4688-a730-4294442861e7",
+        "timestamp": 1787751900612
+      },
+      {
+        "executionId": "1455b679-3a1a-49eb-84d1-5b29368cc3ba",
+        "chatSessionId": "sess_3b0cb566-e80a-4688-a730-4294442861e7",
+        "timestamp": 1787751989607
+      }
+    ],
+    "6.3 Crear componente VirtualKeyboardOverlay": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741814477
+      },
+      {
+        "executionId": "1455b679-3a1a-49eb-84d1-5b29368cc3ba",
+        "chatSessionId": "sess_3b0cb566-e80a-4688-a730-4294442861e7",
+        "timestamp": 1787751993287
+      },
+      {
+        "executionId": "1455b679-3a1a-49eb-84d1-5b29368cc3ba",
+        "chatSessionId": "sess_3b0cb566-e80a-4688-a730-4294442861e7",
+        "timestamp": 1787752092804
+      }
+    ],
+    "6.4 Implementar feedback visual de pulsación": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741814527
+      },
+      {
+        "executionId": "1455b679-3a1a-49eb-84d1-5b29368cc3ba",
+        "chatSessionId": "sess_3b0cb566-e80a-4688-a730-4294442861e7",
+        "timestamp": 1787752096448
+      },
+      {
+        "executionId": "1455b679-3a1a-49eb-84d1-5b29368cc3ba",
+        "chatSessionId": "sess_3b0cb566-e80a-4688-a730-4294442861e7",
+        "timestamp": 1787752237065
+      }
+    ],
+    "7. Checkpoint — Verificar teclados funcionando de forma aislada": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741814574
+      },
+      {
+        "executionId": "76ae94b8-7c7f-40dc-9997-1dad5e6a157c",
+        "chatSessionId": "sess_af8c2172-3f53-405a-b7ab-a44a752e423b",
+        "timestamp": 1787754505167
+      }
+    ],
+    "8.1 Ajustar posicionamiento del numpad en KioskoView": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741814627
+      },
+      {
+        "executionId": "f90400e7-feae-4a42-84d1-c1a019b3e6c8",
+        "chatSessionId": "sess_2d8b6c34-4abf-4594-8985-36fe79f888f5",
+        "timestamp": 1787752620987
+      },
+      {
+        "executionId": "f90400e7-feae-4a42-84d1-c1a019b3e6c8",
+        "chatSessionId": "sess_2d8b6c34-4abf-4594-8985-36fe79f888f5",
+        "timestamp": 1787754447087
+      }
+    ],
+    "8.2 Implementar scroll automático para teclado completo": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741814697
+      },
+      {
+        "executionId": "f90400e7-feae-4a42-84d1-c1a019b3e6c8",
+        "chatSessionId": "sess_2d8b6c34-4abf-4594-8985-36fe79f888f5",
+        "timestamp": 1787752621865
+      },
+      {
+        "executionId": "f90400e7-feae-4a42-84d1-c1a019b3e6c8",
+        "chatSessionId": "sess_2d8b6c34-4abf-4594-8985-36fe79f888f5",
+        "timestamp": 1787754447737
+      }
+    ],
+    "8.3 Añadir botón de cierre visible en ambos teclados": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741814744
+      },
+      {
+        "executionId": "f90400e7-feae-4a42-84d1-c1a019b3e6c8",
+        "chatSessionId": "sess_2d8b6c34-4abf-4594-8985-36fe79f888f5",
+        "timestamp": 1787752622880
+      },
+      {
+        "executionId": "f90400e7-feae-4a42-84d1-c1a019b3e6c8",
+        "chatSessionId": "sess_2d8b6c34-4abf-4594-8985-36fe79f888f5",
+        "timestamp": 1787754448639
+      }
+    ],
+    "8.4 Deshabilitar teclado nativo del SO en Electron (opcional)": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741814794
+      },
+      {
+        "executionId": "f90400e7-feae-4a42-84d1-c1a019b3e6c8",
+        "chatSessionId": "sess_2d8b6c34-4abf-4594-8985-36fe79f888f5",
+        "timestamp": 1787752623985
+      },
+      {
+        "executionId": "f90400e7-feae-4a42-84d1-c1a019b3e6c8",
+        "chatSessionId": "sess_2d8b6c34-4abf-4594-8985-36fe79f888f5",
+        "timestamp": 1787754449710
+      }
+    ],
+    "9.1 Añadir atributos ARIA a las teclas": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741814846
+      },
+      {
+        "executionId": "76ae94b8-7c7f-40dc-9997-1dad5e6a157c",
+        "chatSessionId": "sess_af8c2172-3f53-405a-b7ab-a44a752e423b",
+        "timestamp": 1787754538139
+      },
+      {
+        "executionId": "76ae94b8-7c7f-40dc-9997-1dad5e6a157c",
+        "chatSessionId": "sess_af8c2172-3f53-405a-b7ab-a44a752e423b",
+        "timestamp": 1787754615797
+      }
+    ],
+    "9.2 Verificar coexistencia con teclado físico": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741814896
+      },
+      {
+        "executionId": "76ae94b8-7c7f-40dc-9997-1dad5e6a157c",
+        "chatSessionId": "sess_af8c2172-3f53-405a-b7ab-a44a752e423b",
+        "timestamp": 1787754624180
+      },
+      {
+        "executionId": "76ae94b8-7c7f-40dc-9997-1dad5e6a157c",
+        "chatSessionId": "sess_af8c2172-3f53-405a-b7ab-a44a752e423b",
+        "timestamp": 1787754716929
+      }
+    ],
+    "9.3 Añadir soporte i18n para etiquetas de teclas especiales": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741814965
+      },
+      {
+        "executionId": "76ae94b8-7c7f-40dc-9997-1dad5e6a157c",
+        "chatSessionId": "sess_af8c2172-3f53-405a-b7ab-a44a752e423b",
+        "timestamp": 1787754720549
+      },
+      {
+        "executionId": "76ae94b8-7c7f-40dc-9997-1dad5e6a157c",
+        "chatSessionId": "sess_af8c2172-3f53-405a-b7ab-a44a752e423b",
+        "timestamp": 1787756350483
+      }
+    ],
+    "10. Checkpoint Final — Verificación completa": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787741815015
+      }
+    ],
+    "1. Fase 1: Persistencia y Configuración (Backend)": [
+      {
+        "executionId": "6595f8f5-6855-4170-8559-02f0437a3ae8",
+        "chatSessionId": "sess_99f86ef4-40cd-4b48-b436-7d061c4c1297",
+        "timestamp": 1787742434934
+      }
+    ],
+    "2. Fase 2: Sección de Configuración en UI (Settings)": [
+      {
+        "executionId": "3454091d-7a01-47d4-8eb4-d9dde7d4016f",
+        "chatSessionId": "sess_eca87174-6a2f-4b6c-a090-30fb3685ff06",
+        "timestamp": 1787742946818
+      }
+    ],
+    "4. Fase 3: Layouts de Teclado (Datos)": [
+      {
+        "executionId": "e5813cd5-52bf-45e2-a0cf-71219b8204aa",
+        "chatSessionId": "sess_cef48b5d-9bbb-40e5-ad2c-282aa219c8a0",
+        "timestamp": 1787746997575
+      }
+    ],
+    "5. Fase 4: VirtualKeyboardProvider (Context Global)": [
+      {
+        "executionId": "4f28728a-6d06-48f9-b65e-18bfea12e814",
+        "chatSessionId": "sess_b33b3993-3c9d-489a-b628-4c2809dade6b",
+        "timestamp": 1787750077093
+      }
+    ],
+    "6. Fase 5: Componentes de Teclado (UI)": [
+      {
+        "executionId": "1455b679-3a1a-49eb-84d1-5b29368cc3ba",
+        "chatSessionId": "sess_3b0cb566-e80a-4688-a730-4294442861e7",
+        "timestamp": 1787752237162
+      }
+    ],
+    "8. Fase 6: Integración y Pulido": [
+      {
+        "executionId": "f90400e7-feae-4a42-84d1-c1a019b3e6c8",
+        "chatSessionId": "sess_2d8b6c34-4abf-4594-8985-36fe79f888f5",
+        "timestamp": 1787754449801
+      }
+    ],
+    "9. Fase 7: Accesibilidad": [
+      {
+        "executionId": "76ae94b8-7c7f-40dc-9997-1dad5e6a157c",
+        "chatSessionId": "sess_af8c2172-3f53-405a-b7ab-a44a752e423b",
+        "timestamp": 1787756350602
+      }
+    ]
+  }
+}

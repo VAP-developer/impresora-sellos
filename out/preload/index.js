@@ -22,6 +22,10 @@ const api = {
     setLanguage: (value) => electron.ipcRenderer.invoke("config:setLanguage", value),
     getPrintRotation: () => electron.ipcRenderer.invoke("config:getPrintRotation"),
     setPrintRotation: (value) => electron.ipcRenderer.invoke("config:setPrintRotation", value),
+    getVirtualKeyboardEnabled: () => electron.ipcRenderer.invoke("config:getVirtualKeyboardEnabled"),
+    setVirtualKeyboardEnabled: (enabled) => electron.ipcRenderer.invoke("config:setVirtualKeyboardEnabled", enabled),
+    getVirtualKeyboardLanguage: () => electron.ipcRenderer.invoke("config:getVirtualKeyboardLanguage"),
+    setVirtualKeyboardLanguage: (lang) => electron.ipcRenderer.invoke("config:setVirtualKeyboardLanguage", lang),
     onChange: (callback) => {
       const handler = (_event, config) => {
         callback(config);

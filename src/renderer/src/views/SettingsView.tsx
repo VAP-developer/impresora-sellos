@@ -22,6 +22,7 @@ import { LanguageSection } from '@renderer/components/settings/LanguageSection'
 import { CodigoEspecialSection } from '@renderer/components/settings/CodigoEspecialSection'
 import { LicenseSection } from '@renderer/components/settings/LicenseSection'
 import { PrintRotationSection } from '@renderer/components/settings/PrintRotationSection'
+import { VirtualKeyboardSection } from '@renderer/components/settings/VirtualKeyboardSection'
 import { StampDatabaseSection } from '@renderer/components/settings/StampDatabaseSection'
 
 export default function SettingsView(): JSX.Element {
@@ -31,6 +32,7 @@ export default function SettingsView(): JSX.Element {
   const [tariffOpen, setTariffOpen] = useState(false)
   const [cutOpen, setCutOpen] = useState(false)
   const [langOpen, setLangOpen] = useState(false)
+  const [keyboardOpen, setKeyboardOpen] = useState(false)
   const [codigoOpen, setCodigoOpen] = useState(true)
   const [licenseOpen, setLicenseOpen] = useState(false)
   const [stampDbOpen, setStampDbOpen] = useState(false)
@@ -190,6 +192,40 @@ export default function SettingsView(): JSX.Element {
                 aria-label={t('settings.language')}
               >
                 <LanguageSection />
+              </div>
+            )}
+          </div>
+
+          {/* Section: Virtual Keyboard */}
+          <div>
+            <button
+              type="button"
+              className="w-full bg-[rgb(255,192,0)] p-2 rounded cursor-pointer flex items-center gap-2
+                         text-left focus:outline-none focus:ring-2 focus:ring-yellow-500"
+              onClick={() => setKeyboardOpen(!keyboardOpen)}
+              aria-expanded={keyboardOpen}
+              aria-controls="settings-keyboard-content"
+            >
+              <input
+                type="checkbox"
+                checked={keyboardOpen}
+                readOnly
+                className="cursor-pointer"
+                tabIndex={-1}
+                aria-hidden="true"
+              />
+              <h3 className="text-lg font-bold m-0">
+                {t('settings.virtualKeyboard').toUpperCase()}
+              </h3>
+            </button>
+            {keyboardOpen && (
+              <div
+                id="settings-keyboard-content"
+                className="border border-gray-200 rounded-b p-4 bg-white"
+                role="region"
+                aria-label={t('settings.virtualKeyboard')}
+              >
+                <VirtualKeyboardSection />
               </div>
             )}
           </div>

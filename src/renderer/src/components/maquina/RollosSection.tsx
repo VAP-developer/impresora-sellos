@@ -286,7 +286,8 @@ export default function RollosSection({
           </label>
           <input
             id="rollos-limiteTickets"
-            type="text"
+            type="number"
+            min="0"
             value={limiteTickets}
             onChange={(e) => handleLimiteTicketsChange(e.target.value)}
             className="w-[400px] border-b border-gray-400 text-red-600 outline-none"

@@ -1,0 +1,226 @@
+/**
+ * VirtualKeyboardContext.tsx
+ *
+ * Context global para el teclado virtual. Gestiona:
+ * - Estado de visibilidad y tipo de teclado (numérico/completo)
+ * - Referencia al input activo
+ * - API para pulsaciones de teclas (pressKey, pressBackspace, clearInput)
+ * - Lectura de configuración desde el settings store
+ *
+ * La detección de focus (focusin/mousedown) se implementa en la tarea 5.2.
+ * La lógica avanzada de pulsación con posición de cursor se implementa en la tarea 5.3.
+ */
+
+import React, { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
+import { useSettingsStore } from '@renderer/stores/settings.store'
+import { setNativeValue } from './keyboard-utils'
+
+// ─── Context Value Interface ──────────────────────────────────────────────────
+
+export interface VirtualKeyboardContextValue {
+  /** Si el teclado virtual está habilitado globalmente */
+  enabled: boolean
+  /** Idioma del layout del teclado completo */
+  keyboardLanguage: 'es' | 'en'
+  /** Referencia al input actualmente enfocado */
+  activeInput: HTMLInputElement | null
+  /** Tipo de teclado a mostrar */
+  keyboardType: 'numeric' | 'full' | null
+  /** Si el teclado está visible en pantalla */
+  isVisible: boolean
+  /** Muestra el teclado para un input específico */
+  showKeyboard(input: HTMLInputElement, type: 'numeric' | 'full'): void
+  /** Oculta el teclado */
+  hideKeyboard(): void
+  /** Envía una pulsación de tecla al input activo */
+  pressKey(key: string): void
+  /** Borra el último carácter del input activo */
+  pressBackspace(): void
+  /** Limpia el input activo */
+  clearInput(): void
+}
+
+// ─── Context Creation ─────────────────────────────────────────────────────────
+
+const VirtualKeyboardContext = createContext<VirtualKeyboardContextValue | null>(null)
+
+// ─── Hook ─────────────────────────────────────────────────────────────────────
+
+export function useVirtualKeyboard(): VirtualKeyboardContextValue {
+  const context = useContext(VirtualKeyboardContext)
+  if (!context) {
+    throw new Error('useVirtualKeyboard must be used within a VirtualKeyboardProvider')
+  }
+  return context
+}
+
+// ─── Provider ─────────────────────────────────────────────────────────────────
+
+interface VirtualKeyboardProviderProps {
+  children: ReactNode
+}
+
+export function VirtualKeyboardProvider({ children }: VirtualKeyboardProviderProps): React.JSX.Element {
+  // Leer configuración desde el settings store
+  const virtualKeyboardEnabled = useSettingsStore((s) => s.virtualKeyboardEnabled)
+  const virtualKeyboardLanguage = useSettingsStore((s) => s.virtualKeyboardLanguage)
+
+  // Estado local del teclado
+  const [activeInput, setActiveInput] = useState<HTMLInputElement | null>(null)
+  const [keyboardType, setKeyboardType] = useState<'numeric' | 'full' | null>(null)
+  const [isVisible, setIsVisible] = useState(false)
+
+  // ─── Callbacks ────────────────────────────────────────────────────────────
+
+  const showKeyboard = useCallback((input: HTMLInputElement, type: 'numeric' | 'full') => {
+    setActiveInput(input)
+    setKeyboardType(type)
+    setIsVisible(true)
+  }, [])
+
+  const hideKeyboard = useCallback(() => {
+    setIsVisible(false)
+    setActiveInput(null)
+    setKeyboardType(null)
+  }, [])
+
+  const pressKey = useCallback((key: string) => {
+    if (!activeInput || !document.contains(activeInput)) return
+
+    const currentValue = activeInput.value
+    // selectionStart/selectionEnd are null for input type="number"
+    const selStart = activeInput.selectionStart ?? currentValue.length
+    const selEnd = activeInput.selectionEnd ?? currentValue.length
+    const hasSelection = selStart !== selEnd
+
+    // Respetar maxLength: si no hay selección que reemplazar, no insertar
+    const maxLength = activeInput.maxLength
+    if (maxLength > 0 && currentValue.length >= maxLength && !hasSelection) return
+
+    // Insertar carácter en posición del cursor (o reemplazar selección)
+    const before = currentValue.slice(0, selStart)
+    const after = currentValue.slice(selEnd)
+    const newValue = before + key + after
+
+    setNativeValue(activeInput, newValue)
+
+    // Restaurar cursor justo después del carácter insertado
+    const newPos = selStart + key.length
+    try {
+      activeInput.setSelectionRange(newPos, newPos)
+    } catch {
+      // setSelectionRange throws on input type="number" — ignore
+    }
+  }, [activeInput])
+
+  const pressBackspace = useCallback(() => {
+    if (!activeInput || !document.contains(activeInput)) return
+
+    const currentValue = activeInput.value
+    // selectionStart/selectionEnd are null for input type="number"
+    const selStart = activeInput.selectionStart ?? currentValue.length
+    const selEnd = activeInput.selectionEnd ?? currentValue.length
+    const hasSelection = selStart !== selEnd
+
+    if (hasSelection) {
+      // Eliminar el texto seleccionado
+      const before = currentValue.slice(0, selStart)
+      const after = currentValue.slice(selEnd)
+      setNativeValue(activeInput, before + after)
+
+      try {
+        activeInput.setSelectionRange(selStart, selStart)
+      } catch {
+        // setSelectionRange throws on input type="number" — ignore
+      }
+    } else {
+      // Sin selección: borrar carácter antes del cursor
+      if (selStart === 0) return
+
+      const before = currentValue.slice(0, selStart - 1)
+      const after = currentValue.slice(selStart)
+      setNativeValue(activeInput, before + after)
+
+      const newPos = selStart - 1
+      try {
+        activeInput.setSelectionRange(newPos, newPos)
+      } catch {
+        // setSelectionRange throws on input type="number" — ignore
+      }
+    }
+  }, [activeInput])
+
+  const clearInput = useCallback(() => {
+    if (!activeInput || !document.contains(activeInput)) return
+
+    const clearValue = activeInput.type === 'number' ? '0' : ''
+    setNativeValue(activeInput, clearValue)
+
+    // Posicionar cursor al final del valor limpiado
+    try {
+      activeInput.setSelectionRange(clearValue.length, clearValue.length)
+    } catch {
+      // setSelectionRange throws on input type="number" — ignore
+    }
+  }, [activeInput])
+
+  // ─── Focus Detection ───────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!virtualKeyboardEnabled) return
+
+    const ignoredTypes = ['checkbox', 'radio', 'button', 'submit', 'reset', 'file', 'hidden']
+
+    function handleFocusIn(e: FocusEvent): void {
+      const target = e.target as HTMLElement
+      if (target.tagName !== 'INPUT') return
+
+      const input = target as HTMLInputElement
+      if (ignoredTypes.includes(input.type)) return
+
+      const type: 'numeric' | 'full' = input.type === 'number' ? 'numeric' : 'full'
+      showKeyboard(input, type)
+    }
+
+    function handleMouseDown(e: MouseEvent): void {
+      const target = e.target as HTMLElement
+
+      // Don't close if the click is on the keyboard itself
+      if (target.closest('[data-virtual-keyboard]')) return
+
+      // Don't close if the click is on an input (focusin will handle it)
+      if (target.tagName === 'INPUT') return
+
+      hideKeyboard()
+    }
+
+    document.addEventListener('focusin', handleFocusIn)
+    document.addEventListener('mousedown', handleMouseDown)
+
+    return () => {
+      document.removeEventListener('focusin', handleFocusIn)
+      document.removeEventListener('mousedown', handleMouseDown)
+    }
+  }, [virtualKeyboardEnabled, showKeyboard, hideKeyboard])
+
+  // ─── Context Value ────────────────────────────────────────────────────────
+
+  const contextValue: VirtualKeyboardContextValue = {
+    enabled: virtualKeyboardEnabled,
+    keyboardLanguage: virtualKeyboardLanguage,
+    activeInput,
+    keyboardType,
+    isVisible,
+    showKeyboard,
+    hideKeyboard,
+    pressKey,
+    pressBackspace,
+    clearInput
+  }
+
+  return (
+    <VirtualKeyboardContext.Provider value={contextValue}>
+      {children}
+    </VirtualKeyboardContext.Provider>
+  )
+}

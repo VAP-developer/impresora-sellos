@@ -369,6 +369,10 @@ export interface ElectronAPI {
     setLanguage(value: string): Promise<void>
     getPrintRotation(): Promise<boolean>
     setPrintRotation(value: boolean): Promise<void>
+    getVirtualKeyboardEnabled(): Promise<boolean>
+    setVirtualKeyboardEnabled(enabled: boolean): Promise<void>
+    getVirtualKeyboardLanguage(): Promise<string>
+    setVirtualKeyboardLanguage(lang: string): Promise<void>
     onChange(callback: (config: AppConfig) => void): () => void
   }
   orders: {
@@ -486,6 +490,10 @@ const api: ElectronAPI = {
     setLanguage: (value) => ipcRenderer.invoke('config:setLanguage', value),
     getPrintRotation: () => ipcRenderer.invoke('config:getPrintRotation'),
     setPrintRotation: (value) => ipcRenderer.invoke('config:setPrintRotation', value),
+    getVirtualKeyboardEnabled: () => ipcRenderer.invoke('config:getVirtualKeyboardEnabled'),
+    setVirtualKeyboardEnabled: (enabled) => ipcRenderer.invoke('config:setVirtualKeyboardEnabled', enabled),
+    getVirtualKeyboardLanguage: () => ipcRenderer.invoke('config:getVirtualKeyboardLanguage'),
+    setVirtualKeyboardLanguage: (lang) => ipcRenderer.invoke('config:setVirtualKeyboardLanguage', lang),
     onChange: (callback) => {
       const handler = (_event: Electron.IpcRendererEvent, config: AppConfig): void => {
         callback(config)

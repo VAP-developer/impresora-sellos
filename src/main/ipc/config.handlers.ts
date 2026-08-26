@@ -19,6 +19,12 @@ import { ConfigRepository, type AppLanguage } from '../database/repositories/con
  * - config:setCutNumber
  * - config:getLanguage
  * - config:setLanguage
+ * - config:getPrintRotation
+ * - config:setPrintRotation
+ * - config:getVirtualKeyboardEnabled
+ * - config:setVirtualKeyboardEnabled
+ * - config:getVirtualKeyboardLanguage
+ * - config:setVirtualKeyboardLanguage
  */
 export function registerConfigHandlers(): void {
   const repo = new ConfigRepository()
@@ -92,5 +98,21 @@ export function registerConfigHandlers(): void {
 
   handleIpc('config:setPrintRotation', (value: unknown) => {
     repo.setPrintRotation(value as boolean)
+  })
+
+  handleIpc('config:getVirtualKeyboardEnabled', () => {
+    return repo.getVirtualKeyboardEnabled()
+  })
+
+  handleIpc('config:setVirtualKeyboardEnabled', (value: unknown) => {
+    repo.setVirtualKeyboardEnabled(value as boolean)
+  })
+
+  handleIpc('config:getVirtualKeyboardLanguage', () => {
+    return repo.getVirtualKeyboardLanguage()
+  })
+
+  handleIpc('config:setVirtualKeyboardLanguage', (value: unknown) => {
+    repo.setVirtualKeyboardLanguage(value as AppLanguage)
   })
 }

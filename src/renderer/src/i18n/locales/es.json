@@ -47,7 +47,12 @@
     "selectTariffs": "Seleccionar tarifas",
     "stripTariffWarning": "La tira debe tener al menos 2 tarifas seleccionadas",
     "stamps": "sellos",
-    "times": "veces"
+    "times": "veces",
+    "virtualKeyboard": "Teclado Virtual",
+    "virtualKeyboardEnabled": "Activar teclado virtual",
+    "virtualKeyboardLanguage": "Idioma del teclado",
+    "keyboardSpanish": "Español",
+    "keyboardEnglish": "Inglés"
   },
   "validation": {
     "nameRequired": "El nombre es obligatorio",
@@ -73,5 +78,17 @@
     "saveFailed": "Error al guardar",
     "deleteFailed": "Error al eliminar",
     "groupInUse": "No se puede eliminar: el grupo está asociado a eventos"
+  },
+  "keyboard": {
+    "space": "ESPACIO",
+    "backspace": "Borrar",
+    "shift": "Mayúsculas",
+    "enter": "Enter",
+    "close": "Cerrar teclado",
+    "clear": "Limpiar",
+    "confirm": "Confirmar",
+    "numericKeyboard": "Teclado virtual numérico",
+    "fullKeyboard": "Teclado virtual",
+    "key": "Tecla"
   }
 }

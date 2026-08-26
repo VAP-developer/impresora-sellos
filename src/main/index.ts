@@ -10,6 +10,13 @@ import { loadUserConfig } from './user-config'
 import { setAuthToken, activateLicense, getMachineId } from './license'
 import { AppStateRepository } from './database/repositories/app-state.repository'
 
+// Disable the Windows on-screen keyboard (InputPane) to prevent it from appearing
+// alongside our custom virtual keyboard on touch-enabled devices.
+// This Chromium switch must be set before app.whenReady().
+// Our virtual keyboard's own enabled/disabled toggle controls whether our keyboard shows;
+// this switch simply prevents the OS from also popping up its native keyboard.
+app.commandLine.appendSwitch('disable-features', 'InputPaneOnScreenKeyboard')
+
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
     width: 1280,

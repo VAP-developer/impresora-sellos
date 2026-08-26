@@ -47,7 +47,12 @@
     "selectTariffs": "Select tariffs",
     "stripTariffWarning": "Strip must have at least 2 tariffs selected",
     "stamps": "stamps",
-    "times": "times"
+    "times": "times",
+    "virtualKeyboard": "Virtual Keyboard",
+    "virtualKeyboardEnabled": "Enable virtual keyboard",
+    "virtualKeyboardLanguage": "Keyboard language",
+    "keyboardSpanish": "Spanish",
+    "keyboardEnglish": "English"
   },
   "validation": {
     "nameRequired": "Name is required",
@@ -73,5 +78,17 @@
     "saveFailed": "Failed to save",
     "deleteFailed": "Failed to delete",
     "groupInUse": "Cannot delete: group is associated with events"
+  },
+  "keyboard": {
+    "space": "SPACE",
+    "backspace": "Delete",
+    "shift": "Shift",
+    "enter": "Enter",
+    "close": "Close keyboard",
+    "clear": "Clear",
+    "confirm": "Confirm",
+    "numericKeyboard": "Numeric virtual keyboard",
+    "fullKeyboard": "Virtual keyboard",
+    "key": "Key"
   }
 }

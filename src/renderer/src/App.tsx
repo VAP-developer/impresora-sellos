@@ -6,6 +6,8 @@ import { useSettingsStore } from '@renderer/stores/settings.store'
 import { useImagesStore } from '@renderer/stores/images.store'
 import { LicenseBlockScreen } from '@renderer/components/LicenseBlockScreen'
 import { BlockedScreen } from '@renderer/components/BlockedScreen'
+import { VirtualKeyboardProvider } from '@renderer/components/virtual-keyboard/VirtualKeyboardContext'
+import { VirtualKeyboardOverlay } from '@renderer/components/virtual-keyboard/VirtualKeyboardOverlay'
 import { router } from './router'
 
 function App(): JSX.Element {
@@ -50,11 +52,12 @@ function App(): JSX.Element {
   }
 
   return (
-    <>
+    <VirtualKeyboardProvider>
       <LicenseBlockScreen />
       <BlockedScreen />
       <RouterProvider router={router} />
-    </>
+      <VirtualKeyboardOverlay />
+    </VirtualKeyboardProvider>
   )
 }
 
