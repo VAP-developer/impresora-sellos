@@ -22,7 +22,7 @@
     "userId": {"S": "usr_vjc_home"},
     "displayName": {"S": "home"},
     "welcomeMessage": {"S": "Bienvenido home"},
-    "maxMachines": {"N": "2"},
+    "maxMachines": {"N": "6"},
     "isAdmin": {"BOOL": false},
     "activeMachines": {"L": []}
   }
