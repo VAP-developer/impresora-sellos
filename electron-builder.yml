@@ -25,6 +25,8 @@ extraResources:
     to: print-pdf.ps1
   - from: resources/configure-cut-at-end.ps1
     to: configure-cut-at-end.ps1
+  - from: resources/set-stamp-paper-size.ps1
+    to: set-stamp-paper-size.ps1
   - from: src/main/database/migrations
     to: migrations
     filter:

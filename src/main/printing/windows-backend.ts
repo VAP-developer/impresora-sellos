@@ -321,11 +321,16 @@ export class WindowsBackend implements PrinterBackend {
 
       const sumatraPath = getSumatraPdfPath()
 
-      // Resolve DPI for rendering
+      // Resolve DPI for rendering.
+      //
+      // Use the printer's NATIVE resolution — do NOT multiply it. Rasterising
+      // above the native DPI forces the driver to downscale an oversized bitmap,
+      // which on the Brother TD-4520TN (300 dpi) produced jobs the printer
+      // silently discarded: the spooler reported "printed successfully" but no
+      // label came out. It also contradicts the dynamic-printer-dpi spec, which
+      // requires `noscale,{dpiX}x{dpiY}dpi` with the detected native values.
       const dpi = this.dpiCache?.get(printerName) ?? FALLBACK_DPI
-      const renderDpiX = dpi.dpiX * 2
-      const renderDpiY = dpi.dpiY * 2
-      const dpiSetting = `${renderDpiX}x${renderDpiY}dpi`
+      const dpiSetting = `${dpi.dpiX}x${dpi.dpiY}dpi`
       const printSettings = `noscale,${dpiSetting}`
 
       const args = [
@@ -335,7 +340,17 @@ export class WindowsBackend implements PrinterBackend {
         tempFile
       ]
 
+      console.log(
+        `[WindowsBackend] PRINT job="${jobName}" printer="${printerName}" ` +
+        `media="${options.media}" dpi=${dpi.dpiX}x${dpi.dpiY} render=${dpiSetting} ` +
+        `pdfBytes=${pdfBuffer.length} sumatra="${sumatraPath}" tmp="${tempFile}"`
+      )
+
+      const startedAt = Date.now()
       await this.cmd.execFile(sumatraPath, args, { timeout: 30000 })
+      console.log(
+        `[WindowsBackend] SumatraPDF returned for job="${jobName}" printer="${printerName}" in ${Date.now() - startedAt}ms`
+      )
 
       // Wait for the spooler to pick up the job with the correct paper size
       // before allowing the next job to reconfigure the driver
@@ -352,6 +367,14 @@ export class WindowsBackend implements PrinterBackend {
     } catch (err: unknown) {
       try { unlinkSync(tempFile) } catch { /* ignore */ }
       const message = err instanceof Error ? err.message : String(err)
+      // Surface the details Node attaches to failed child processes (exit code,
+      // signal, stderr) — without these the log only shows "Command failed".
+      const e = err as { code?: unknown; signal?: unknown; stderr?: unknown; stdout?: unknown }
+      console.error(
+        `[WindowsBackend] PRINT FAILED printer="${printerName}" job="${jobName}" ` +
+        `code=${String(e?.code)} signal=${String(e?.signal)} msg=${message} ` +
+        `stderr=${String(e?.stderr ?? '').trim()} stdout=${String(e?.stdout ?? '').trim()}`
+      )
       return { success: false, error: `Print failed: ${message}` }
     }
   }

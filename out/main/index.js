@@ -1160,9 +1160,7 @@ class WindowsBackend {
       }
       const sumatraPath = getSumatraPdfPath();
       const dpi = this.dpiCache?.get(printerName) ?? FALLBACK_DPI;
-      const renderDpiX = dpi.dpiX * 2;
-      const renderDpiY = dpi.dpiY * 2;
-      const dpiSetting = `${renderDpiX}x${renderDpiY}dpi`;
+      const dpiSetting = `${dpi.dpiX}x${dpi.dpiY}dpi`;
       const printSettings = `noscale,${dpiSetting}`;
       const args = [
         "-print-to",
@@ -1172,7 +1170,14 @@ class WindowsBackend {
         "-silent",
         tempFile
       ];
+      console.log(
+        `[WindowsBackend] PRINT job="${jobName}" printer="${printerName}" media="${options.media}" dpi=${dpi.dpiX}x${dpi.dpiY} render=${dpiSetting} pdfBytes=${pdfBuffer.length} sumatra="${sumatraPath}" tmp="${tempFile}"`
+      );
+      const startedAt = Date.now();
       await this.cmd.execFile(sumatraPath, args, { timeout: 3e4 });
+      console.log(
+        `[WindowsBackend] SumatraPDF returned for job="${jobName}" printer="${printerName}" in ${Date.now() - startedAt}ms`
+      );
       if (customMedia) {
         await new Promise((resolve) => setTimeout(resolve, 1e3));
       }
@@ -1189,6 +1194,10 @@ class WindowsBackend {
       } catch {
       }
       const message = err instanceof Error ? err.message : String(err);
+      const e = err;
+      console.error(
+        `[WindowsBackend] PRINT FAILED printer="${printerName}" job="${jobName}" code=${String(e?.code)} signal=${String(e?.signal)} msg=${message} stderr=${String(e?.stderr ?? "").trim()} stdout=${String(e?.stdout ?? "").trim()}`
+      );
       return { success: false, error: `Print failed: ${message}` };
     }
   }
@@ -1350,12 +1359,20 @@ class PrinterManager {
   async print(target, pdfBuffer, options) {
     const uri = this.assignments[target];
     if (!uri) {
+      console.error(
+        `[PrinterManager] No printer assigned for target "${target}". Current assignments: ${JSON.stringify({
+          printer1: this.assignments.printer1,
+          printer2: this.assignments.printer2,
+          ticket: this.assignments.ticket
+        })}`
+      );
       return {
         success: false,
         error: `No printer assigned for target "${target}"`
       };
     }
     if (this.paused.has(target)) {
+      console.warn(`[PrinterManager] Target "${target}" is PAUSED — job not sent`);
       return {
         success: false,
         error: `Printer "${target}" is paused`
@@ -1612,6 +1629,21 @@ class PrintQueueRepository {
     ).run(errorMessage, id);
   }
   /**
+   * Recovers jobs left stuck in 'printing' (e.g. the app was killed or a print
+   * backend hung during a previous run). Marks them as 'error' so they don't
+   * remain zombie rows that never complete. Returns the number of jobs reset.
+   *
+   * Called on service startup.
+   */
+  resetStuckPrinting() {
+    const result = this.db.prepare(
+      `UPDATE print_queue
+         SET status = 'error', error_message = 'Interrupted while printing (recovered on startup)'
+         WHERE status = 'printing'`
+    ).run();
+    return result.changes;
+  }
+  /**
    * Resets a job back to 'pending' status for retry.
    * Clears the error message but preserves the attempt count.
    */
@@ -1689,7 +1721,8 @@ const DEFAULT_OPTIONS = {
   maxAttempts: 3,
   pollIntervalMs: 1e3,
   retryDelayMs: 2e3,
-  defaultTicketHeightMm: 200
+  defaultTicketHeightMm: 200,
+  printTimeoutMs: 45e3
 };
 class PrintQueueService {
   repository;
@@ -1719,6 +1752,10 @@ class PrintQueueService {
    */
   enqueue(pdfs, orderId) {
     const jobIds = [];
+    const summary = pdfs.map((p) => `${p.pdfType}→${p.target}`).join(", ");
+    console.log(
+      `[PrintQueue] ENQUEUE ${pdfs.length} pdf(s) orderId=${orderId ?? "none"}` + (pdfs.length > 0 ? `: ${summary}` : " — WARNING: sale produced NO PDFs")
+    );
     for (const pdf of pdfs) {
       const id = this.repository.insert({
         orderId: orderId ?? null,
@@ -1773,29 +1810,43 @@ class PrintQueueService {
   async processJob(job) {
     const cached = this.bufferCache.get(job.id);
     if (!cached) {
+      console.warn(
+        `[PrintQueue] Job ${job.id} (${job.pdfType} → ${job.printerTarget}): buffer missing from cache, marking error`
+      );
       this.repository.markError(job.id, "PDF buffer not found in cache (possible restart)");
       return false;
     }
     const { buffer } = cached;
+    const targetUri = this.printerManager.getUriForTarget(job.printerTarget);
+    console.log(
+      `[PrintQueue] Job ${job.id} START type=${job.pdfType} target=${job.printerTarget} uri=${targetUri ?? "UNASSIGNED"} bytes=${buffer.length} attempts=${job.attempts}`
+    );
     this.repository.markPrinting(job.id);
     try {
       const options = this.buildPrintOptions(job);
-      const result = await this.printerManager.print(
-        job.printerTarget,
-        buffer,
-        options
+      const result = await this.withTimeout(
+        this.printerManager.print(job.printerTarget, buffer, options),
+        this.options.printTimeoutMs,
+        `Print timed out after ${this.options.printTimeoutMs}ms`
       );
       if (result.success) {
+        console.log(`[PrintQueue] Job ${job.id} OK (target=${job.printerTarget})`);
         this.repository.markCompleted(job.id);
         this.bufferCache.delete(job.id);
         return true;
       } else {
+        console.error(
+          `[PrintQueue] Job ${job.id} FAILED (target=${job.printerTarget}): ${result.error ?? "unknown error"}`
+        );
         this.repository.markError(job.id, result.error ?? "Unknown printer error");
         await this.scheduleRetry(job);
         return false;
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
+      console.error(
+        `[PrintQueue] Job ${job.id} THREW (target=${job.printerTarget}): ${errorMessage}`
+      );
       this.repository.markError(job.id, errorMessage);
       await this.scheduleRetry(job);
       return false;
@@ -1853,6 +1904,14 @@ class PrintQueueService {
    */
   start() {
     if (this.running) return;
+    try {
+      const recovered = this.repository.resetStuckPrinting();
+      if (recovered > 0) {
+        console.log(`[PrintQueue] Recovered ${recovered} job(s) stuck in 'printing'`);
+      }
+    } catch (err) {
+      console.warn("[PrintQueue] Failed to recover stuck jobs:", err);
+    }
     this.running = true;
     this.schedulePoll();
   }
@@ -1937,6 +1996,18 @@ class PrintQueueService {
   delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
+  /**
+   * Races a promise against a timeout. If the promise doesn't settle within
+   * `ms`, the returned promise rejects with an Error(message). Used to prevent a
+   * hung print backend from blocking the queue indefinitely.
+   */
+  withTimeout(promise, ms, message) {
+    let timer;
+    const timeout = new Promise((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), ms);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  }
 }
 class PrinterAssignmentsRepository {
   db;
@@ -1991,6 +2062,9 @@ function getPrinterManager() {
     const dpiCache = new DpiCache();
     const dpiDetector = new WmiDpiDetector(defaultWindowsExecutor);
     const backend = new WindowsBackend(defaultWindowsExecutor, dpiCache);
+    console.log(
+      `[Services] Printer assignments loaded: ${JSON.stringify(savedAssignments)}`
+    );
     printerManager = new PrinterManager(backend, assignments, dpiDetector, dpiCache);
     if (assignments) {
       printerManager.setAssignments(assignments);
@@ -2008,52 +2082,58 @@ function initServices() {
   const queue = getPrintQueueService();
   queue.start();
   console.log("[Services] Print queue background processing started");
-  configureCutAtEnd().catch((err) => {
-    console.warn("[Services] Failed to configure cut-at-end mode:", err);
+  configureStampPrinters().catch((err) => {
+    console.warn("[Services] Failed to configure stamp printers:", err);
   });
 }
-async function configureCutAtEnd() {
+const STAMP_PAGE_WIDTH_MM = 55;
+const STAMP_PAGE_HEIGHT_MM$1 = 55;
+function findResourceScript(scriptName) {
   const { existsSync } = require("fs");
   const { join } = require("path");
-  let scriptPath = "";
-  const scriptName = "configure-cut-at-end.ps1";
+  const candidates = [];
   if (process.resourcesPath) {
-    const packaged = join(process.resourcesPath, scriptName);
-    if (existsSync(packaged)) scriptPath = packaged;
+    candidates.push(join(process.resourcesPath, scriptName));
   }
-  if (!scriptPath) {
-    const devPath = join(__dirname, "..", "resources", scriptName);
-    if (existsSync(devPath)) scriptPath = devPath;
+  candidates.push(join(__dirname, "..", "resources", scriptName));
+  candidates.push(join(__dirname, "..", "..", "resources", scriptName));
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
   }
-  if (!scriptPath) {
-    const devPath2 = join(__dirname, "..", "..", "resources", scriptName);
-    if (existsSync(devPath2)) scriptPath = devPath2;
-  }
-  if (!scriptPath) {
-    console.log("[Services] configure-cut-at-end.ps1 not found, skipping");
-    return;
-  }
+  return "";
+}
+function getStampPrinterNames() {
   let savedAssignments = {};
   try {
     const assignmentsRepo = new PrinterAssignmentsRepository();
     savedAssignments = assignmentsRepo.getAll();
   } catch {
+    return [];
+  }
+  return [savedAssignments.printer1, savedAssignments.printer2].filter((uri) => Boolean(uri)).map((uri) => decodeURIComponent(uri.replace("win://", "")));
+}
+async function configureStampPrinters() {
+  const scriptPath = findResourceScript("set-stamp-paper-size.ps1");
+  if (!scriptPath) {
+    console.log("[Services] set-stamp-paper-size.ps1 not found, skipping");
     return;
   }
-  const stampPrinters = [savedAssignments.printer1, savedAssignments.printer2].filter(Boolean);
+  const stampPrinters = getStampPrinterNames();
   if (stampPrinters.length === 0) return;
   const { exec: nodeExec } = require("child_process");
   const { promisify } = require("util");
   const execAsync2 = promisify(nodeExec);
-  for (const uri of stampPrinters) {
-    const printerName = decodeURIComponent(uri.replace("win://", ""));
+  for (const printerName of stampPrinters) {
     const escaped = printerName.replace(/"/g, '`"');
-    const cmd = `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}" -PrinterName "${escaped}"`;
+    const cmd = `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}" -PrinterName "${escaped}" -WidthMm ${STAMP_PAGE_WIDTH_MM} -HeightMm ${STAMP_PAGE_HEIGHT_MM$1}`;
     try {
-      await execAsync2(cmd, { timeout: 1e4 });
-      console.log(`[Services] Configured cut-at-end for: ${printerName}`);
+      const { stdout, stderr } = await execAsync2(cmd, { timeout: 1e4 });
+      const out = String(stdout ?? "").trim().replace(/\s*\n\s*/g, " | ");
+      console.log(`[Services] Configured stamp printer "${printerName}": ${out}`);
+      const errOut = String(stderr ?? "").trim();
+      if (errOut) console.warn(`[Services] Config stderr for "${printerName}": ${errOut}`);
     } catch (err) {
-      console.warn(`[Services] Failed to configure cut-at-end for ${printerName}:`, err);
+      console.warn(`[Services] Failed to configure stamp printer ${printerName}:`, err);
     }
   }
 }
@@ -3152,6 +3232,8 @@ const STAMP_WIDTH_MM = 55;
 const STAMP_HEIGHT_MM = 55;
 const STAMP_WIDTH = STAMP_WIDTH_MM * MM_TO_PT$1;
 const STAMP_HEIGHT = STAMP_HEIGHT_MM * MM_TO_PT$1;
+const STAMP_PAGE_HEIGHT_MM = 25;
+const STAMP_PAGE_HEIGHT = STAMP_PAGE_HEIGHT_MM * MM_TO_PT$1;
 const FONTS = {
   regular: "FranklinGothic",
   bold: "FranklinGothicBold",
@@ -3344,7 +3426,8 @@ async function renderStampMultiPage(stamps) {
     throw new Error("No stamps to render");
   }
   const doc = new PDFDocument({
-    size: [STAMP_WIDTH, STAMP_HEIGHT],
+    // Página = etiqueta física 55x25mm (ver STAMP_PAGE_HEIGHT_MM).
+    size: [STAMP_WIDTH, STAMP_PAGE_HEIGHT],
     margin: 0,
     info: { Title: `Tira de ${stamps.length} etiquetas`, Author: "Stamp Sales App" }
   });
@@ -3354,7 +3437,7 @@ async function renderStampMultiPage(stamps) {
   const rotate180 = shouldRotate180();
   stamps.forEach((stamp, index) => {
     if (index > 0) {
-      doc.addPage({ size: [STAMP_WIDTH, STAMP_HEIGHT], margin: 0 });
+      doc.addPage({ size: [STAMP_WIDTH, STAMP_PAGE_HEIGHT], margin: 0 });
     }
     if (rotate180) {
       applyRotation180(doc);
@@ -3402,7 +3485,7 @@ async function renderStampMultiPage(stamps) {
 }
 async function renderStampEspecialStrip(codigos, especial, tarifa) {
   const doc = new PDFDocument({
-    size: [STAMP_WIDTH, STAMP_HEIGHT],
+    size: [STAMP_WIDTH, STAMP_PAGE_HEIGHT],
     margin: 0,
     layout: "portrait",
     info: { Title: "Tira Especial", Author: "Stamp Sales App" }
@@ -3422,7 +3505,7 @@ async function renderStampEspecialStrip(codigos, especial, tarifa) {
   drawBackground(doc, fs.existsSync(bg1) ? bg1 : null);
   drawTextLeft(doc, codigos[0], FONTS.regular, 6, 1.5, 2);
   drawTextLeft(doc, especial, FONTS.regular, 6, 23.3, 2);
-  doc.addPage({ size: [STAMP_WIDTH, STAMP_HEIGHT], margin: 0 });
+  doc.addPage({ size: [STAMP_WIDTH, STAMP_PAGE_HEIGHT], margin: 0 });
   doc.rotate(90, { origin: [pageWidth / 2, pageHeight / 2] });
   if (rotate180) {
     applyRotation180(doc);
@@ -3432,7 +3515,7 @@ async function renderStampEspecialStrip(codigos, especial, tarifa) {
   drawTextLeft(doc, tarifa, FONTS.regular, 12, 1.5, 19.5);
   drawTextLeft(doc, codigos[1], FONTS.regular, 6, 1.5, 2);
   drawTextLeft(doc, especial, FONTS.regular, 6, 23.3, 2);
-  doc.addPage({ size: [STAMP_WIDTH, STAMP_HEIGHT], margin: 0 });
+  doc.addPage({ size: [STAMP_WIDTH, STAMP_PAGE_HEIGHT], margin: 0 });
   doc.rotate(90, { origin: [pageWidth / 2, pageHeight / 2] });
   if (rotate180) {
     applyRotation180(doc);
@@ -3442,7 +3525,7 @@ async function renderStampEspecialStrip(codigos, especial, tarifa) {
   drawTextLeft(doc, tarifa, FONTS.regular, 12, 1.5, 19.5);
   drawTextLeft(doc, codigos[2], FONTS.regular, 6, 1.5, 2);
   drawTextLeft(doc, especial, FONTS.regular, 6, 23.3, 2);
-  doc.addPage({ size: [STAMP_WIDTH, STAMP_HEIGHT], margin: 0 });
+  doc.addPage({ size: [STAMP_WIDTH, STAMP_PAGE_HEIGHT], margin: 0 });
   doc.rotate(90, { origin: [pageWidth / 2, pageHeight / 2] });
   if (rotate180) {
     applyRotation180(doc);
@@ -5530,6 +5613,88 @@ function handleIpc(channel, handler) {
     }
   });
 }
+const MAX_LOG_BYTES = 5 * 1024 * 1024;
+let stream = null;
+let logFilePath = "";
+let installed = false;
+function getLogFilePath() {
+  return logFilePath;
+}
+function formatArg(arg) {
+  if (typeof arg === "string") return arg;
+  if (arg instanceof Error) return `${arg.message}
+${arg.stack ?? ""}`;
+  try {
+    return JSON.stringify(arg);
+  } catch {
+    return String(arg);
+  }
+}
+function timestamp() {
+  return (/* @__PURE__ */ new Date()).toISOString();
+}
+function initFileLogger() {
+  if (installed) return;
+  installed = true;
+  try {
+    const logsDir = path.join(electron.app.getPath("userData"), "logs");
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+    logFilePath = path.join(logsDir, "main.log");
+    try {
+      if (fs.existsSync(logFilePath) && fs.statSync(logFilePath).size > MAX_LOG_BYTES) {
+        fs.renameSync(logFilePath, path.join(logsDir, "main.prev.log"));
+      }
+    } catch {
+    }
+    stream = fs.createWriteStream(logFilePath, { flags: "a" });
+    stream.on("error", () => {
+      stream = null;
+    });
+    const write = (level, args) => {
+      if (!stream) return;
+      try {
+        stream.write(`[${timestamp()}] [${level}] ${args.map(formatArg).join(" ")}
+`);
+      } catch {
+      }
+    };
+    const original = {
+      log: console.log.bind(console),
+      info: console.info.bind(console),
+      warn: console.warn.bind(console),
+      error: console.error.bind(console)
+    };
+    console.log = (...args) => {
+      original.log(...args);
+      write("INFO", args);
+    };
+    console.info = (...args) => {
+      original.info(...args);
+      write("INFO", args);
+    };
+    console.warn = (...args) => {
+      original.warn(...args);
+      write("WARN", args);
+    };
+    console.error = (...args) => {
+      original.error(...args);
+      write("ERROR", args);
+    };
+    process.on("uncaughtException", (err) => {
+      write("FATAL", ["uncaughtException:", err]);
+    });
+    process.on("unhandledRejection", (reason) => {
+      write("FATAL", ["unhandledRejection:", reason]);
+    });
+    console.log(
+      `[Logger] File logging started — version=${electron.app.getVersion()} packaged=${electron.app.isPackaged} log=${logFilePath}`
+    );
+  } catch {
+    stream = null;
+  }
+}
 electron.app.commandLine.appendSwitch("disable-features", "InputPaneOnScreenKeyboard");
 function createWindow() {
   const mainWindow = new electron.BrowserWindow({
@@ -5557,6 +5722,7 @@ function createWindow() {
 }
 electron.app.whenReady().then(async () => {
   utils.electronApp.setAppUserModelId("com.stamp-sales");
+  initFileLogger();
   const userConfig2 = loadUserConfig();
   if (userConfig2.license && userConfig2.license.apiKey) {
     setAuthToken(userConfig2.license.apiKey);
@@ -5608,6 +5774,7 @@ Revisa el archivo startup-error.log junto al ejecutable.`);
   }
   try {
     initServices();
+    console.log(`[startup] Services initialised. Log file: ${getLogFilePath()}`);
   } catch (err) {
     console.error("[FATAL] Failed to initialize services:", err);
   }

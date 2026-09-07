@@ -197,6 +197,24 @@ export class PrintQueueRepository {
   }
 
   /**
+   * Recovers jobs left stuck in 'printing' (e.g. the app was killed or a print
+   * backend hung during a previous run). Marks them as 'error' so they don't
+   * remain zombie rows that never complete. Returns the number of jobs reset.
+   *
+   * Called on service startup.
+   */
+  resetStuckPrinting(): number {
+    const result = this.db
+      .prepare(
+        `UPDATE print_queue
+         SET status = 'error', error_message = 'Interrupted while printing (recovered on startup)'
+         WHERE status = 'printing'`
+      )
+      .run()
+    return result.changes
+  }
+
+  /**
    * Resets a job back to 'pending' status for retry.
    * Clears the error message but preserves the attempt count.
    */

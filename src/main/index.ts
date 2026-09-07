@@ -9,6 +9,7 @@ import { initServices, shutdownServices } from './services'
 import { loadUserConfig } from './user-config'
 import { setAuthToken, activateLicense, getMachineId } from './license'
 import { AppStateRepository } from './database/repositories/app-state.repository'
+import { initFileLogger, getLogFilePath } from './logger'
 
 // Disable the Windows on-screen keyboard (InputPane) to prevent it from appearing
 // alongside our custom virtual keyboard on touch-enabled devices.
@@ -47,6 +48,10 @@ function createWindow(): void {
 
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.stamp-sales')
+
+  // Start file logging before anything else so all startup output is captured.
+  // Log file: %APPDATA%\stamp-sales-app\logs\main.log
+  initFileLogger()
 
   // Load user-specific config.json (personalization, license, etc.)
   const userConfig = loadUserConfig()
@@ -111,6 +116,7 @@ app.whenReady().then(async () => {
   // Initialize services (start print queue background processing)
   try {
     initServices()
+    console.log(`[startup] Services initialised. Log file: ${getLogFilePath()}`)
   } catch (err) {
     console.error('[FATAL] Failed to initialize services:', err)
   }

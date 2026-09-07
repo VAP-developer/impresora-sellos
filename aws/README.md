@@ -155,10 +155,29 @@ Tras desplegar la infraestructura, ejecuta el script para crear los usuarios en 
 
 Esto crea:
 
-| Usuario | Contraseña | Mensaje de bienvenida |
-|---------|-----------|----------------------|
-| admin.svvs | Sv#vjc!vS.2026 | Bienvenido VJC |
-| test | test_123 | Bienvenido Test |
+| Usuario | Datos DynamoDB | Mensaje de bienvenida |
+|---------|----------------|----------------------|
+| admin.svvs | `scripts/admin-item.json` | Bienvenido VJC |
+| test | `scripts/test-item.json` | Bienvenido Test |
+
+**Las contraseñas no están en el script.** Se resuelven en este orden:
+
+1. Parámetro explícito: `.\setup-users.ps1 -AdminPassword (Read-Host -AsSecureString)`
+2. Variables `ADMIN_SVVS_PASSWORD` / `TEST_PASSWORD` en `aws/.env` (fichero ignorado por git)
+3. Prompt interactivo con entrada oculta, si no están en ninguno de los anteriores
+
+El mínimo es 8 caracteres (política del User Pool). Usa `-SkipTest` si solo quieres crear `admin.svvs`.
+
+Para cambiar la contraseña de un usuario ya existente:
+
+```powershell
+aws cognito-idp admin-set-user-password `
+  --user-pool-id $env:USER_POOL_ID `
+  --username "admin.svvs" `
+  --password (Read-Host -Prompt "Nueva contraseña") `
+  --permanent `
+  --region eu-west-1
+```
 
 ---
 
@@ -534,9 +553,9 @@ aws dynamodb put-item --table-name svvs-kiosko-users --item file://aws/scripts/a
 aws dynamodb put-item --table-name svvs-kiosko-users --item file://aws/scripts/test-item.json --region eu-west-1
 aws dynamodb put-item --table-name svvs-kiosko-users --item file://aws/scripts/vjchome-item.json --region eu-west-1
 
-# Creamos vjc.home en Cognito
-aws cognito-idp admin-create-user --user-pool-id eu-west-1_CKDDDarFe --username "vjc.home" --temporary-password "TempPass1!" --message-action SUPPRESS --region eu-west-1 --no-cli-pager
-aws cognito-idp admin-set-user-password --user-pool-id eu-west-1_CKDDDarFe --username "vjc.home" --password "vjc_home_123" --permanent --region eu-west-1
+# Creamos vjc.home en Cognito (la contraseña se pide por prompt, no se hardcodea)
+aws cognito-idp admin-create-user --user-pool-id eu-west-1_CKDDDarFe --username "vjc.home" --temporary-password "Tmp!$(Get-Random)" --message-action SUPPRESS --region eu-west-1 --no-cli-pager
+aws cognito-idp admin-set-user-password --user-pool-id eu-west-1_CKDDDarFe --username "vjc.home" --password (Read-Host -Prompt "Password vjc.home") --permanent --region eu-west-1
 
 # Instalar y subir lambdas
 cd aws\lambdas\activate; npm install; cd ..\..\..

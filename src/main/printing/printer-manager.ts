@@ -328,6 +328,14 @@ export class PrinterManager {
   async print(target: PrinterTarget, pdfBuffer: Buffer, options: PrintOptions): Promise<PrintResult> {
     const uri = this.assignments[target]
     if (!uri) {
+      console.error(
+        `[PrinterManager] No printer assigned for target "${target}". ` +
+        `Current assignments: ${JSON.stringify({
+          printer1: this.assignments.printer1,
+          printer2: this.assignments.printer2,
+          ticket: this.assignments.ticket
+        })}`
+      )
       return {
         success: false,
         error: `No printer assigned for target "${target}"`
@@ -335,6 +343,7 @@ export class PrinterManager {
     }
 
     if (this.paused.has(target)) {
+      console.warn(`[PrinterManager] Target "${target}" is PAUSED — job not sent`)
       return {
         success: false,
         error: `Printer "${target}" is paused`

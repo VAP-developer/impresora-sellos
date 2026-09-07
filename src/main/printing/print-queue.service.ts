@@ -42,13 +42,21 @@ export interface PrintQueueServiceOptions {
   retryDelayMs?: number
   /** Default ticket height in mm when not specified (default: 200) */
   defaultTicketHeightMm?: number
+  /**
+   * Max time in ms to wait for a single print job before giving up (default: 45000).
+   * Protects the queue from a backend that hangs (e.g. a printer driver that never
+   * returns, or a printer that opens a modal dialog). Without this, one stuck job
+   * would block the whole queue and freeze the app.
+   */
+  printTimeoutMs?: number
 }
 
 const DEFAULT_OPTIONS: Required<PrintQueueServiceOptions> = {
   maxAttempts: 3,
   pollIntervalMs: 1000,
   retryDelayMs: 2000,
-  defaultTicketHeightMm: 200
+  defaultTicketHeightMm: 200,
+  printTimeoutMs: 45000
 }
 
 // ─── Service ──────────────────────────────────────────────────────────────────
@@ -101,6 +109,14 @@ export class PrintQueueService {
    */
   enqueue(pdfs: GeneratedPdf[], orderId?: number): number[] {
     const jobIds: number[] = []
+
+    // Log what the sale produced. An empty array here means the sale generated
+    // no PDFs at all (nothing will ever print), which is otherwise invisible.
+    const summary = pdfs.map((p) => `${p.pdfType}→${p.target}`).join(', ')
+    console.log(
+      `[PrintQueue] ENQUEUE ${pdfs.length} pdf(s) orderId=${orderId ?? 'none'}` +
+      (pdfs.length > 0 ? `: ${summary}` : ' — WARNING: sale produced NO PDFs')
+    )
 
     for (const pdf of pdfs) {
       const id = this.repository.insert({
@@ -169,34 +185,55 @@ export class PrintQueueService {
     const cached = this.bufferCache.get(job.id)
     if (!cached) {
       // No buffer in cache — mark as error (PDF was lost, likely after restart)
+      console.warn(
+        `[PrintQueue] Job ${job.id} (${job.pdfType} → ${job.printerTarget}): buffer missing from cache, marking error`
+      )
       this.repository.markError(job.id, 'PDF buffer not found in cache (possible restart)')
       return false
     }
 
     const { buffer } = cached
 
+    const targetUri = this.printerManager.getUriForTarget(job.printerTarget as PrinterTarget)
+    console.log(
+      `[PrintQueue] Job ${job.id} START type=${job.pdfType} target=${job.printerTarget} ` +
+      `uri=${targetUri ?? 'UNASSIGNED'} bytes=${buffer.length} attempts=${job.attempts}`
+    )
+
     // Mark as printing
     this.repository.markPrinting(job.id)
 
     try {
       const options = this.buildPrintOptions(job)
-      const result = await this.printerManager.print(
-        job.printerTarget as PrinterTarget,
-        buffer,
-        options
+      // Guard against a backend that hangs (unresponsive printer driver, modal
+      // dialog, etc.). Without this, the awaited print() could never resolve,
+      // leaving the job stuck in 'printing' and blocking the entire queue —
+      // which freezes the app. On timeout we treat the job as a failure and
+      // move on, keeping the queue (and other printers) responsive.
+      const result = await this.withTimeout(
+        this.printerManager.print(job.printerTarget as PrinterTarget, buffer, options),
+        this.options.printTimeoutMs,
+        `Print timed out after ${this.options.printTimeoutMs}ms`
       )
 
       if (result.success) {
+        console.log(`[PrintQueue] Job ${job.id} OK (target=${job.printerTarget})`)
         this.repository.markCompleted(job.id)
         this.bufferCache.delete(job.id)
         return true
       } else {
+        console.error(
+          `[PrintQueue] Job ${job.id} FAILED (target=${job.printerTarget}): ${result.error ?? 'unknown error'}`
+        )
         this.repository.markError(job.id, result.error ?? 'Unknown printer error')
         await this.scheduleRetry(job)
         return false
       }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : String(err)
+      console.error(
+        `[PrintQueue] Job ${job.id} THREW (target=${job.printerTarget}): ${errorMessage}`
+      )
       this.repository.markError(job.id, errorMessage)
       await this.scheduleRetry(job)
       return false
@@ -271,6 +308,16 @@ export class PrintQueueService {
    */
   start(): void {
     if (this.running) return
+    // Recover any jobs left stuck in 'printing' from a previous run (app killed
+    // or backend hung). Otherwise they'd stay as zombie rows forever.
+    try {
+      const recovered = this.repository.resetStuckPrinting()
+      if (recovered > 0) {
+        console.log(`[PrintQueue] Recovered ${recovered} job(s) stuck in 'printing'`)
+      }
+    } catch (err) {
+      console.warn('[PrintQueue] Failed to recover stuck jobs:', err)
+    }
     this.running = true
     this.schedulePoll()
   }
@@ -368,5 +415,18 @@ export class PrintQueueService {
 
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms))
+  }
+
+  /**
+   * Races a promise against a timeout. If the promise doesn't settle within
+   * `ms`, the returned promise rejects with an Error(message). Used to prevent a
+   * hung print backend from blocking the queue indefinitely.
+   */
+  private withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+    let timer: ReturnType<typeof setTimeout>
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), ms)
+    })
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer)) as Promise<T>
   }
 }

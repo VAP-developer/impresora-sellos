@@ -62,6 +62,10 @@ export function getPrinterManager(): PrinterManager {
     // Create WindowsBackend with DPI cache so print jobs use detected resolution
     const backend = new WindowsBackend(defaultWindowsExecutor, dpiCache)
 
+    console.log(
+      `[Services] Printer assignments loaded: ${JSON.stringify(savedAssignments)}`
+    )
+
     // Create PrinterManager with all dependencies
     printerManager = new PrinterManager(backend, assignments, dpiDetector, dpiCache)
 
@@ -95,78 +99,118 @@ export function initServices(): void {
   queue.start()
   console.log('[Services] Print queue background processing started')
 
-  // Configure stamp printers for "cut at end" mode (fire-and-forget).
-  // The application controls cut groups by generating separate PDFs,
-  // so the driver only needs to cut when each job ends.
-  configureCutAtEnd().catch((err) => {
-    console.warn('[Services] Failed to configure cut-at-end mode:', err)
+  // Configure the stamp printers' driver DevMode (fire-and-forget).
+  //
+  // This performs BOTH the paper-size (55x25mm) and the cut-at-end setup in a
+  // SINGLE operation via the Win32 DocumentProperties API. It must not be split
+  // into two concurrent tasks: the previous design ran a raw-byte cut-mode edit
+  // in parallel with the paper-size setup, which raced and corrupted the large
+  // TD-4520TN DEVMODE (spooler reported success but nothing printed).
+  configureStampPrinters().catch((err) => {
+    console.warn('[Services] Failed to configure stamp printers:', err)
   })
 }
 
 /**
- * Configures all assigned stamp printers (printer1, printer2) to use
- * "Cut at End" mode only. This disables "Cut Every N" in the Brother driver
- * so that the app's PDF grouping (via groupLabels/cutNumber) controls cutting.
+ * Stamp page size in millimetres.
  *
- * Modifies the per-user DevMode in HKCU registry directly because:
- * - DocumentProperties API resets private DEVMODE fields
- * - SetPrinter level 9 doesn't reliably propagate to per-user defaults
- * - SumatraPDF reads from per-user defaults when creating print jobs
- *
- * This is idempotent — safe to call on every startup.
+ * IMPORTANT: 55x55, NOT 55x25. The physical label is 55x25mm, but the page must
+ * be 55x55mm because that's how stamp-renderer.ts builds the PDF
+ * (STAMP_WIDTH_MM = 55, STAMP_HEIGHT_MM = 55, LABEL_HEIGHT_MM = 25 — the
+ * content sits in the top 25mm strip, which is the part the printer marks).
+ * Verified on paper: with 55x25 the content comes out cut in half.
  */
-async function configureCutAtEnd(): Promise<void> {
+const STAMP_PAGE_WIDTH_MM = 55
+const STAMP_PAGE_HEIGHT_MM = 55
+
+/**
+ * Resolves a resource script path across dev and packaged layouts.
+ * Returns an empty string if the script cannot be found.
+ */
+function findResourceScript(scriptName: string): string {
   const { existsSync } = require('fs')
   const { join } = require('path')
 
-  // Find the configure script
-  let scriptPath = ''
-  const scriptName = 'configure-cut-at-end.ps1'
-
+  const candidates: string[] = []
   if (process.resourcesPath) {
-    const packaged = join(process.resourcesPath, scriptName)
-    if (existsSync(packaged)) scriptPath = packaged
+    candidates.push(join(process.resourcesPath, scriptName))
   }
-  if (!scriptPath) {
-    const devPath = join(__dirname, '..', 'resources', scriptName)
-    if (existsSync(devPath)) scriptPath = devPath
-  }
-  if (!scriptPath) {
-    const devPath2 = join(__dirname, '..', '..', 'resources', scriptName)
-    if (existsSync(devPath2)) scriptPath = devPath2
-  }
+  candidates.push(join(__dirname, '..', 'resources', scriptName))
+  candidates.push(join(__dirname, '..', '..', 'resources', scriptName))
 
-  if (!scriptPath) {
-    console.log('[Services] configure-cut-at-end.ps1 not found, skipping')
-    return
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate
   }
+  return ''
+}
 
-  // Get assigned stamp printers
+/**
+ * Returns the printer names assigned to the stamp targets (printer1, printer2).
+ * Decodes the win:// URIs into plain Windows printer names.
+ */
+function getStampPrinterNames(): string[] {
   let savedAssignments: Record<string, string> = {}
   try {
     const assignmentsRepo = new PrinterAssignmentsRepository()
     savedAssignments = assignmentsRepo.getAll()
   } catch {
+    return []
+  }
+
+  return [savedAssignments.printer1, savedAssignments.printer2]
+    .filter((uri): uri is string => Boolean(uri))
+    .map((uri) => decodeURIComponent(uri.replace('win://', '')))
+}
+
+/**
+ * Ensures the assigned stamp printers (printer1, printer2) use the 55x55mm
+ * stamp page size expected by the PDF generator.
+ *
+ * Uses set-stamp-paper-size.ps1, which applies the size through
+ * Set-PrintConfiguration (the PrintTicket) — the configuration the driver
+ * actually uses. Earlier versions poked bytes into the per-user DevMode in the
+ * registry, which was unreliable: SumatraPDF honoured it inconsistently and the
+ * driver's effective size stayed at the TD-4520TN factory default of 4"x6", so
+ * jobs were silently discarded (the spooler reported success, nothing printed).
+ *
+ * Cutting is not configured here: the app already controls cut groups by
+ * generating one PDF per group (see label-grouping.ts), so the driver only needs
+ * to cut at the end of each job.
+ *
+ * Runs printers sequentially. Idempotent — safe to call on every startup.
+ */
+async function configureStampPrinters(): Promise<void> {
+  const scriptPath = findResourceScript('set-stamp-paper-size.ps1')
+  if (!scriptPath) {
+    console.log('[Services] set-stamp-paper-size.ps1 not found, skipping')
     return
   }
 
-  const stampPrinters = [savedAssignments.printer1, savedAssignments.printer2].filter(Boolean)
+  const stampPrinters = getStampPrinterNames()
   if (stampPrinters.length === 0) return
 
   const { exec: nodeExec } = require('child_process')
   const { promisify } = require('util')
   const execAsync = promisify(nodeExec)
 
-  for (const uri of stampPrinters) {
-    // Decode win://PrinterName to plain printer name
-    const printerName = decodeURIComponent(uri.replace('win://', ''))
+  for (const printerName of stampPrinters) {
     const escaped = printerName.replace(/"/g, '`"')
-    const cmd = `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}" -PrinterName "${escaped}"`
+    const cmd =
+      `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}" ` +
+      `-PrinterName "${escaped}" ` +
+      `-WidthMm ${STAMP_PAGE_WIDTH_MM} ` +
+      `-HeightMm ${STAMP_PAGE_HEIGHT_MM}`
     try {
-      await execAsync(cmd, { timeout: 10000 })
-      console.log(`[Services] Configured cut-at-end for: ${printerName}`)
+      const { stdout, stderr } = (await execAsync(cmd, { timeout: 10000 })) as {
+        stdout: string
+        stderr: string
+      }
+      const out = String(stdout ?? '').trim().replace(/\s*\n\s*/g, ' | ')
+      console.log(`[Services] Configured stamp printer "${printerName}": ${out}`)
+      const errOut = String(stderr ?? '').trim()
+      if (errOut) console.warn(`[Services] Config stderr for "${printerName}": ${errOut}`)
     } catch (err) {
-      console.warn(`[Services] Failed to configure cut-at-end for ${printerName}:`, err)
+      console.warn(`[Services] Failed to configure stamp printer ${printerName}:`, err)
     }
   }
 }

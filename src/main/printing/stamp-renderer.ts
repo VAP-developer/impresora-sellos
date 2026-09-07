@@ -36,7 +36,29 @@ export const STAMP_WIDTH_MM = 55 // medida MAYOR (ROTACIÓN 90)
 export const STAMP_HEIGHT_MM = 55 // medida mayor O IGUAL (ROTACIÓN 0) COORDENADAS TEXTO EN BASE HEIGHT
 // Constantes finales
 export const STAMP_WIDTH = STAMP_WIDTH_MM * MM_TO_PT // ~155.91 pt
-export const STAMP_HEIGHT = STAMP_HEIGHT_MM * MM_TO_PT // ~70.87 pt
+export const STAMP_HEIGHT = STAMP_HEIGHT_MM * MM_TO_PT // ~155.91 pt
+
+/**
+ * Alto de la PÁGINA del PDF en mm — 25mm, el tamaño de la etiqueta física.
+ *
+ * OJO: no confundir con STAMP_HEIGHT_MM (55), que es el alto del SISTEMA DE
+ * COORDENADAS sobre el que están medidas todas las posiciones de texto
+ * (`bottomToTop` mide "desde abajo" sobre 55mm). Ese sistema se mantiene para no
+ * recalcular el layout: el contenido cae entre 0 y ~57pt, así que entra de sobra
+ * en los 70.87pt (25mm) de la página.
+ *
+ * Por qué la página debe ser 55x25 y no 55x55:
+ *   Las Brother TD-4520TN llevan sensor de huecos y esperan etiquetas de 25mm.
+ *   Con una página de 55mm de alto intentan avanzar 55mm, no encuentran el hueco
+ *   y descartan el trabajo: el spooler informa de "impreso correctamente" y no
+ *   sale papel. Verificado en papel: con página 55x25 imprime; con 55x55 no.
+ *
+ * Las imágenes (fondo/sello) se siguen dibujando con alto STAMP_HEIGHT y quedan
+ * recortadas por la página, que es el mismo recorte que antes hacía la impresora
+ * al marcar sólo la franja superior. El resultado impreso es equivalente.
+ */
+export const STAMP_PAGE_HEIGHT_MM = 25
+export const STAMP_PAGE_HEIGHT = STAMP_PAGE_HEIGHT_MM * MM_TO_PT // ~70.87 pt
 
 // ─────────────────────────────────────────────
 // Font & Resource Path Helpers
@@ -551,7 +573,9 @@ function collectPdf(doc: PDFKit.PDFDocument): Promise<Buffer> {
  */
 export async function renderStamp(params: StampRenderParams): Promise<Buffer> {
   const doc = new PDFDocument({
-    size: [STAMP_WIDTH, STAMP_HEIGHT], // ancho x alto en puntos (55mm  160 x 25mm 71 )
+    // Página = etiqueta física 55x25mm. Las coordenadas del texto siguen
+    // midiéndose sobre el sistema de 55mm (ver STAMP_PAGE_HEIGHT_MM).
+    size: [STAMP_WIDTH, STAMP_PAGE_HEIGHT],
     margin: 0,
     //layout: 'portrait',
     info: { Title: 'Etiqueta', Author: 'Stamp Sales App' }
@@ -639,7 +663,7 @@ export function renderStampBlank(params: StampRenderParams): Promise<Buffer> {
  */
 export async function renderStampE1(params: StampEspecialParams): Promise<Buffer> {
   const doc = new PDFDocument({
-    size: [STAMP_WIDTH, STAMP_HEIGHT],
+    size: [STAMP_WIDTH, STAMP_PAGE_HEIGHT],
     margin: 0,
     info: { Title: 'Tira Especial 1', Author: 'Stamp Sales App' }
   })
@@ -667,7 +691,7 @@ export async function renderStampE1(params: StampEspecialParams): Promise<Buffer
  */
 export async function renderStampE2(params: StampEspecialParams): Promise<Buffer> {
   const doc = new PDFDocument({
-    size: [STAMP_WIDTH, STAMP_HEIGHT],
+    size: [STAMP_WIDTH, STAMP_PAGE_HEIGHT],
     margin: 0,
     info: { Title: 'Tira Especial 2', Author: 'Stamp Sales App' }
   })
@@ -699,7 +723,7 @@ export async function renderStampE2(params: StampEspecialParams): Promise<Buffer
  */
 export async function renderStampE3(params: StampEspecialParams): Promise<Buffer> {
   const doc = new PDFDocument({
-    size: [STAMP_WIDTH, STAMP_HEIGHT],
+    size: [STAMP_WIDTH, STAMP_PAGE_HEIGHT],
     margin: 0,
     info: { Title: 'Tira Especial 3', Author: 'Stamp Sales App' }
   })
@@ -731,7 +755,7 @@ export async function renderStampE3(params: StampEspecialParams): Promise<Buffer
  */
 export async function renderStampE4(params: StampEspecialParams): Promise<Buffer> {
   const doc = new PDFDocument({
-    size: [STAMP_WIDTH, STAMP_HEIGHT],
+    size: [STAMP_WIDTH, STAMP_PAGE_HEIGHT],
     margin: 0,
     info: { Title: 'Tira Especial 4', Author: 'Stamp Sales App' }
   })
@@ -762,7 +786,8 @@ export async function renderStampMultiPage(stamps: StampRenderParams[]): Promise
   }
 
   const doc = new PDFDocument({
-    size: [STAMP_WIDTH, STAMP_HEIGHT],
+    // Página = etiqueta física 55x25mm (ver STAMP_PAGE_HEIGHT_MM).
+    size: [STAMP_WIDTH, STAMP_PAGE_HEIGHT],
     margin: 0,
     info: { Title: `Tira de ${stamps.length} etiquetas`, Author: 'Stamp Sales App' }
   })
@@ -776,7 +801,7 @@ export async function renderStampMultiPage(stamps: StampRenderParams[]): Promise
 
   stamps.forEach((stamp, index) => {
     if (index > 0) {
-      doc.addPage({ size: [STAMP_WIDTH, STAMP_HEIGHT], margin: 0 })
+      doc.addPage({ size: [STAMP_WIDTH, STAMP_PAGE_HEIGHT], margin: 0 })
     }
 
     // Apply 180° rotation on each page if enabled
@@ -855,7 +880,7 @@ export async function renderStampEspecialStrip(
   tarifa: string
 ): Promise<Buffer> {
   const doc = new PDFDocument({
-    size: [STAMP_WIDTH, STAMP_HEIGHT],
+    size: [STAMP_WIDTH, STAMP_PAGE_HEIGHT],
     margin: 0,
      layout: 'portrait',
     info: { Title: 'Tira Especial', Author: 'Stamp Sales App' }
@@ -887,7 +912,7 @@ export async function renderStampEspecialStrip(
   drawTextLeft(doc, especial, FONTS.regular, 6, 23.3, 2)
 
   // Page 2: E2 — tarifa + código + especial
-  doc.addPage({ size: [STAMP_WIDTH, STAMP_HEIGHT], margin: 0 })
+  doc.addPage({ size: [STAMP_WIDTH, STAMP_PAGE_HEIGHT], margin: 0 })
   doc.rotate(90, { origin: [pageWidth / 2, pageHeight / 2] })
   if (rotate180) {
     applyRotation180(doc)
@@ -899,7 +924,7 @@ export async function renderStampEspecialStrip(
   drawTextLeft(doc, especial, FONTS.regular, 6, 23.3, 2)
 
   // Page 3: E3 — tarifa + código + especial
-  doc.addPage({ size: [STAMP_WIDTH, STAMP_HEIGHT], margin: 0 })
+  doc.addPage({ size: [STAMP_WIDTH, STAMP_PAGE_HEIGHT], margin: 0 })
   doc.rotate(90, { origin: [pageWidth / 2, pageHeight / 2] })
   if (rotate180) {
     applyRotation180(doc)
@@ -911,7 +936,7 @@ export async function renderStampEspecialStrip(
   drawTextLeft(doc, especial, FONTS.regular, 6, 23.3, 2)
 
   // Page 4: E4 — only código + especial
-  doc.addPage({ size: [STAMP_WIDTH, STAMP_HEIGHT], margin: 0 })
+  doc.addPage({ size: [STAMP_WIDTH, STAMP_PAGE_HEIGHT], margin: 0 })
   doc.rotate(90, { origin: [pageWidth / 2, pageHeight / 2] })
   if (rotate180) {
     applyRotation180(doc)
