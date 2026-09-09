@@ -1140,6 +1140,18 @@ function parseCustomMedia(media) {
   if (!match) return null;
   return { widthTenths: parseInt(match[1], 10) * 10, heightTenths: parseInt(match[2], 10) * 10 };
 }
+async function configureCutAtEnd(printerName, executor) {
+  const scriptPath = findScript("configure-cut-at-end.ps1");
+  if (!scriptPath) {
+    return;
+  }
+  const escapedPrinter = printerName.replace(/"/g, '`"');
+  const cmd = `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}" -PrinterName "${escapedPrinter}"`;
+  try {
+    await executor.exec(cmd, { timeout: 1e4 });
+  } catch {
+  }
+}
 function getSumatraPdfPath() {
   const { join } = require("path");
   let sumatraPath = join(
@@ -1152,12 +1164,38 @@ function getSumatraPdfPath() {
   }
   return sumatraPath;
 }
+function findScript(scriptName) {
+  const { join } = require("path");
+  const { existsSync } = require("fs");
+  const candidates = [];
+  if (process.resourcesPath) {
+    candidates.push(join(process.resourcesPath, scriptName));
+  }
+  candidates.push(join(__dirname, "..", "..", "resources", scriptName));
+  candidates.push(join(__dirname, "..", "..", "..", "resources", scriptName));
+  candidates.push(join(__dirname, "..", "..", "scripts", scriptName));
+  candidates.push(join(__dirname, "..", "..", "..", "scripts", scriptName));
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return "";
+}
 class WindowsBackend {
   cmd;
   dpiCache;
   constructor(executor, dpiCache) {
     this.cmd = executor ?? defaultWindowsExecutor;
     this.dpiCache = dpiCache;
+  }
+  /**
+   * Configures a printer's driver to cut only at the end of each job.
+   * Fire-and-forget friendly: never throws, runs once per printer.
+   * See configureCutAtEnd() for the rationale.
+   */
+  async configureCutAtEnd(printerName) {
+    return configureCutAtEnd(printerName, this.cmd);
   }
   /**
    * Prints a PDF using the best available method:
@@ -1395,6 +1433,25 @@ class PrinterManager {
       }
       if (detectionPromises.length > 0) {
         void Promise.allSettled(detectionPromises);
+      }
+    }
+    if (typeof this.backend.configureCutAtEnd === "function") {
+      const backend = this.backend;
+      const stampTargets = ["printer1", "printer2"];
+      const cutPromises = [];
+      for (const target of stampTargets) {
+        const newUri = assignments[target];
+        if (!newUri) continue;
+        const previousUri = previousAssignments[target];
+        if (previousUri === newUri) continue;
+        const printerName = getWindowsPrinterName(newUri);
+        cutPromises.push(
+          backend.configureCutAtEnd(printerName).catch(() => {
+          })
+        );
+      }
+      if (cutPromises.length > 0) {
+        void Promise.allSettled(cutPromises);
       }
     }
   }
@@ -2450,6 +2507,8 @@ class TariffGroupsRepository {
         title: group.title,
         local_currency: group.local_currency ?? "EUR",
         complementary_currency: group.complementary_currency ?? "EUR",
+        local_currency_symbol_before: Boolean(group.local_currency_symbol_before),
+        complementary_currency_symbol_before: Boolean(group.complementary_currency_symbol_before),
         tariffs,
         strips,
         created_at: group.created_at,
@@ -2512,8 +2571,11 @@ class TariffGroupsRepository {
       strips: input.strips
     });
     const insertGroup = this.db.prepare(`
-      INSERT INTO tariff_groups (year, title, currency, local_currency, complementary_currency)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO tariff_groups (
+        year, title, currency, local_currency, complementary_currency,
+        local_currency_symbol_before, complementary_currency_symbol_before
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
     const insertTariff = this.db.prepare(`
       INSERT INTO tariffs (group_id, name, description, local_price, secondary_price, position, type)
@@ -2532,7 +2594,9 @@ class TariffGroupsRepository {
           input.local_currency,
           // also set deprecated currency column
           input.local_currency,
-          input.complementary_currency
+          input.complementary_currency,
+          input.local_currency_symbol_before ? 1 : 0,
+          input.complementary_currency_symbol_before ? 1 : 0
         );
       } catch (err) {
         if (err instanceof Error && err.message.includes("UNIQUE constraint failed")) {
@@ -2592,6 +2656,8 @@ class TariffGroupsRepository {
     const title = input.title ?? existing.title;
     const localCurrency = input.local_currency ?? existing.local_currency;
     const complementaryCurrency = input.complementary_currency ?? existing.complementary_currency;
+    const localSymbolBefore = input.local_currency_symbol_before ?? existing.local_currency_symbol_before;
+    const complementarySymbolBefore = input.complementary_currency_symbol_before ?? existing.complementary_currency_symbol_before;
     this.validate({
       title,
       local_currency: localCurrency,
@@ -2602,6 +2668,7 @@ class TariffGroupsRepository {
     const updateGroup = this.db.prepare(`
       UPDATE tariff_groups SET
         year = ?, title = ?, currency = ?, local_currency = ?, complementary_currency = ?,
+        local_currency_symbol_before = ?, complementary_currency_symbol_before = ?,
         updated_at = datetime('now')
       WHERE id = ?
     `);
@@ -2623,7 +2690,16 @@ class TariffGroupsRepository {
     const updateTransaction = this.db.transaction(() => {
       const year = input.year ?? existing.year;
       try {
-        updateGroup.run(year, title, localCurrency, localCurrency, complementaryCurrency, id);
+        updateGroup.run(
+          year,
+          title,
+          localCurrency,
+          localCurrency,
+          complementaryCurrency,
+          localSymbolBefore ? 1 : 0,
+          complementarySymbolBefore ? 1 : 0,
+          id
+        );
       } catch (err) {
         if (err instanceof Error && err.message.includes("UNIQUE constraint failed")) {
           throw new Error(TARIFF_GROUP_ERRORS.DUPLICATE_YEAR);
@@ -3308,15 +3384,34 @@ const STAMP_WIDTH_MM = 55;
 const STAMP_PAGE_HEIGHT_MM = 25;
 const SELLO_LAYOUT = {
   tarifa: { x: 1, y: 1.4, size: 12.2 },
-  descripcion: { x: 100, y: 5.4, size: 9 },
+  descripcion: { x: 1, y: 5.4, size: 9 },
   // esta línea NO SE USA
-  fecha: { x: 1, y: 11.2, size: 9 },
-  localidad: { x: 1, y: 15.2, size: 9 },
-  codigo1: { x: 100, y: 18.5, size: 5.9 },
+  fecha: { x: 1, y: 11, size: 9 },
+  localidad: { x: 1, y: 14, size: 9 },
+  codigo1: { x: 1, y: 18.5, size: 5.9 },
   // esta línea NO SE USA
-  codigo2: { x: 1, y: 20, size: 5.9 }
+  codigo2: { x: 1, y: 20.5, size: 5.9 }
   // CÓDIGO: letra P+MES+PAÍS+AÑO   CÓDIGO EVENTO+0001+001  = ejemplo: P9ES26 EX26-0001-001
 };
+const SELLO_LAYOUT_DEFAULT = [
+  { source: "tarifa", x: SELLO_LAYOUT.tarifa.x, y: SELLO_LAYOUT.tarifa.y, size: SELLO_LAYOUT.tarifa.size },
+  { source: "descripcion", x: SELLO_LAYOUT.descripcion.x, y: SELLO_LAYOUT.descripcion.y, size: SELLO_LAYOUT.descripcion.size },
+  { source: "fecha", x: SELLO_LAYOUT.fecha.x, y: SELLO_LAYOUT.fecha.y, size: SELLO_LAYOUT.fecha.size },
+  { source: "localidad", x: SELLO_LAYOUT.localidad.x, y: SELLO_LAYOUT.localidad.y, size: SELLO_LAYOUT.localidad.size },
+  { source: "codigoLinea1", x: SELLO_LAYOUT.codigo1.x, y: SELLO_LAYOUT.codigo1.y, size: SELLO_LAYOUT.codigo1.size },
+  { source: "codigoLinea2", x: SELLO_LAYOUT.codigo2.x, y: SELLO_LAYOUT.codigo2.y, size: SELLO_LAYOUT.codigo2.size }
+];
+const SELLO_LAYOUT_CORREO_ESP = [
+  { source: "tarifa", x: 1, y: 1.4, size: 12.2 },
+  { source: "fecha", x: 1, y: 11.2, size: 9 },
+  { source: "localidad", x: 1, y: 15.2, size: 9 },
+  // Código en un único campo (no se parte en dos líneas):
+  // formato P{mes}{pais}{annio} {feria}-{cliente}-{producto}, ej. "P9ES26 EX26-0001-001"
+  { source: "codigoCompleto", x: 1, y: 20, size: 5.9 }
+];
+function getSelloLayout(formatoCorreoEsp) {
+  return formatoCorreoEsp ? SELLO_LAYOUT_CORREO_ESP : SELLO_LAYOUT_DEFAULT;
+}
 function getFontsPath() {
   if (utils.is.dev) {
     return path.join(__dirname, "../../resources/fonts");
@@ -3399,24 +3494,34 @@ function renderImageLayers(stamp) {
   }
   return parts.join("");
 }
-function renderTextFields(stamp, formatoCorreoEsp) {
-  const L = SELLO_LAYOUT;
-  const field = (text, pos) => {
-    if (!text) return "";
-    return `<div class="f" style="left:${pos.x}mm;top:${pos.y}mm;font-size:${pos.size}pt">${escapeHtml(text)}</div>`;
-  };
-  if (formatoCorreoEsp) {
-    return field(stamp.tarifa, L.tarifa);
-  }
+function resolveFieldText(stamp, source) {
   const { line1, line2 } = formatCodigoLines(stamp.codigo);
-  return [
-    field(stamp.tarifa, L.tarifa),
-    field(stamp.tarifaDescripcion ?? "", L.descripcion),
-    field(formatFechaMonthYear(stamp.fecha), L.fecha),
-    field(stamp.evento, L.localidad),
-    field(line1, L.codigo1),
-    field(line2, L.codigo2)
-  ].join("");
+  switch (source) {
+    case "tarifa":
+      return stamp.tarifa;
+    case "descripcion":
+      return stamp.tarifaDescripcion ?? "";
+    case "fecha":
+      return formatFechaMonthYear(stamp.fecha);
+    case "localidad":
+      return stamp.evento;
+    case "codigoLinea1":
+      return line1;
+    case "codigoLinea2":
+      return line2;
+    case "codigoCompleto":
+      return stamp.codigo;
+    default:
+      return "";
+  }
+}
+function renderTextFields(stamp, formatoCorreoEsp) {
+  const layout = getSelloLayout(formatoCorreoEsp);
+  return layout.map((f) => {
+    const text = resolveFieldText(stamp, f.source);
+    if (!text) return "";
+    return `<div class="f" style="left:${f.x}mm;top:${f.y}mm;font-size:${f.size}pt">${escapeHtml(text)}</div>`;
+  }).join("");
 }
 function renderStampsHtml(stamps, options = {}) {
   const widthMm = options.widthMm ?? STAMP_WIDTH_MM;
@@ -3548,6 +3653,43 @@ ${labels}
 </html>`;
 }
 const TICKET_WIDTH_MM = 78;
+const TICKET_LAYOUT_DEFAULT = [
+  { source: "logo" },
+  { source: "feria", style: "feria" },
+  { source: "lugar", style: "lugar" },
+  { source: "empresa", style: "info" },
+  { source: "cif", style: "info" },
+  { source: "cp", style: "info" },
+  { source: "fecha", style: "fecha" },
+  { source: "modo", style: "modo" },
+  { source: "columnas" },
+  { source: "items", separatorBefore: true },
+  { source: "total", separatorBefore: true },
+  { source: "legal1", style: "legal", separatorBefore: true },
+  { source: "legal2", style: "legal" },
+  { source: "legal3", style: "legal" }
+];
+const TICKET_LAYOUT_CORREO_ESP = [
+  { source: "logo" },
+  { source: "feria", style: "feria" },
+  { source: "lugar", style: "lugar" },
+  { source: "empresa", style: "info" },
+  { source: "cif", style: "info" },
+  { source: "cp", style: "info" },
+  { source: "fecha", style: "fecha" },
+  { source: "modo", style: "modo" },
+  { source: "columnas" },
+  { source: "items", separatorBefore: true },
+  { source: "total", separatorBefore: true },
+  { source: "legal1", style: "legal", separatorBefore: true },
+  { source: "legal2", style: "legal" },
+  { source: "legal3", style: "legal" }
+  // Ejemplo para futuros campos exclusivos de Correo ESP:
+  // { source: 'session', style: 'session' }
+];
+function getTicketLayout(formatoCorreoEsp) {
+  return formatoCorreoEsp ? TICKET_LAYOUT_CORREO_ESP : TICKET_LAYOUT_DEFAULT;
+}
 function countActiveItems(items) {
   return items.filter((item) => item.cantidad > 0).length;
 }
@@ -3557,9 +3699,9 @@ function formatClientId(id) {
   if (id < 1e3) return "0" + id;
   return "" + id;
 }
-function formatPrice(value, currencySymbol = "€") {
+function formatPrice(value, currencySymbol = "€", symbolBefore = false) {
   const str = value.toFixed(2);
-  return str + currencySymbol;
+  return symbolBefore ? currencySymbol + str : str + currencySymbol;
 }
 function calcTicketHeightMm(numItems) {
   return TICKET_MARGIN_TOP + TICKET_LOGO_HEIGHT + TICKET_HEADER_HEIGHT + TICKET_COLUMNS_HEIGHT + numItems * TICKET_ITEM_ROW_HEIGHT + TICKET_TOTAL_HEIGHT + TICKET_FOOTER_HEIGHT + TICKET_MARGIN_BOTTOM + TICKET_HEIGHT_SAFETY_MARGIN;
@@ -3670,7 +3812,17 @@ ${body}
 function columnsHeader() {
   return `<div class="cols cond"><span class="h-name">Producto</span><span class="h-qty">Cant.</span><span class="h-price">Precio</span><span class="h-total">Importe</span></div>`;
 }
-function renderTicketHtml(params) {
+const BLOCK_STYLE_CLASS = {
+  feria: "center bold feria",
+  lugar: "center bold lugar",
+  info: "center bold info",
+  fecha: "center cond fecha",
+  modo: "bold modo",
+  legal: "center bold legal",
+  session: "center bold session",
+  master: "bold masterlabel"
+};
+function renderTicketHtml(params, formatoCorreoEsp = false) {
   const {
     fechaTicket,
     modoTicket,
@@ -3712,25 +3864,57 @@ function renderTicketHtml(params) {
       )
     );
   }
-  const body = [
-    logo ? `<img class="logo" src="${logo}" style="width:30mm">` : "",
-    `<div class="center bold feria">${escapeHtml(feria)}</div>`,
-    `<div class="center bold lugar">${escapeHtml(lugar)}</div>`,
-    `<div class="center bold info">${escapeHtml(empresa)}</div>`,
-    `<div class="center bold info">${escapeHtml(cif)}</div>`,
-    `<div class="center bold info">${escapeHtml(cp)}</div>`,
-    `<div class="center cond fecha">Fecha ${escapeHtml(fechaTicket)}</div>`,
-    `<div class="bold modo">${escapeHtml(modoLine)}</div>`,
-    columnsHeader(),
-    `<hr class="sep">`,
-    rows.join(""),
-    `<hr class="sep-total">`,
-    `<div class="total-row cond"><span class="t-label">Total:</span><span class="t-qty">${totalProductos}</span><span class="t-total">${escapeHtml(formatPrice(totalImporte, currencySymbol))}</span></div>`,
-    `<hr class="sep">`,
-    `<div class="center bold legal">${escapeHtml(l1)}</div>`,
-    `<div class="center bold legal">${escapeHtml(l2)}</div>`,
-    `<div class="center bold legal">${escapeHtml(l3)}</div>`
-  ].join("\n");
+  const textFor = (block) => {
+    switch (block.source) {
+      case "feria":
+        return feria;
+      case "lugar":
+        return lugar;
+      case "empresa":
+        return empresa;
+      case "cif":
+        return cif;
+      case "cp":
+        return cp;
+      case "fecha":
+        return `Fecha ${fechaTicket}`;
+      case "modo":
+        return modoLine;
+      case "session":
+        return `${params.nombreMaquina ?? ""} - Sesión: ${formatClientId(params.idCliente ?? 0)}`;
+      case "legal1":
+        return l1;
+      case "legal2":
+        return l2;
+      case "legal3":
+        return l3;
+      case "masterLabel":
+        return "MASTER SET";
+      default:
+        return "";
+    }
+  };
+  const renderBlock = (block) => {
+    const sep = block.separatorBefore ? block.source === "total" ? '<hr class="sep-total">' : '<hr class="sep">' : "";
+    switch (block.source) {
+      case "logo":
+        return logo ? `<img class="logo" src="${logo}" style="width:30mm">` : "";
+      case "columnas":
+        return sep + columnsHeader();
+      case "items":
+        return sep + rows.join("");
+      case "total":
+        return sep + `<div class="total-row cond"><span class="t-label">Total:</span><span class="t-qty">${totalProductos}</span><span class="t-total">${escapeHtml(formatPrice(totalImporte, currencySymbol))}</span></div>`;
+      default: {
+        const text = textFor(block);
+        if (!text) return sep;
+        const cls = block.style ? BLOCK_STYLE_CLASS[block.style] : "info";
+        return sep + `<div class="${cls}">${escapeHtml(text)}</div>`;
+      }
+    }
+  };
+  const layout = getTicketLayout(formatoCorreoEsp);
+  const body = layout.map(renderBlock).join("\n");
   return ticketDocument("Factura Simplificada", heightMm, body);
 }
 function renderTicketCajaHtml(params) {
@@ -3939,6 +4123,16 @@ function buildLabelCode(config, productoId, codigoFeria1Override, codigoFeria2Ov
   const maquina = codigo.maquina;
   return `${modo}${mes}${pais}${annio} ${maquina}-${cliente}-${producto}`;
 }
+function buildLabelCodeCorreoEsp(config, productoId, codigoFeria1Override) {
+  const { codigo } = config;
+  const mes = formatMes(codigo.mes);
+  const pais = codigo.pais;
+  const annio = formatAnnio(codigo.annio);
+  const feria1 = codigoFeria1Override ?? codigo.codigo_feria_1 ?? "";
+  const cliente = formatCliente(codigo.cliente);
+  const producto = formatProducto(productoId);
+  return `P${mes}${pais}${annio} ${feria1}-${cliente}-${producto}`;
+}
 function buildTicketTitle(profile, baseTitle) {
   const profileLower = profile.toLowerCase();
   if (profileLower === "protocolo") return `Protocolo de: ${baseTitle}`;
@@ -4115,6 +4309,7 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
   }
   const layoutModelo1 = dynamicTariffCtx?.eventLayoutModelo1 ?? "derecha";
   const layoutModelo2 = dynamicTariffCtx?.eventLayoutModelo2 ?? "derecha";
+  const makeCode = (productoId) => formatoCorreoEsp ? buildLabelCodeCorreoEsp(config, productoId, codigoFeria1) : buildLabelCode(config, productoId, codigoFeria1, codigoFeria2);
   let bg1 = null;
   let bg2 = null;
   let overlay1 = null;
@@ -4154,7 +4349,7 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
             tarifaDescripcion: tariff.description,
             fecha: stampFecha,
             evento: stampEvento,
-            codigo: buildLabelCode(config, productoCounter, codigoFeria1, codigoFeria2),
+            codigo: makeCode(productoCounter),
             backgroundImage: background,
             overlayImage: overlay,
             printLogoPng,
@@ -4187,7 +4382,7 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
             tarifaDescripcion: tariff.description,
             fecha: stampFecha,
             evento: stampEvento,
-            codigo: buildLabelCode(config, productoCounter, codigoFeria1, codigoFeria2),
+            codigo: makeCode(productoCounter),
             backgroundImage: background,
             overlayImage: overlay,
             printLogoPng,
@@ -4227,7 +4422,7 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
               tarifaDescripcion: stripTariff.description,
               fecha: stampFecha,
               evento: stampEvento,
-              codigo: buildLabelCode(config, productoCounter, codigoFeria1, codigoFeria2),
+              codigo: makeCode(productoCounter),
               backgroundImage: background,
               overlayImage: overlay,
               printLogoPng,
@@ -4265,7 +4460,7 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
                 tarifa: tLabel,
                 fecha: stampFecha,
                 evento: stampEvento,
-                codigo: buildLabelCode(config, productoCounter, codigoFeria1, codigoFeria2),
+                codigo: makeCode(productoCounter),
                 backgroundImage: background,
                 overlayImage: overlay,
                 printLogoPng,
@@ -4280,7 +4475,7 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
                 tarifa: tariff.label,
                 fecha: stampFecha,
                 evento: stampEvento,
-                codigo: buildLabelCode(config, productoCounter, codigoFeria1, codigoFeria2),
+                codigo: makeCode(productoCounter),
                 backgroundImage: background,
                 overlayImage: overlay,
                 printLogoPng,
@@ -4306,7 +4501,7 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
             tarifa: tariff.label,
             fecha: stampFecha,
             evento: stampEvento,
-            codigo: buildLabelCode(config, productoCounter, codigoFeria1, codigoFeria2),
+            codigo: makeCode(productoCounter),
             backgroundImage: background,
             overlayImage: overlay,
             printLogoPng,
@@ -4331,7 +4526,7 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
   }
   if (!dynamicTariffCtx) {
     const counterRef = { value: productoCounter };
-    await generateEspecialStrips(config, quantities, counterRef, pdfs, rotate180);
+    await generateEspecialStrips(config, quantities, counterRef, pdfs, rotate180, formatoCorreoEsp);
     productoCounter = counterRef.value;
   }
   let items;
@@ -4424,7 +4619,7 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
       codigoTicket
     };
     const ticketHeightMm = calcTicketHeightMm(countActiveItems(items));
-    const ticketHtml = renderTicketHtml(mainTicketParams);
+    const ticketHtml = renderTicketHtml(mainTicketParams, formatoCorreoEsp);
     pdfs.push({
       buffer: htmlBuffer(ticketHtml),
       contentType: "html",
@@ -4463,7 +4658,7 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
               codigoTicket
             };
             const singleTiraHeightMm = calcTicketHeightMm(countActiveItems(singleTiraItems));
-            const singleTiraHtml = renderTicketHtml(singleTiraParams);
+            const singleTiraHtml = renderTicketHtml(singleTiraParams, formatoCorreoEsp);
             pdfs.push({
               buffer: htmlBuffer(singleTiraHtml),
               contentType: "html",
@@ -4536,8 +4731,9 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
   ).length;
   return { pdfs, stampCount, ticketCount, nextProducto: productoCounter, notifications };
 }
-async function generateEspecialStrips(config, quantities, counterRef, pdfs, rotate180 = false) {
+async function generateEspecialStrips(config, quantities, counterRef, pdfs, rotate180 = false, formatoCorreoEsp = false) {
   const { ticket } = config;
+  const makeCode = (productoId) => formatoCorreoEsp ? buildLabelCodeCorreoEsp(config, productoId) : buildLabelCode(config, productoId);
   const hasTiras1 = quantities.tarifaAT1 > 0 || quantities.tarifa4T1 > 0;
   const hasTiras2 = quantities.tarifaAT2 > 0 || quantities.tarifa4T2 > 0;
   if (ticket.TEmod1 === "S" && hasTiras1) {
@@ -4546,10 +4742,10 @@ async function generateEspecialStrips(config, quantities, counterRef, pdfs, rota
       const price = especialPrices[idx];
       if (price && price > 0) {
         const codigos = [
-          buildLabelCode(config, counterRef.value++),
-          buildLabelCode(config, counterRef.value++),
-          buildLabelCode(config, counterRef.value++),
-          buildLabelCode(config, counterRef.value++)
+          makeCode(counterRef.value++),
+          makeCode(counterRef.value++),
+          makeCode(counterRef.value++),
+          makeCode(counterRef.value++)
         ];
         const tarifa = `Tarifa A${idx + 1 > 1 ? idx + 1 : ""}`;
         const html = renderEspecialStripHtml({ codigos, especial: "  -E", tarifa }, { rotate180 });
@@ -4569,10 +4765,10 @@ async function generateEspecialStrips(config, quantities, counterRef, pdfs, rota
       const price = especialPrices[idx];
       if (price && price > 0) {
         const codigos = [
-          buildLabelCode(config, counterRef.value++),
-          buildLabelCode(config, counterRef.value++),
-          buildLabelCode(config, counterRef.value++),
-          buildLabelCode(config, counterRef.value++)
+          makeCode(counterRef.value++),
+          makeCode(counterRef.value++),
+          makeCode(counterRef.value++),
+          makeCode(counterRef.value++)
         ];
         const tarifa = `Tarifa A${idx + 1 > 1 ? idx + 1 : ""}`;
         const html = renderEspecialStripHtml({ codigos, especial: "  -E", tarifa }, { rotate180 });

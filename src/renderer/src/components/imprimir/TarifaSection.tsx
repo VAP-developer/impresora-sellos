@@ -13,7 +13,7 @@
  * Validates: Requirement 13 (tariff configuration as part of Imprimir view)
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { PreciosConfig } from '@renderer/types/config'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -40,6 +40,72 @@ const TARIFA_LABELS: Record<TarifaTemplate, [string, string, string, string]> = 
 /** Mapping from template label index to PreciosConfig field. */
 const PRICE_FIELDS: (keyof PreciosConfig)[] = ['tarifaA', 'tarifaA2', 'tarifaB', 'tarifaC']
 
+/**
+ * Parse a decimal string that may use comma or dot as separator.
+ * Returns 0 for invalid/negative inputs.
+ */
+function parsePrice(rawValue: string): number {
+  const normalized = rawValue.replace(',', '.')
+  const parsed = parseFloat(normalized)
+  return isNaN(parsed) || parsed < 0 ? 0 : parsed
+}
+
+/**
+ * Input de precio decimal.
+ *
+ * Usa type="text" + inputMode="decimal" para que el teclado virtual numérico
+ * muestre la coma y para conservar valores intermedios como "12," mientras el
+ * usuario escribe (un input type="number" descarta esos valores y vacía el
+ * campo). Mantiene el texto crudo en estado local y normaliza al perder foco.
+ */
+interface PriceInputProps {
+  id: string
+  value: number | undefined
+  onCommit: (value: number) => void
+  className?: string
+  ariaLabel: string
+}
+
+function PriceInput({ id, value, onCommit, className, ariaLabel }: PriceInputProps): JSX.Element {
+  const numericValue = value ?? 0
+  const [text, setText] = useState<string>(String(numericValue))
+  const [editing, setEditing] = useState(false)
+
+  // Sincronizar con el valor externo cuando no se está editando (ej. reset,
+  // cambio de plantilla o carga de config).
+  useEffect(() => {
+    if (!editing) setText(String(numericValue))
+  }, [numericValue, editing])
+
+  const handleChange = (raw: string): void => {
+    // Permitir sólo dígitos y un único separador decimal (coma o punto).
+    const cleaned = raw.replace(/[^0-9.,]/g, '')
+    setText(cleaned)
+    onCommit(parsePrice(cleaned))
+  }
+
+  const handleBlur = (): void => {
+    setEditing(false)
+    const parsed = parsePrice(text)
+    setText(String(parsed))
+    onCommit(parsed)
+  }
+
+  return (
+    <input
+      id={id}
+      type="text"
+      inputMode="decimal"
+      value={editing ? text : String(numericValue)}
+      onFocus={() => setEditing(true)}
+      onChange={(e) => handleChange(e.target.value)}
+      onBlur={handleBlur}
+      className={className}
+      aria-label={ariaLabel}
+    />
+  )
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function TarifaSection({
@@ -57,25 +123,6 @@ export default function TarifaSection({
 
   const handleTemplateChange = (newTemplate: TarifaTemplate): void => {
     setTemplate(newTemplate)
-  }
-
-  /**
-   * Parse a price input value, returning 0 for invalid/negative inputs.
-   * Allows empty string temporarily (user is typing) but normalizes on blur.
-   */
-  const handlePriceChange = (
-    field: keyof PreciosConfig,
-    rawValue: string
-  ): void => {
-    const parsed = parseFloat(rawValue)
-    const value = isNaN(parsed) || parsed < 0 ? 0 : parsed
-    onPreciosChange(field, value)
-  }
-
-  /** Get the display value for a price field. */
-  const getPriceValue = (field: keyof PreciosConfig): string => {
-    const value = precios[field]
-    return value !== undefined && value !== null ? String(value) : '0'
   }
 
   return (
@@ -153,15 +200,12 @@ export default function TarifaSection({
                 >
                   {labels[index]}
                 </label>
-                <input
+                <PriceInput
                   id={`tarifa-price-${field}`}
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={getPriceValue(field)}
-                  onChange={(e) => handlePriceChange(field, e.target.value)}
+                  value={precios[field]}
+                  onCommit={(v) => onPreciosChange(field, v)}
                   className="w-full border border-gray-300 rounded p-2"
-                  aria-label={`Precio ${labels[index]}`}
+                  ariaLabel={`Precio ${labels[index]}`}
                 />
               </div>
             ))}
@@ -175,15 +219,12 @@ export default function TarifaSection({
                 >
                   TIRA Tarifa A
                 </label>
-                <input
+                <PriceInput
                   id="tarifa-price-tarifaTA"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={getPriceValue('tarifaTA')}
-                  onChange={(e) => handlePriceChange('tarifaTA', e.target.value)}
+                  value={precios.tarifaTA}
+                  onCommit={(v) => onPreciosChange('tarifaTA', v)}
                   className="w-full border border-gray-300 rounded p-2"
-                  aria-label="Precio TIRA Tarifa A"
+                  ariaLabel="Precio TIRA Tarifa A"
                 />
               </div>
               <div className="w-[200px]">
@@ -193,15 +234,12 @@ export default function TarifaSection({
                 >
                   TIRA 4 Tarifas
                 </label>
-                <input
+                <PriceInput
                   id="tarifa-price-tarifaT4"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={getPriceValue('tarifaT4')}
-                  onChange={(e) => handlePriceChange('tarifaT4', e.target.value)}
+                  value={precios.tarifaT4}
+                  onCommit={(v) => onPreciosChange('tarifaT4', v)}
                   className="w-full border border-gray-300 rounded p-2"
-                  aria-label="Precio TIRA 4 Tarifas"
+                  ariaLabel="Precio TIRA 4 Tarifas"
                 />
               </div>
             </div>

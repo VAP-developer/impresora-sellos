@@ -2,7 +2,8 @@
  * FullKeyboard.tsx
  *
  * Teclado QWERTY completo para inputs type="text".
- * Se posiciona fijo en la parte inferior de la ventana (full width, 280px de alto).
+ * Se posiciona fijo en la mitad derecha inferior de la ventana (280px de alto),
+ * ocupando el hueco reservado a la derecha de la tabla del kiosko.
  * Soporta layouts español (con Ñ) e inglés (QWERTY estándar).
  * Implementa toggle de Shift para mayúsculas/minúsculas.
  */
@@ -91,7 +92,7 @@ export function FullKeyboard({ language }: FullKeyboardProps): React.JSX.Element
   return (
     <div
       data-virtual-keyboard="true"
-      className="fixed bottom-0 left-0 right-0 z-50 h-[280px] bg-gray-100 border-t border-gray-300 shadow-lg p-2"
+      className="fixed bottom-0 right-0 left-1/2 z-50 h-[280px] bg-gray-100 border-t border-l border-gray-300 shadow-lg p-2"
       role="group"
       aria-label={t('keyboard.fullKeyboard')}
     >

@@ -32,6 +32,10 @@ export interface TariffGroup {
   title: string
   local_currency: string
   complementary_currency: string
+  /** true = symbol before the price (€10), false = symbol after (10€) */
+  local_currency_symbol_before: boolean
+  /** true = symbol before the price (€10), false = symbol after (10€) */
+  complementary_currency_symbol_before: boolean
   tariffs: Tariff[]
   strips: Strip[]
   created_at: string
@@ -43,6 +47,8 @@ export interface TariffGroupInput {
   title: string
   local_currency: string
   complementary_currency: string
+  local_currency_symbol_before?: boolean
+  complementary_currency_symbol_before?: boolean
   tariffs: TariffInput[]
   strips: StripInput[]
 }
@@ -70,6 +76,8 @@ export interface TariffGroupUpdateInput {
   title?: string
   local_currency?: string
   complementary_currency?: string
+  local_currency_symbol_before?: boolean
+  complementary_currency_symbol_before?: boolean
   tariffs: TariffInput[]
   strips: StripInput[]
 }
@@ -106,6 +114,8 @@ interface TariffGroupRow {
   currency: string
   local_currency: string
   complementary_currency: string
+  local_currency_symbol_before: number
+  complementary_currency_symbol_before: number
   created_at: string
   updated_at: string
 }
@@ -285,6 +295,8 @@ export class TariffGroupsRepository {
         title: group.title,
         local_currency: group.local_currency ?? 'EUR',
         complementary_currency: group.complementary_currency ?? 'EUR',
+        local_currency_symbol_before: Boolean(group.local_currency_symbol_before),
+        complementary_currency_symbol_before: Boolean(group.complementary_currency_symbol_before),
         tariffs,
         strips,
         created_at: group.created_at,
@@ -364,8 +376,11 @@ export class TariffGroupsRepository {
     })
 
     const insertGroup = this.db.prepare(`
-      INSERT INTO tariff_groups (year, title, currency, local_currency, complementary_currency)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO tariff_groups (
+        year, title, currency, local_currency, complementary_currency,
+        local_currency_symbol_before, complementary_currency_symbol_before
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `)
 
     const insertTariff = this.db.prepare(`
@@ -386,7 +401,9 @@ export class TariffGroupsRepository {
           input.title,
           input.local_currency, // also set deprecated currency column
           input.local_currency,
-          input.complementary_currency
+          input.complementary_currency,
+          input.local_currency_symbol_before ? 1 : 0,
+          input.complementary_currency_symbol_before ? 1 : 0
         )
       } catch (err: unknown) {
         if (err instanceof Error && err.message.includes('UNIQUE constraint failed')) {
@@ -461,6 +478,9 @@ export class TariffGroupsRepository {
     const title = input.title ?? existing.title
     const localCurrency = input.local_currency ?? existing.local_currency
     const complementaryCurrency = input.complementary_currency ?? existing.complementary_currency
+    const localSymbolBefore = input.local_currency_symbol_before ?? existing.local_currency_symbol_before
+    const complementarySymbolBefore =
+      input.complementary_currency_symbol_before ?? existing.complementary_currency_symbol_before
 
     this.validate({
       title,
@@ -473,6 +493,7 @@ export class TariffGroupsRepository {
     const updateGroup = this.db.prepare(`
       UPDATE tariff_groups SET
         year = ?, title = ?, currency = ?, local_currency = ?, complementary_currency = ?,
+        local_currency_symbol_before = ?, complementary_currency_symbol_before = ?,
         updated_at = datetime('now')
       WHERE id = ?
     `)
@@ -500,7 +521,16 @@ export class TariffGroupsRepository {
       const year = input.year ?? existing.year
 
       try {
-        updateGroup.run(year, title, localCurrency, localCurrency, complementaryCurrency, id)
+        updateGroup.run(
+          year,
+          title,
+          localCurrency,
+          localCurrency,
+          complementaryCurrency,
+          localSymbolBefore ? 1 : 0,
+          complementarySymbolBefore ? 1 : 0,
+          id
+        )
       } catch (err: unknown) {
         if (err instanceof Error && err.message.includes('UNIQUE constraint failed')) {
           throw new Error(TARIFF_GROUP_ERRORS.DUPLICATE_YEAR)

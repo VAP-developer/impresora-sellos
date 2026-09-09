@@ -21,7 +21,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { useConfigStore } from '@renderer/stores/config.store'
 import { useKioskoStore } from '@renderer/stores/kiosko.store'
 import { useImagesStore } from '@renderer/stores/images.store'
-import { getCurrencySymbol } from '@renderer/lib/currencies'
+import { getCurrencySymbol, formatPrice } from '@renderer/lib/currencies'
 import * as ipc from '@renderer/lib/ipc-client'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -77,6 +77,11 @@ export default function CartControls({
     const activeCurrency = useSecondaryPrice ? secondaryCurrency : localCurrency
     return getCurrencySymbol(activeCurrency)
   }, [activeTariffGroup, useSecondaryPrice])
+
+  // Symbol position for the active currency (local vs complementary)
+  const symbolBefore = useSecondaryPrice
+    ? (activeTariffGroup?.complementary_currency_symbol_before ?? false)
+    : (activeTariffGroup?.local_currency_symbol_before ?? false)
 
   // Derive computed values from config
   const precios = config?.precios
@@ -310,7 +315,7 @@ export default function CartControls({
             <>
               {/* Remaining budget */}
               <p className="text-center text-gray-500 text-sm font-bold" aria-label="Presupuesto restante">
-                {budgetRemaining.toFixed(2)} {currencySymbol}
+                {formatPrice(budgetRemaining, currencySymbol, symbolBefore)}
               </p>
 
               {/* Basket total */}
@@ -319,7 +324,7 @@ export default function CartControls({
                 aria-label="Total de la cesta"
                 aria-live="polite"
               >
-                Cesta {total.toFixed(2)}{currencySymbol}
+                Cesta {formatPrice(total, currencySymbol, symbolBefore)}
               </h2>
             </>
           ) : (

@@ -332,6 +332,41 @@ function buildLabelCode(config: AppConfig, productoId: number, codigoFeria1Overr
 }
 
 /**
+ * Builds the label code for the "Formato Correo ESP" layout.
+ *
+ * Pattern: P{mes}{pais}{annio} {codigoFeria1}-{cliente4}-{producto3}
+ * Example: "P9ES26 EX26-0001-001"
+ *
+ * Where:
+ *   - "P"          → fixed prefix
+ *   - {mes}        → month char from pestaña Máquina (config.codigo.mes)
+ *   - {pais}       → country code (config.codigo.pais, e.g. "ES")
+ *   - {annio}      → 2-digit year (config.codigo.annio, "auto" → current year)
+ *   - {codigoFeria1} → 4-char fair/event code
+ *   - {cliente}    → session/client id, zero-padded to 4 digits
+ *   - {producto}   → product counter, zero-padded to 3 digits
+ *
+ * @param config - App configuration
+ * @param productoId - The product/stamp counter value to encode
+ * @param codigoFeria1Override - Optional override for codigo_feria_1 (from event)
+ */
+function buildLabelCodeCorreoEsp(
+  config: AppConfig,
+  productoId: number,
+  codigoFeria1Override?: string
+): string {
+  const { codigo } = config
+  const mes = formatMes(codigo.mes)
+  const pais = codigo.pais
+  const annio = formatAnnio(codigo.annio)
+  const feria1 = codigoFeria1Override ?? codigo.codigo_feria_1 ?? ''
+  const cliente = formatCliente(codigo.cliente)
+  const producto = formatProducto(productoId)
+
+  return `P${mes}${pais}${annio} ${feria1}-${cliente}-${producto}`
+}
+
+/**
  * Determines the ticket title based on the active profile.
  * - Protocolo → "Protocolo de: {titulo}"
  * - SPDE → "SPDE de: {titulo}"
@@ -647,6 +682,14 @@ export async function generateSalePdfs(
   const layoutModelo1 = dynamicTariffCtx?.eventLayoutModelo1 ?? 'derecha'
   const layoutModelo2 = dynamicTariffCtx?.eventLayoutModelo2 ?? 'derecha'
 
+  // Selects the label-code builder based on the active layout.
+  // In "Formato Correo ESP" the code uses the P{mes}{pais}{annio} {feria1}-{cliente}-{producto}
+  // pattern (e.g. "P9ES26 EX26-0001-001"); otherwise the standard/legacy pattern.
+  const makeCode = (productoId: number): string =>
+    formatoCorreoEsp
+      ? buildLabelCodeCorreoEsp(config, productoId, codigoFeria1)
+      : buildLabelCode(config, productoId, codigoFeria1, codigoFeria2)
+
   // Resolve image layers: when ImageLayerOptions is provided, use the layer
   // composition logic; otherwise fall back to legacy model-based background.
   let bg1: string | null = null
@@ -706,7 +749,7 @@ export async function generateSalePdfs(
             tarifaDescripcion: tariff.description,
             fecha: stampFecha,
             evento: stampEvento,
-            codigo: buildLabelCode(config, productoCounter, codigoFeria1, codigoFeria2),
+            codigo: makeCode(productoCounter),
             backgroundImage: background,
             overlayImage: overlay,
             printLogoPng,
@@ -742,7 +785,7 @@ export async function generateSalePdfs(
             tarifaDescripcion: tariff.description,
             fecha: stampFecha,
             evento: stampEvento,
-            codigo: buildLabelCode(config, productoCounter, codigoFeria1, codigoFeria2),
+            codigo: makeCode(productoCounter),
             backgroundImage: background,
             overlayImage: overlay,
             printLogoPng,
@@ -797,7 +840,7 @@ export async function generateSalePdfs(
               tarifaDescripcion: stripTariff.description,
               fecha: stampFecha,
               evento: stampEvento,
-              codigo: buildLabelCode(config, productoCounter, codigoFeria1, codigoFeria2),
+              codigo: makeCode(productoCounter),
               backgroundImage: background,
               overlayImage: overlay,
               printLogoPng,
@@ -853,7 +896,7 @@ export async function generateSalePdfs(
                 tarifa: tLabel,
                 fecha: stampFecha,
                 evento: stampEvento,
-                codigo: buildLabelCode(config, productoCounter, codigoFeria1, codigoFeria2),
+                codigo: makeCode(productoCounter),
                 backgroundImage: background,
                 overlayImage: overlay,
                 printLogoPng,
@@ -869,7 +912,7 @@ export async function generateSalePdfs(
                 tarifa: tariff.label,
                 fecha: stampFecha,
                 evento: stampEvento,
-                codigo: buildLabelCode(config, productoCounter, codigoFeria1, codigoFeria2),
+                codigo: makeCode(productoCounter),
                 backgroundImage: background,
                 overlayImage: overlay,
                 printLogoPng,
@@ -898,7 +941,7 @@ export async function generateSalePdfs(
             tarifa: tariff.label,
             fecha: stampFecha,
             evento: stampEvento,
-            codigo: buildLabelCode(config, productoCounter, codigoFeria1, codigoFeria2),
+            codigo: makeCode(productoCounter),
             backgroundImage: background,
             overlayImage: overlay,
             printLogoPng,
@@ -929,7 +972,7 @@ export async function generateSalePdfs(
   // Special strips only apply to legacy tariffs (they use tiras which dynamic tariffs don't have)
   if (!dynamicTariffCtx) {
     const counterRef = { value: productoCounter }
-    await generateEspecialStrips(config, quantities as SaleQuantities, counterRef, pdfs, rotate180)
+    await generateEspecialStrips(config, quantities as SaleQuantities, counterRef, pdfs, rotate180, formatoCorreoEsp)
     productoCounter = counterRef.value
   }
 
@@ -1209,9 +1252,18 @@ async function generateEspecialStrips(
   quantities: SaleQuantities,
   counterRef: { value: number },
   pdfs: GeneratedPdf[],
-  rotate180 = false
+  rotate180 = false,
+  formatoCorreoEsp = false
 ): Promise<void> {
   const { ticket } = config
+
+  // Selects the label-code builder based on the active layout, mirroring the
+  // main stamp flow. In "Formato Correo ESP" the code uses the
+  // P{mes}{pais}{annio} {feria1}-{cliente}-{producto} pattern.
+  const makeCode = (productoId: number): string =>
+    formatoCorreoEsp
+      ? buildLabelCodeCorreoEsp(config, productoId)
+      : buildLabelCode(config, productoId)
 
   // Check if there are any tira quantities that trigger especial strips
   const hasTiras1 = quantities.tarifaAT1 > 0 || quantities.tarifa4T1 > 0
@@ -1224,10 +1276,10 @@ async function generateEspecialStrips(
       const price = especialPrices[idx]
       if (price && price > 0) {
         const codigos: [string, string, string, string] = [
-          buildLabelCode(config, counterRef.value++),
-          buildLabelCode(config, counterRef.value++),
-          buildLabelCode(config, counterRef.value++),
-          buildLabelCode(config, counterRef.value++)
+          makeCode(counterRef.value++),
+          makeCode(counterRef.value++),
+          makeCode(counterRef.value++),
+          makeCode(counterRef.value++)
         ]
         const tarifa = `Tarifa A${idx + 1 > 1 ? idx + 1 : ''}`
         const html = renderEspecialStripHtml({ codigos, especial: '  -E', tarifa }, { rotate180 })
@@ -1249,10 +1301,10 @@ async function generateEspecialStrips(
       const price = especialPrices[idx]
       if (price && price > 0) {
         const codigos: [string, string, string, string] = [
-          buildLabelCode(config, counterRef.value++),
-          buildLabelCode(config, counterRef.value++),
-          buildLabelCode(config, counterRef.value++),
-          buildLabelCode(config, counterRef.value++)
+          makeCode(counterRef.value++),
+          makeCode(counterRef.value++),
+          makeCode(counterRef.value++),
+          makeCode(counterRef.value++)
         ]
         const tarifa = `Tarifa A${idx + 1 > 1 ? idx + 1 : ''}`
         const html = renderEspecialStripHtml({ codigos, especial: '  -E', tarifa }, { rotate180 })

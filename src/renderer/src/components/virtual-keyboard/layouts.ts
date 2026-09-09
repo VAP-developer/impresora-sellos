@@ -19,11 +19,17 @@ export type KeyboardLayout = KeyboardRow[]
 
 /**
  * Layout numérico tipo calculadora.
- * Disposición:
+ * Disposición (4 columnas × 4 filas), con un único botón ✓ grande
+ * que ocupa las dos filas inferiores de la última columna:
  *   7  8  9  ⌫
  *   4  5  6  C
- *   1  2  3
- *   0(doble) .  ✓(doble alto)
+ *   1  2  3  ✓
+ *   0(doble) ,  ✓
+ *
+ * La colocación de las teclas grandes (0 de doble ancho y ✓ de doble alto)
+ * se resuelve en NumericKeypad.tsx mediante posicionamiento explícito en grid.
+ * La tecla decimal usa la coma ',' como etiqueta (locale ES), pero inserta
+ * el separador correcto según el input activo (ver pressKey).
  */
 export const LAYOUT_NUMERIC: KeyboardLayout = [
   [
@@ -41,13 +47,11 @@ export const LAYOUT_NUMERIC: KeyboardLayout = [
   [
     { key: '1', type: 'char' },
     { key: '2', type: 'char' },
-    { key: '3', type: 'char' },
-    { key: 'confirm', label: '✓', type: 'action', width: 1 }
+    { key: '3', type: 'char' }
   ],
   [
     { key: '0', type: 'char', width: 2 },
-    { key: '.', type: 'char' },
-    { key: 'confirm', label: '✓', type: 'action' }
+    { key: 'decimal', label: ',', type: 'char' }
   ]
 ]
 

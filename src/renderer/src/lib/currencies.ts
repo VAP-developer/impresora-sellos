@@ -91,3 +91,16 @@ export function getCurrencySymbol(code: string): string {
   }
   return CURRENCY_SYMBOLS[code] ?? code
 }
+
+/**
+ * Format a numeric price with its currency symbol, honoring the symbol position.
+ *
+ * @param value          The price amount (formatted to 2 decimals).
+ * @param currencySymbol The resolved currency symbol (e.g. '€', '$').
+ * @param symbolBefore   When true, the symbol is placed before the price ("€10.00");
+ *                       otherwise after it ("10.00€"). Defaults to false (after).
+ */
+export function formatPrice(value: number, currencySymbol: string, symbolBefore = false): string {
+  const amount = value.toFixed(2)
+  return symbolBefore ? `${currencySymbol}${amount}` : `${amount}${currencySymbol}`
+}

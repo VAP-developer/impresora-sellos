@@ -372,6 +372,10 @@ export interface TariffGroup {
   title: string
   local_currency: string
   complementary_currency: string
+  /** true = symbol before the price (€10), false = symbol after (10€) */
+  local_currency_symbol_before: boolean
+  /** true = symbol before the price (€10), false = symbol after (10€) */
+  complementary_currency_symbol_before: boolean
   tariffs: Tariff[]
   strips: Strip[]
   created_at: string
@@ -383,6 +387,8 @@ export interface TariffGroupInput {
   title: string
   local_currency: string
   complementary_currency: string
+  local_currency_symbol_before?: boolean
+  complementary_currency_symbol_before?: boolean
   tariffs: TariffInput[]
   strips: StripInput[]
 }
@@ -410,6 +416,8 @@ export interface TariffGroupUpdateInput {
   title?: string
   local_currency?: string
   complementary_currency?: string
+  local_currency_symbol_before?: boolean
+  complementary_currency_symbol_before?: boolean
   tariffs: TariffInput[]
   strips: StripInput[]
 }

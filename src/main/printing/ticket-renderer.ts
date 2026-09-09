@@ -216,6 +216,8 @@ export interface GenTicketParams {
   l3: string
   /** Currency symbol (default: '€') */
   currencySymbol?: string
+  /** When true, the currency symbol is placed before the price (€10 vs 10€) */
+  currencySymbolBefore?: boolean
   /** Fair code part 1 (e.g. "JC26") — displayed in ticket header */
   codigoFeria1?: string
   /** Fair code part 2 (e.g. "VAP") — displayed in ticket header */
@@ -244,6 +246,8 @@ export interface GenTicketCajaParams {
   modelo2Ticket: string
   /** Currency symbol (default: '€') */
   currencySymbol?: string
+  /** When true, the currency symbol is placed before the price (€10 vs 10€) */
+  currencySymbolBefore?: boolean
 }
 
 /** Parameters for genTicketMaster (master set ticket) */
@@ -282,6 +286,8 @@ export interface GenTicketMasterParams {
   l3: string
   /** Currency symbol (default: '€') */
   currencySymbol?: string
+  /** When true, the currency symbol is placed before the price (€10 vs 10€) */
+  currencySymbolBefore?: boolean
 }
 
 // ─────────────────────────────────────────────
@@ -330,10 +336,12 @@ export function formatClientId(id: number): string {
  * Ensures at least 2 decimal places.
  * @param value - Price value
  * @param currencySymbol - Currency symbol to use (default: '€')
+ * @param symbolBefore - When true, the symbol is placed before the price ("€10.00");
+ *                       otherwise after it ("10.00€"). Defaults to false (after).
  */
-export function formatPrice(value: number, currencySymbol = '€'): string {
+export function formatPrice(value: number, currencySymbol = '€', symbolBefore = false): string {
   const str = value.toFixed(2)
-  return str + currencySymbol
+  return symbolBefore ? currencySymbol + str : str + currencySymbol
 }
 
 /**
@@ -707,7 +715,8 @@ export async function genTicket(params: GenTicketParams): Promise<Buffer> {
     l1,
     l2,
     l3,
-    currencySymbol = '€'
+    currencySymbol = '€',
+    currencySymbolBefore = false
   } = params
 
   // Calculate page height using the legacy formula (based on number of active items)
@@ -787,8 +796,8 @@ export async function genTicket(params: GenTicketParams): Promise<Buffer> {
 
       const itemName = modeloTicket + ' ' + producto.nombre_ticket
       const quantity = String(item.cantidad)
-      const price = formatPrice(producto.precio, currencySymbol)
-      const total = formatPrice(item.cantidad * producto.precio, currencySymbol)
+      const price = formatPrice(producto.precio, currencySymbol, currencySymbolBefore)
+      const total = formatPrice(item.cantidad * producto.precio, currencySymbol, currencySymbolBefore)
 
       // Draw item name with wrapping support
       const textHeightPt = drawLeft(doc, itemName, FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT, itemNameMaxWidth)
@@ -890,7 +899,8 @@ export async function genTicketCaja(params: GenTicketCajaParams): Promise<Buffer
     modoTicket,
     modelo1Ticket,
     modelo2Ticket,
-    currencySymbol = '€'
+    currencySymbol = '€',
+    currencySymbolBefore = false
   } = params
 
   // Calculate page height using the legacy formula (based on number of active items)
@@ -982,8 +992,8 @@ export async function genTicketCaja(params: GenTicketCajaParams): Promise<Buffer
 
       const itemName = modeloTicket + ' ' + producto.nombre_ticket
       const quantity = String(item.cantidad)
-      const price = formatPrice(producto.precio, currencySymbol)
-      const total = formatPrice(item.cantidad * producto.precio, currencySymbol)
+      const price = formatPrice(producto.precio, currencySymbol, currencySymbolBefore)
+      const total = formatPrice(item.cantidad * producto.precio, currencySymbol, currencySymbolBefore)
 
       // Draw item name with wrapping support
       const textHeightPt = drawLeft(doc, itemName, FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT, itemNameMaxWidth)
@@ -1096,7 +1106,8 @@ export async function genTicketMaster(params: GenTicketMasterParams): Promise<Bu
     l1,
     l2,
     l3,
-    currencySymbol = '€'
+    currencySymbol = '€',
+    currencySymbolBefore = false
   } = params
 
   // Calculate page height using the legacy formula (based on number of active items)

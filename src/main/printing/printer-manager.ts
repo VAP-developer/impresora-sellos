@@ -167,6 +167,18 @@ export interface PrinterBackend {
    * @returns true if cancellation was successful
    */
   cancelJob(printerUri: string, jobId: string): Promise<boolean>
+
+  /**
+   * Optional: configures the printer driver to cut only at the end of each
+   * print job (disabling any "cut every N labels" driver setting). Called once
+   * per stamp printer at assignment time so the app's per-group PDF splitting
+   * produces the correct physical cuts, with no per-job latency.
+   *
+   * Not all backends support this (only Windows/Brother thermal drivers).
+   *
+   * @param printerName - The printer name (already decoded from the URI)
+   */
+  configureCutAtEnd?(printerName: string): Promise<void>
 }
 
 // ─── Thermal Printer Configuration ────────────────────────────────────────────
@@ -335,6 +347,42 @@ export class PrinterManager {
       // Non-blocking: intentionally not awaited
       if (detectionPromises.length > 0) {
         void Promise.allSettled(detectionPromises)
+      }
+    }
+
+    // Configure "cut at end of job" once per stamp printer (fast option).
+    //
+    // The app splits labels into one PDF per cut group (groupLabels in
+    // pdf-generator), and each PDF is a separate print job. If the driver is
+    // left in "cut every N" mode, its own interval collides with the app's
+    // grouping and produces wrong cut counts (e.g. cut=6 → 4+2+1). Forcing
+    // "cut at end" makes the driver cut exactly when each group's PDF ends.
+    //
+    // Done ONCE here at assignment time (fire-and-forget), NOT per print job,
+    // so it adds no latency when printing many labels.
+    if (typeof this.backend.configureCutAtEnd === 'function') {
+      const backend = this.backend
+      const stampTargets: PrinterTarget[] = ['printer1', 'printer2']
+      const cutPromises: Promise<void>[] = []
+
+      for (const target of stampTargets) {
+        const newUri = assignments[target]
+        if (!newUri) continue
+
+        // Skip if the printer for this target didn't actually change
+        const previousUri = previousAssignments[target]
+        if (previousUri === newUri) continue
+
+        const printerName = getWindowsPrinterName(newUri)
+        cutPromises.push(
+          backend.configureCutAtEnd!(printerName).catch(() => {
+            // Non-fatal: printing still works with the existing driver cut mode
+          })
+        )
+      }
+
+      if (cutPromises.length > 0) {
+        void Promise.allSettled(cutPromises)
       }
     }
   }

@@ -106,6 +106,11 @@ export default function DynamicTariffTable(): JSX.Element {
     return getCurrencySymbol(activeCurrency)
   }, [activeCurrency])
 
+  // Symbol position for the active currency (local vs complementary)
+  const symbolBefore = showSecondary
+    ? (activeTariffGroup?.complementary_currency_symbol_before ?? false)
+    : (activeTariffGroup?.local_currency_symbol_before ?? false)
+
   const togglePrice = useCallback(() => {
     setUseSecondaryPrice(!showSecondary)
   }, [showSecondary, setUseSecondaryPrice])
@@ -181,6 +186,7 @@ export default function DynamicTariffTable(): JSX.Element {
         showSecondary={showSecondary}
         toggleSecondary={togglePrice}
         currencySymbol={currencySymbol}
+        symbolBefore={symbolBefore}
       />
     </div>
   )

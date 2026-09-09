@@ -2,8 +2,8 @@
  * TariffTableContent.tsx
  *
  * Pure presentation component that renders the tariff table structure:
- *   - Header row with 8 columns
- *   - Data rows with quantity inputs, limits, and subtotals
+ *   - Header row with 4 columns (Cantidad A | Modalidad | Precio | Cantidad B)
+ *   - Data rows with quantity inputs
  *   - Price toggle button in header
  *
  * This component is fully stateless and receives all data via props.
@@ -11,6 +11,7 @@
  */
 
 import { useCallback } from 'react'
+import { formatPrice } from '@renderer/lib/currencies'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -34,6 +35,8 @@ interface TariffTableContentProps {
   showSecondary: boolean
   toggleSecondary: () => void
   currencySymbol: string
+  /** When true, the currency symbol is rendered before the price (€10 vs 10€) */
+  symbolBefore?: boolean
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -42,10 +45,10 @@ export default function TariffTableContent({
   rows,
   quantities,
   setQuantity,
-  limits,
   showSecondary,
   toggleSecondary,
-  currencySymbol
+  currencySymbol,
+  symbolBefore = false
 }: TariffTableContentProps): JSX.Element {
   const handleChange = useCallback(
     (field: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -58,13 +61,7 @@ export default function TariffTableContent({
   return (
     <div role="table" aria-label="Tabla de tarifas">
       {/* ─── Header row ─── */}
-      <div className="grid grid-cols-[1fr_2fr_3fr_4fr_2fr_3fr_2fr_1fr] bg-[rgb(24,62,117)] border-b-2 border-blue-800">
-        <div className="px-2 py-2 text-center text-sm font-bold text-white uppercase tracking-wide">
-          Subtotal
-        </div>
-        <div className="px-2 py-2 text-center text-sm font-bold text-white uppercase tracking-wide">
-          Límite
-        </div>
+      <div className="grid grid-cols-[3fr_4fr_2fr_3fr] bg-[rgb(24,62,117)] border-b-2 border-blue-800">
         <div className="px-2 py-2 text-center text-sm font-bold text-white uppercase tracking-wide">
           Cantidad
         </div>
@@ -85,23 +82,13 @@ export default function TariffTableContent({
         <div className="px-2 py-2 text-center text-sm font-bold text-white uppercase tracking-wide">
           Cantidad
         </div>
-        <div className="px-2 py-2 text-center text-sm font-bold text-white uppercase tracking-wide">
-          Límite
-        </div>
-        <div className="px-2 py-2 text-center text-sm font-bold text-white uppercase tracking-wide">
-          Subtotal
-        </div>
       </div>
 
       {/* ─── Data rows ─── */}
       {rows.map((row, idx) => {
         const qtyS1 = quantities[row.qtyFieldS1] ?? 0
         const qtyS2 = quantities[row.qtyFieldS2] ?? 0
-        const limitS1 = limits[row.limitFieldS1] ?? 0
-        const limitS2 = limits[row.limitFieldS2] ?? 0
         const activePrice = showSecondary ? row.secondaryPrice : row.localPrice
-        const subtotalS1 = activePrice * qtyS1
-        const subtotalS2 = activePrice * qtyS2
 
         const stripBg = row.isStrip ? 'bg-[rgb(255,203,48)] border-l-4 border-l-amber-500' : ''
         const labelBg = row.label ? 'bg-[rgb(222,222,222)] border-l-4 border-l-amber-500' : ''
@@ -110,20 +97,10 @@ export default function TariffTableContent({
         return (
           <div
             key={`${row.qtyFieldS1}-${row.qtyFieldS2}`}
-            className={`grid grid-cols-[1fr_2fr_3fr_4fr_2fr_3fr_2fr_1fr] items-center ${stripBg}  ${labelBg} ${rowBorder}`}
+            className={`grid grid-cols-[3fr_4fr_2fr_3fr] items-center ${stripBg}  ${labelBg} ${rowBorder}`}
             role="row"
             aria-label={row.label}
           >
-            {/* Subtotal Sello A */}
-            <div className="px-2 py-2 text-center text-lg font-bold text-gray-800">
-              {subtotalS1 > 0 ? `${subtotalS1.toFixed(2)}${currencySymbol}` : '—'}
-            </div>
-
-            {/* Límite Sello A */}
-            <div className="px-2 py-2 text-center text-lg font-semibold text-gray-700">
-              {limitS1}
-            </div>
-
             {/* Cantidad Sello A */}
             <div className="px-2 py-2 flex justify-center">
               <input
@@ -147,7 +124,7 @@ export default function TariffTableContent({
 
             {/* Precio */}
             <div className="px-2 py-2 text-center text-[25px] font-bold text-bg-[rgb(24,62,117)]">
-              {activePrice.toFixed(2)}{currencySymbol}
+              {formatPrice(activePrice, currencySymbol, symbolBefore)}
             </div>
 
             {/* Cantidad Sello B */}
@@ -162,16 +139,6 @@ export default function TariffTableContent({
                            bg-white shadow-sm"
                 aria-label={`Cantidad ${row.label} Sello B`}
               />
-            </div>
-
-            {/* Límite Sello B */}
-            <div className="px-2 py-2 text-center text-lg font-semibold text-gray-700">
-              {limitS2}
-            </div>
-
-            {/* Subtotal Sello B */}
-            <div className="px-2 py-2 text-center text-lg font-bold text-gray-800">
-              {subtotalS2 > 0 ? `${subtotalS2.toFixed(2)}${currencySymbol}` : '—'}
             </div>
           </div>
         )

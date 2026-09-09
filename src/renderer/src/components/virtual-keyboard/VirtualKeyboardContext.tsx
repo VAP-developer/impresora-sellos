@@ -87,11 +87,28 @@ export function VirtualKeyboardProvider({ children }: VirtualKeyboardProviderPro
   const pressKey = useCallback((key: string) => {
     if (!activeInput || !document.contains(activeInput)) return
 
+    const isNumberInput = activeInput.type === 'number'
+
+    // Resolver la tecla decimal. En un input type="number" un valor intermedio
+    // como "12." es inválido y el DOM lo descarta (vacía el value), por eso el
+    // separador "borra" el contenido. Los inputs decimales deben ser
+    // type="text" inputMode="decimal", donde el separador es la coma y se
+    // conserva mientras el usuario escribe.
+    let charToInsert = key
+    if (key === 'decimal') {
+      charToInsert = isNumberInput ? '.' : ','
+    }
+
     const currentValue = activeInput.value
     // selectionStart/selectionEnd are null for input type="number"
     const selStart = activeInput.selectionStart ?? currentValue.length
     const selEnd = activeInput.selectionEnd ?? currentValue.length
     const hasSelection = selStart !== selEnd
+
+    // Evitar un segundo separador decimal si ya existe uno en el valor
+    if (key === 'decimal' && !hasSelection) {
+      if (currentValue.includes('.') || currentValue.includes(',')) return
+    }
 
     // Respetar maxLength: si no hay selección que reemplazar, no insertar
     const maxLength = activeInput.maxLength
@@ -100,12 +117,13 @@ export function VirtualKeyboardProvider({ children }: VirtualKeyboardProviderPro
     // Insertar carácter en posición del cursor (o reemplazar selección)
     const before = currentValue.slice(0, selStart)
     const after = currentValue.slice(selEnd)
-    const newValue = before + key + after
+    const newValue = before + charToInsert + after
 
     setNativeValue(activeInput, newValue)
 
     // Restaurar cursor justo después del carácter insertado
-    const newPos = selStart + key.length
+    const inserted = newValue.length - (currentValue.length - (selEnd - selStart))
+    const newPos = selStart + inserted
     try {
       activeInput.setSelectionRange(newPos, newPos)
     } catch {
@@ -178,7 +196,12 @@ export function VirtualKeyboardProvider({ children }: VirtualKeyboardProviderPro
       const input = target as HTMLInputElement
       if (ignoredTypes.includes(input.type)) return
 
-      const type: 'numeric' | 'full' = input.type === 'number' ? 'numeric' : 'full'
+      // Mostrar el teclado numérico para inputs number y para inputs de texto
+      // que declaren inputMode numérico/decimal (inputs de precio, etc.).
+      const numericInputMode =
+        input.inputMode === 'numeric' || input.inputMode === 'decimal'
+      const isNumeric = input.type === 'number' || numericInputMode
+      const type: 'numeric' | 'full' = isNumeric ? 'numeric' : 'full'
       showKeyboard(input, type)
     }
 

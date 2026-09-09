@@ -44,6 +44,8 @@ interface FormState {
   title: string
   local_currency: string
   complementary_currency: string
+  local_currency_symbol_before: boolean
+  complementary_currency_symbol_before: boolean
   tariffs: TariffFormRow[]
   strips: StripFormRow[]
 }
@@ -103,6 +105,8 @@ function groupToFormState(group: TariffGroup): FormState {
     title: group.title,
     local_currency: group.local_currency,
     complementary_currency: group.complementary_currency,
+    local_currency_symbol_before: group.local_currency_symbol_before ?? false,
+    complementary_currency_symbol_before: group.complementary_currency_symbol_before ?? false,
     tariffs: group.tariffs.map((t) => ({
       id: t.id,
       name: t.name,
@@ -128,6 +132,8 @@ function initialFormState(): FormState {
     title: '',
     local_currency: 'EUR',
     complementary_currency: 'EUR',
+    local_currency_symbol_before: false,
+    complementary_currency_symbol_before: false,
     tariffs: [emptyTariffRow(), emptyTariffRow()],
     strips: []
   }
@@ -314,6 +320,8 @@ export function TariffGroupSection(): JSX.Element {
           title: form.title.trim(),
           local_currency: form.local_currency,
           complementary_currency: form.complementary_currency,
+          local_currency_symbol_before: form.local_currency_symbol_before,
+          complementary_currency_symbol_before: form.complementary_currency_symbol_before,
           tariffs,
           strips
         }
@@ -324,6 +332,8 @@ export function TariffGroupSection(): JSX.Element {
           title: form.title.trim(),
           local_currency: form.local_currency,
           complementary_currency: form.complementary_currency,
+          local_currency_symbol_before: form.local_currency_symbol_before,
+          complementary_currency_symbol_before: form.complementary_currency_symbol_before,
           tariffs,
           strips
         }
@@ -607,6 +617,17 @@ export function TariffGroupSection(): JSX.Element {
             value={form.local_currency}
             onChange={(val) => setForm((prev) => ({ ...prev, local_currency: val }))}
           />
+          <label className="mt-2 flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+            <input
+              type="checkbox"
+              className="w-4 h-4 cursor-pointer"
+              checked={form.local_currency_symbol_before}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, local_currency_symbol_before: e.target.checked }))
+              }
+            />
+            <span>{t('settings.currencySymbolBefore')}</span>
+          </label>
           {errors.local_currency && (
             <p className="mt-1 text-xs text-red-600" role="alert">
               {errors.local_currency}
@@ -622,6 +643,20 @@ export function TariffGroupSection(): JSX.Element {
             value={form.complementary_currency}
             onChange={(val) => setForm((prev) => ({ ...prev, complementary_currency: val }))}
           />
+          <label className="mt-2 flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+            <input
+              type="checkbox"
+              className="w-4 h-4 cursor-pointer"
+              checked={form.complementary_currency_symbol_before}
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  complementary_currency_symbol_before: e.target.checked
+                }))
+              }
+            />
+            <span>{t('settings.currencySymbolBefore')}</span>
+          </label>
           {errors.complementary_currency && (
             <p className="mt-1 text-xs text-red-600" role="alert">
               {errors.complementary_currency}

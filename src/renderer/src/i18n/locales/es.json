@@ -40,6 +40,7 @@
     "position": "Posición",
     "localCurrency": "Moneda Local",
     "complementaryCurrency": "Moneda Complementaria",
+    "currencySymbolBefore": "Posición moneda delante",
     "description": "Descripción",
     "localPrice": "Precio local",
     "secondaryPrice": "Precio complementario",

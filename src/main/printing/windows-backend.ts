@@ -192,6 +192,41 @@ export async function configureCutInterval(
 }
 
 /**
+ * Configures the Brother TD printer driver to cut ONLY at the end of each
+ * print job (flags 0x0001), disabling the driver's own "cut every N labels".
+ *
+ * This is the fast, low-latency strategy for the cut feature: the app already
+ * splits labels into one PDF per cut group (see groupLabels in pdf-generator),
+ * so the driver just needs to cut when each job/PDF finishes. Because each PDF
+ * is a separate print job, the physical cut lands exactly at each group.
+ *
+ * Run this ONCE per printer (at assignment time), NOT per print job — so it
+ * adds zero latency to the actual printing of labels.
+ *
+ * Non-fatal: any failure is swallowed; printing still works, just with whatever
+ * cut mode the driver already had.
+ */
+export async function configureCutAtEnd(
+  printerName: string,
+  executor: WindowsCommandExecutor
+): Promise<void> {
+  const scriptPath = findScript('configure-cut-at-end.ps1')
+  if (!scriptPath) {
+    // Script not found — skip silently
+    return
+  }
+
+  const escapedPrinter = printerName.replace(/"/g, '`"')
+  const cmd = `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}" -PrinterName "${escapedPrinter}"`
+
+  try {
+    await executor.exec(cmd, { timeout: 10000 })
+  } catch {
+    // Non-fatal: if we can't configure the cut mode, printing still works
+  }
+}
+
+/**
  * Resolves the path to SumatraPDF executable bundled with pdf-to-printer.
  * In an Electron packaged app, the path needs to account for asar unpacking.
  */
@@ -259,6 +294,15 @@ export class WindowsBackend implements PrinterBackend {
   constructor(executor?: WindowsCommandExecutor, dpiCache?: DpiCache) {
     this.cmd = executor ?? defaultWindowsExecutor
     this.dpiCache = dpiCache
+  }
+
+  /**
+   * Configures a printer's driver to cut only at the end of each job.
+   * Fire-and-forget friendly: never throws, runs once per printer.
+   * See configureCutAtEnd() for the rationale.
+   */
+  async configureCutAtEnd(printerName: string): Promise<void> {
+    return configureCutAtEnd(printerName, this.cmd)
   }
 
   /**

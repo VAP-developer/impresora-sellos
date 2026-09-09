@@ -112,11 +112,11 @@ function applyPrinterRotation(doc: PDFKit.PDFDocument): void {
 // MAQUETACIÓN SELLO POST & GO
 export const SELLO_LAYOUT = {
  tarifa: { x: 1, y: 1.4, size: 12.2 },
- descripcion: { x: 100, y: 5.4, size: 9 }, // esta línea NO SE USA
- fecha: { x: 1, y: 11.2, size: 9 },
- localidad: { x: 1, y: 15.2, size: 9 },
- codigo1: { x: 100, y: 18.5, size: 5.9 }, // esta línea NO SE USA
- codigo2: { x: 1, y: 20, size: 5.9 } // CÓDIGO: letra P+MES+PAÍS+AÑO   CÓDIGO EVENTO+0001+001  = ejemplo: P9ES26 EX26-0001-001
+ descripcion: { x: 1, y: 5.4, size: 9 }, // esta línea NO SE USA
+ fecha: { x: 1, y: 11, size: 9 },
+ localidad: { x: 1, y: 14, size: 9 },
+ codigo1: { x: 1, y: 18.5, size: 5.9 }, // esta línea NO SE USA
+ codigo2: { x: 1, y: 20.5, size: 5.9 } // CÓDIGO: letra P+MES+PAÍS+AÑO   CÓDIGO EVENTO+0001+001  = ejemplo: P9ES26 EX26-0001-001
 } as const
 
 // ─────────────────────────────────────────────
@@ -169,10 +169,12 @@ export const SELLO_LAYOUT_DEFAULT: readonly SelloField[] = [
  * aquí más entradas { source, x, y, size } — el render las pintará solas.
  */
 export const SELLO_LAYOUT_CORREO_ESP: readonly SelloField[] = [
-  { source: 'tarifa', x: 1, y: 1.4, size: 12.2 }
-  // Ejemplo para futuros campos:
-  // { source: 'fecha', x: 1, y: 11, size: 9 },
-  // { source: 'codigoCompleto', x: 1, y: 20, size: 6 }
+  { source: 'tarifa', x: 1, y: 1.4, size: 12.2 },
+  { source: 'fecha', x: 1, y: 11.2, size: 9 },
+  { source: 'localidad', x: 1, y: 15.2, size: 9 },
+  // Código en un único campo (no se parte en dos líneas):
+  // formato P{mes}{pais}{annio} {feria}-{cliente}-{producto}, ej. "P9ES26 EX26-0001-001"
+  { source: 'codigoCompleto', x: 1, y: 20, size: 5.9 }
 ] as const
 
 /**
@@ -489,13 +491,40 @@ function drawSelloFields(
   params: { tarifa: string; tarifaDescripcion?: string; fecha: string; evento: string; codigo: string },
   formatoCorreoEsp = false
 ): void {
-  // Formato Correo ESP: la etiqueta muestra únicamente el nombre de la tarifa.
+  const { line1, line2 } = formatCodigoLines(params.codigo)
+
+  // Resuelve el texto de un campo según su origen (mismo criterio que el
+  // renderizador HTML en stamp-html-renderer.ts).
+  const textForSource = (source: SelloFieldSource): string => {
+    switch (source) {
+      case 'tarifa':
+        return params.tarifa
+      case 'descripcion':
+        return params.tarifaDescripcion ?? ''
+      case 'fecha':
+        return formatFechaMonthYear(params.fecha)
+      case 'localidad':
+        return params.evento
+      case 'codigoLinea1':
+        return line1
+      case 'codigoLinea2':
+        return line2
+      case 'codigoCompleto':
+        return params.codigo
+      default:
+        return ''
+    }
+  }
+
+  // Formato Correo ESP: recorre su layout (tarifa + fecha + localidad + código
+  // completo en un único campo). El resto usa el layout por defecto.
   if (formatoCorreoEsp) {
-    drawLocal(doc, params.tarifa, FONTS.regular, SELLO_LAYOUT.tarifa)
+    for (const field of SELLO_LAYOUT_CORREO_ESP) {
+      drawLocal(doc, textForSource(field.source), FONTS.regular, field)
+    }
     return
   }
 
-  const { line1, line2 } = formatCodigoLines(params.codigo)
   drawLocal(doc, params.tarifa, FONTS.regular, SELLO_LAYOUT.tarifa)
   drawLocal(doc, params.tarifaDescripcion ?? '', FONTS.regular, SELLO_LAYOUT.descripcion)
   drawLocal(doc, formatFechaMonthYear(params.fecha), FONTS.regular, SELLO_LAYOUT.fecha)

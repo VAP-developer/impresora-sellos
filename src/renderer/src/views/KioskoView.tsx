@@ -18,6 +18,7 @@ import StampModelSingle from '@renderer/components/kiosko/StampModelSingle'
 import TariffTableSplit from '@renderer/components/kiosko/TariffTableSplit'
 import DynamicTariffTable from '@renderer/components/kiosko/DynamicTariffTable'
 import CartControls from '@renderer/components/kiosko/CartControls'
+import { useVirtualKeyboard } from '@renderer/components/virtual-keyboard/VirtualKeyboardContext'
 
 export default function KioskoView(): JSX.Element {
   const config = useConfigStore((state) => state.config)
@@ -43,6 +44,10 @@ export default function KioskoView(): JSX.Element {
 
   const rollo1Installed = (ticket?.rollo1 ?? 0) !== -1
   const rollo2Installed = (ticket?.rollo2 ?? 0) !== -1
+
+  // When the on-screen keyboard is visible we reserve a blank column on the
+  // right so the keyboard can appear there instead of overlapping the table.
+  const { isVisible: keyboardVisible } = useVirtualKeyboard()
 
   // Load the tariff group from the active event when the view mounts
   // or when the active event changes (config.sello.elevento)
@@ -114,8 +119,23 @@ export default function KioskoView(): JSX.Element {
         </div>
       </div>
 
-      {/* Middle: tariff tables - dynamic when group is active, static otherwise */}
-      {activeTariffGroup ? <DynamicTariffTable /> : <TariffTableSplit />}
+      {/*
+        Middle: tariff table on the LEFT side. A blank column is reserved on the
+        right side; when the virtual keyboard is active it slides into that gap
+        so it never covers the table.
+      */}
+      <div className="flex items-start gap-2">
+        <div className="w-1/2 min-w-0">
+          {activeTariffGroup ? <DynamicTariffTable /> : <TariffTableSplit />}
+        </div>
+
+        {/* Right-side blank space reserved for the on-screen keyboard */}
+        <div
+          className="w-1/2 shrink-0"
+          data-keyboard-slot="true"
+          aria-hidden={!keyboardVisible}
+        />
+      </div>
     </div>
   )
 }
