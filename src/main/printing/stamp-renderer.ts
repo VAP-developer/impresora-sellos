@@ -120,6 +120,70 @@ export const SELLO_LAYOUT = {
 } as const
 
 // ─────────────────────────────────────────────
+// Layouts de etiqueta seleccionables por configuración
+// ─────────────────────────────────────────────
+//
+// Cada layout es una LISTA de campos. Cada campo dice:
+//   - `source`: de qué dato del sello sale el texto
+//   - x, y (mm desde arriba-izquierda) y size (pt)
+//
+// El renderizador (stamp-html-renderer) recorre la lista del layout activo y
+// pinta cada campo. Para AÑADIR un campo nuevo (p. ej. al formato Correo ESP),
+// basta con añadir una entrada más a la lista correspondiente aquí — no hay que
+// tocar el código de render.
+
+/** Orígenes de texto disponibles para un campo del sello */
+export type SelloFieldSource =
+  | 'tarifa'
+  | 'descripcion'
+  | 'fecha' // se formatea a mes+año
+  | 'localidad'
+  | 'codigoLinea1'
+  | 'codigoLinea2'
+  | 'codigoCompleto'
+
+/** Un campo colocado en la etiqueta */
+export interface SelloField {
+  source: SelloFieldSource
+  x: number // mm desde el borde izquierdo
+  y: number // mm desde el borde superior
+  size: number // pt
+}
+
+/**
+ * Layout de la etiqueta NORMAL (default).
+ * Equivale a los campos que pintaba renderTextFields para el caso no-ESP.
+ */
+export const SELLO_LAYOUT_DEFAULT: readonly SelloField[] = [
+  { source: 'tarifa', x: SELLO_LAYOUT.tarifa.x, y: SELLO_LAYOUT.tarifa.y, size: SELLO_LAYOUT.tarifa.size },
+  { source: 'descripcion', x: SELLO_LAYOUT.descripcion.x, y: SELLO_LAYOUT.descripcion.y, size: SELLO_LAYOUT.descripcion.size },
+  { source: 'fecha', x: SELLO_LAYOUT.fecha.x, y: SELLO_LAYOUT.fecha.y, size: SELLO_LAYOUT.fecha.size },
+  { source: 'localidad', x: SELLO_LAYOUT.localidad.x, y: SELLO_LAYOUT.localidad.y, size: SELLO_LAYOUT.localidad.size },
+  { source: 'codigoLinea1', x: SELLO_LAYOUT.codigo1.x, y: SELLO_LAYOUT.codigo1.y, size: SELLO_LAYOUT.codigo1.size },
+  { source: 'codigoLinea2', x: SELLO_LAYOUT.codigo2.x, y: SELLO_LAYOUT.codigo2.y, size: SELLO_LAYOUT.codigo2.size }
+] as const
+
+/**
+ * Layout de la etiqueta FORMATO CORREO ESP.
+ * Hoy sólo muestra el nombre de la tarifa. Para ampliarlo en el futuro, añade
+ * aquí más entradas { source, x, y, size } — el render las pintará solas.
+ */
+export const SELLO_LAYOUT_CORREO_ESP: readonly SelloField[] = [
+  { source: 'tarifa', x: 1, y: 1.4, size: 12.2 }
+  // Ejemplo para futuros campos:
+  // { source: 'fecha', x: 1, y: 11, size: 9 },
+  // { source: 'codigoCompleto', x: 1, y: 20, size: 6 }
+] as const
+
+/**
+ * Devuelve el layout de etiqueta activo según la configuración.
+ * @param formatoCorreoEsp - valor del check "Formato Correo ESP"
+ */
+export function getSelloLayout(formatoCorreoEsp: boolean): readonly SelloField[] {
+  return formatoCorreoEsp ? SELLO_LAYOUT_CORREO_ESP : SELLO_LAYOUT_DEFAULT
+}
+
+// ─────────────────────────────────────────────
 // Font & Resource Path Helpers
 // ─────────────────────────────────────────────
 
@@ -576,35 +640,21 @@ function drawOverlay(
  * Exported for testing.
  */
 export function computeLogoBox(
-  doc: PDFKit.PDFDocument,
-  fecha: string,
-  evento: string
+  _doc: PDFKit.PDFDocument,
+  _fecha: string,
+  _evento: string
 ): { x: number; y: number; width: number; height: number } | null {
-  doc.font(FONTS.regular).fontSize(FECHA_LOCALIDAD_FONT_SIZE)
-
-  const fechaWidth = doc.widthOfString(formatFechaMonthYear(fecha))
-  const eventoWidth = doc.widthOfString(evento)
-  const textBlockWidth = Math.max(fechaWidth, eventoWidth)
-
-  // X position: right of the text block + gap, shifted left
-  //const baseX = TEXT_LEFT_MM * MM_TO_PT + textBlockWidth + LOGO_TEXT_GAP_MM * MM_TO_PT
-  const baseX = 88 // IZQUIERDA - / DERECHA +
-  const x = baseX -31 * MM_TO_PT
-
-  // Vertical: use bottomToTop for the same coordinate system as text
-  const top = bottomToTop(FECHA_Y_MM, FECHA_LOCALIDAD_FONT_SIZE)
-  const bottom = bottomToTop(LOCALIDAD_Y_MM, FECHA_LOCALIDAD_FONT_SIZE) + FECHA_LOCALIDAD_FONT_SIZE
-  const baseHeight = bottom - top
-  const height = 162 // POSSICIÓN ARRIBA - / ABAJO +
-  const y = top - 25 * MM_TO_PT
-
-  // Width scaled proportionally, capped to available space
-  const maxWidth = 200 // NO VALE PARA NADA
-  const width = 161 // TAMAÑO Ok
-
-  if (width <= 0 || height <= 0) return null
-
-  return { x, y, width, height }
+  // El lienzo ya está pre-girado con applyPrinterRotation():
+  //   translate(STAMP_WIDTH, 0) + rotate(90)
+  // Un punto LOCAL (x, y) cae en la página en (STAMP_WIDTH - y, x). Por tanto:
+  //   - el eje X local recorre el ALTO de la página  -> límite STAMP_PAGE_HEIGHT (25mm)
+  //   - el eje Y local recorre el ANCHO de la página -> límite STAMP_WIDTH (55mm)
+  //
+  // Como doc.image(src, 0, 0, {width, height}) ocupa x∈[0,width] e y∈[0,height],
+  // para cubrir TODA la etiqueta el ancho de la imagen debe llegar a
+  // STAMP_PAGE_HEIGHT (eje X local = 25mm) y el alto a STAMP_WIDTH (eje Y local
+  // = 55mm). Es decir, van "cruzados" respecto al papel por culpa de la rotación.
+  return { x: 0, y: 0, width: STAMP_PAGE_HEIGHT, height: STAMP_WIDTH }
 }
 
 /**
@@ -627,9 +677,13 @@ function drawLogoPng(
   const box = computeLogoBox(doc, fecha, evento)
   if (!box) return
 
+  // Estirar el logo para llenar TODA la caja (que ahora es la etiqueta completa),
+  // igual que drawBackground. Con `fit` se preservaría la relación de aspecto y
+  // quedarían bandas si el logo no es 55:25. Si en el futuro se prefiere respetar
+  // el aspecto, cambiar por: { fit: [box.width, box.height], align: 'center', valign: 'center' }
   const options: PDFKit.Mixins.ImageOption = {
-    fit: [box.width, box.height],
-    valign: 'center'
+    width: box.width,
+    height: box.height
   }
 
   try {
@@ -721,7 +775,12 @@ export async function renderStamp(params: StampRenderParams): Promise<Buffer> {
   // acotado a STAMP_PAGE_HEIGHT (25mm) y el eje y local a STAMP_WIDTH (55mm).
   // Hay que pasarle esa caja, si no la imagen se dibuja con más "ancho" del
   // que cabe en el eje x y sale recortada.
-    drawBackground(doc, params.backgroundImage, undefined, STAMP_PAGE_HEIGHT, STAMP_WIDTH) // NO VALE NO HACE NADA¿?
+    // Lienzo pre-girado (translate(STAMP_WIDTH,0)+rotate(90)): un punto local
+    // (x,y) cae en la página en (STAMP_WIDTH - y, x). Así el eje X local está
+    // acotado al ALTO de página (STAMP_PAGE_HEIGHT, 25mm) y el eje Y local al
+    // ANCHO (STAMP_WIDTH, 55mm). Por eso el ancho de la caja va a
+    // STAMP_PAGE_HEIGHT y el alto a STAMP_WIDTH: "cruzados" por la rotación.
+    drawBackground(doc, params.backgroundImage, undefined, STAMP_PAGE_HEIGHT, STAMP_WIDTH)
 
   // If printLogoPng is true, draw the logo to the right of fecha/localidad
   // instead of using the full right-half overlay

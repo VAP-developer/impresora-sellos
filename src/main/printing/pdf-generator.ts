@@ -18,11 +18,12 @@
  */
 
 import type { AppConfig, PreciosConfig } from '../../renderer/src/types/config'
-import { renderStampMultiPage, renderStampEspecialStrip } from './stamp-renderer'
 import type { StampRenderParams, StampLayout } from './stamp-renderer'
-import { genTicket, genTicketCaja, genTicketMaster, calcTicketHeightMm, calcTicketCajaHeightMm, calcTicketMasterHeightMm, countActiveItems } from './ticket-renderer'
+import { renderStampsHtml, renderEspecialStripHtml } from './stamp-html-renderer'
+import { renderTicketHtml, renderTicketCajaHtml, renderTicketMasterHtml } from './ticket-html-renderer'
+import { calcTicketHeightMm, calcTicketCajaHeightMm, calcTicketMasterHeightMm, countActiveItems } from './ticket-renderer'
 import type { TicketItem, TicketProduct } from './ticket-renderer'
-import { StampsRepository, StampRecord } from '../database/repositories/stamps.repository'
+import { StampsRepository } from '../database/repositories/stamps.repository'
 import { existsSync, readFileSync } from 'fs'
 import { extname } from 'path'
 import { groupLabels } from './label-grouping'
@@ -210,9 +211,13 @@ export interface DynamicTariffContext {
 /** Target printer for a generated PDF */
 export type PrinterTarget = 'printer1' | 'printer2' | 'ticket'
 
-/** A generated PDF with its routing metadata */
+/** A generated print job (content + routing metadata) */
 export interface GeneratedPdf {
-  /** PDF content as Buffer */
+  /**
+   * Contenido del trabajo. Puede ser un PDF (binario) o HTML (texto UTF-8),
+   * según `contentType`. Se mantiene el nombre `buffer` por compatibilidad con
+   * el resto del pipeline (cola de impresión, backend).
+   */
   buffer: Buffer
   /** Target printer for this PDF */
   target: PrinterTarget
@@ -222,6 +227,16 @@ export interface GeneratedPdf {
   description: string
   /** Actual page height in mm (used for ticket media sizing) */
   ticketHeightMm?: number
+  /**
+   * Tipo de contenido del buffer: 'html' (impresión por Electron) o 'pdf'.
+   * Toda la generación nueva usa 'html'.
+   */
+  contentType?: 'html' | 'pdf'
+}
+
+/** Convierte un string HTML a Buffer UTF-8 para transportarlo por el pipeline */
+function htmlBuffer(html: string): Buffer {
+  return Buffer.from(html, 'utf8')
 }
 
 /** Result of generating all PDFs for a sale */
@@ -560,14 +575,20 @@ export async function generateSalePdfs(
   let cutNumber: number
   // Read "Formato Correo ESP": when enabled the ticket title is prefixed with "ESP"
   let formatoCorreoEsp = false
+  // Rotación 180° para impresoras que alimentan la etiqueta invertida
+  let rotate180 = false
   try {
     const configRepo = new ConfigRepository()
     cutNumber = configRepo.getCutNumber()
     formatoCorreoEsp = configRepo.getFormatoCorreoEsp()
+    rotate180 = configRepo.getPrintRotation()
   } catch {
     // DB not available (e.g. in unit tests) — use default
     cutNumber = 4
   }
+
+  // Opciones comunes para el render HTML de las etiquetas
+  const stampHtmlOpts = { rotate180, formatoCorreoEsp }
 
   // Product counter starts at 1 for each new sale (resets per client/order)
   let productoCounter = 1
@@ -697,9 +718,10 @@ export async function generateSalePdfs(
         // Split into groups of cutNumber — 1 PDF per group
         const groups = groupLabels(stamps, cutNumber)
         for (const group of groups) {
-          const pdfBuffer = await renderStampMultiPage(group)
+          const html = renderStampsHtml(group, stampHtmlOpts)
           pdfs.push({
-            buffer: pdfBuffer,
+            buffer: htmlBuffer(html),
+            contentType: 'html',
             target: 'printer1',
             pdfType: 'stamp_simple',
             description: `${tariff.name} modelo1 x${group.length}`
@@ -732,9 +754,10 @@ export async function generateSalePdfs(
         // Split into groups of cutNumber — 1 PDF per group
         const groups = groupLabels(stamps, cutNumber)
         for (const group of groups) {
-          const pdfBuffer = await renderStampMultiPage(group)
+          const html = renderStampsHtml(group, stampHtmlOpts)
           pdfs.push({
-            buffer: pdfBuffer,
+            buffer: htmlBuffer(html),
+            contentType: 'html',
             target: 'printer2',
             pdfType: 'stamp_simple',
             description: `${tariff.name} modelo2 x${group.length}`
@@ -784,9 +807,10 @@ export async function generateSalePdfs(
             productoCounter++
           }
 
-          const pdfBuffer = await renderStampMultiPage(stripStamps)
+          const html = renderStampsHtml(stripStamps, stampHtmlOpts)
           pdfs.push({
-            buffer: pdfBuffer,
+            buffer: htmlBuffer(html),
+            contentType: 'html',
             target,
             pdfType: 'stamp_tira',
             description: `Tira ${strip.name} modelo${model} unidad ${i + 1}/${qty} (${stripStamps.length} sellos)`
@@ -856,9 +880,10 @@ export async function generateSalePdfs(
             }
           }
 
-          const pdfBuffer = await renderStampMultiPage(stripStamps)
+          const html = renderStampsHtml(stripStamps, stampHtmlOpts)
           pdfs.push({
-            buffer: pdfBuffer,
+            buffer: htmlBuffer(html),
+            contentType: 'html',
             target: tariff.target,
             pdfType: 'stamp_tira',
             description: `Tira ${tariff.label} modelo${tariff.model} unidad ${i + 1}/${qty} (${stripStamps.length} sellos)`
@@ -886,9 +911,10 @@ export async function generateSalePdfs(
         // Split into groups of cutNumber — 1 PDF per group
         const groups = groupLabels(stamps, cutNumber)
         for (const group of groups) {
-          const pdfBuffer = await renderStampMultiPage(group)
+          const html = renderStampsHtml(group, stampHtmlOpts)
           pdfs.push({
-            buffer: pdfBuffer,
+            buffer: htmlBuffer(html),
+            contentType: 'html',
             target: tariff.target,
             pdfType: 'stamp_simple',
             description: `${tariff.label} modelo${tariff.model} x${group.length}`
@@ -903,7 +929,7 @@ export async function generateSalePdfs(
   // Special strips only apply to legacy tariffs (they use tiras which dynamic tariffs don't have)
   if (!dynamicTariffCtx) {
     const counterRef = { value: productoCounter }
-    await generateEspecialStrips(config, quantities as SaleQuantities, counterRef, pdfs)
+    await generateEspecialStrips(config, quantities as SaleQuantities, counterRef, pdfs, rotate180)
     productoCounter = counterRef.value
   }
 
@@ -1037,11 +1063,12 @@ export async function generateSalePdfs(
       codigoTicket
     }
     const ticketHeightMm = calcTicketHeightMm(countActiveItems(items))
-    const ticketBuffer = await genTicket(mainTicketParams)
+    const ticketHtml = renderTicketHtml(mainTicketParams, formatoCorreoEsp)
 
-    // Main ticket — its own PDF with its own height
+    // Main ticket — its own page with its own height
     pdfs.push({
-      buffer: ticketBuffer,
+      buffer: htmlBuffer(ticketHtml),
+      contentType: 'html',
       target: 'ticket',
       pdfType: 'ticket',
       description: 'Ticket principal',
@@ -1084,9 +1111,10 @@ export async function generateSalePdfs(
               codigoTicket
             }
             const singleTiraHeightMm = calcTicketHeightMm(countActiveItems(singleTiraItems))
-            const singleTiraBuffer = await genTicket(singleTiraParams)
+            const singleTiraHtml = renderTicketHtml(singleTiraParams, formatoCorreoEsp)
             pdfs.push({
-              buffer: singleTiraBuffer,
+              buffer: htmlBuffer(singleTiraHtml),
+              contentType: 'html',
               target: 'ticket',
               pdfType: 'ticket',
               description: `Ticket tira ${productos[idx].nombre_ticket} unidad ${t + 1}`,
@@ -1111,9 +1139,10 @@ export async function generateSalePdfs(
         currencySymbol
       }
       const ticketCajaHeightMm = calcTicketCajaHeightMm(countActiveItems(items))
-      const ticketCajaBuffer = await genTicketCaja(ticketCajaParams)
+      const ticketCajaHtml = renderTicketCajaHtml(ticketCajaParams)
       pdfs.push({
-        buffer: ticketCajaBuffer,
+        buffer: htmlBuffer(ticketCajaHtml),
+        contentType: 'html',
         target: 'ticket',
         pdfType: 'ticket_caja',
         description: 'Ticket copia (caja)',
@@ -1123,7 +1152,7 @@ export async function generateSalePdfs(
 
     // Master set ticket — when configured
     if (config.ticket.ImprimeMasterTicket === 'S') {
-      const ticketMasterBuffer = await genTicketMaster({
+      const ticketMasterHtml = renderTicketMasterHtml({
         fechaTicket,
         modoTicket: 'Master Set',
         modelo1Ticket,
@@ -1143,7 +1172,8 @@ export async function generateSalePdfs(
         currencySymbol
       })
       pdfs.push({
-        buffer: ticketMasterBuffer,
+        buffer: htmlBuffer(ticketMasterHtml),
+        contentType: 'html',
         target: 'ticket',
         pdfType: 'ticket_master',
         description: 'Ticket master set',
@@ -1178,7 +1208,8 @@ async function generateEspecialStrips(
   config: AppConfig,
   quantities: SaleQuantities,
   counterRef: { value: number },
-  pdfs: GeneratedPdf[]
+  pdfs: GeneratedPdf[],
+  rotate180 = false
 ): Promise<void> {
   const { ticket } = config
 
@@ -1199,9 +1230,10 @@ async function generateEspecialStrips(
           buildLabelCode(config, counterRef.value++)
         ]
         const tarifa = `Tarifa A${idx + 1 > 1 ? idx + 1 : ''}`
-        const buffer = await renderStampEspecialStrip(codigos, '  -E', tarifa)
+        const html = renderEspecialStripHtml({ codigos, especial: '  -E', tarifa }, { rotate180 })
         pdfs.push({
-          buffer,
+          buffer: htmlBuffer(html),
+          contentType: 'html',
           target: 'printer1',
           pdfType: 'stamp_especial',
           description: `Tira especial ${idx + 1} modelo1`
@@ -1223,9 +1255,10 @@ async function generateEspecialStrips(
           buildLabelCode(config, counterRef.value++)
         ]
         const tarifa = `Tarifa A${idx + 1 > 1 ? idx + 1 : ''}`
-        const buffer = await renderStampEspecialStrip(codigos, '  -E', tarifa)
+        const html = renderEspecialStripHtml({ codigos, especial: '  -E', tarifa }, { rotate180 })
         pdfs.push({
-          buffer,
+          buffer: htmlBuffer(html),
+          contentType: 'html',
           target: 'printer2',
           pdfType: 'stamp_especial',
           description: `Tira especial ${idx + 1} modelo2`

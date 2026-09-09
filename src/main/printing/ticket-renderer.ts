@@ -50,6 +50,113 @@ export const TICKET_WIDTH_MM = 78
 export const TICKET_WIDTH = TICKET_WIDTH_MM * MM_TO_PT
 
 // ─────────────────────────────────────────────
+// Layout de ticket seleccionable por configuración
+// ─────────────────────────────────────────────
+//
+// Un layout de ticket es una LISTA ORDENADA de "bloques". El renderizador HTML
+// (ticket-html-renderer) recorre la lista de arriba a abajo y pinta cada bloque.
+//
+// Para AÑADIR o quitar contenido (p. ej. campos nuevos del formato Correo ESP),
+// basta con editar la lista correspondiente aquí — no hay que tocar el render.
+//
+// El texto de cada bloque puede ser:
+//   - un literal fijo (`text`)
+//   - o un dato del ticket, referenciado por `source` (ver TicketFieldSource)
+
+/** Datos del ticket que un bloque puede mostrar */
+export type TicketFieldSource =
+  | 'logo'          // imagen image2.jpg centrada
+  | 'feria'
+  | 'lugar'
+  | 'empresa'
+  | 'cif'
+  | 'cp'
+  | 'fecha'         // "Fecha {fechaTicket}"
+  | 'modo'          // título/modo (+ código feria si aplica)
+  | 'columnas'      // cabecera Producto/Cant./Precio/Importe
+  | 'items'         // filas de productos
+  | 'total'         // fila de total
+  | 'session'       // "MAQUINA - Sesión: XXXX"
+  | 'legal1'
+  | 'legal2'
+  | 'legal3'
+  | 'masterLabel'   // etiqueta "MASTER SET"
+
+/** Estilo de un bloque de texto del ticket */
+export type TicketBlockStyle =
+  | 'feria'   // 12pt bold centrado
+  | 'lugar'   // 10pt bold centrado
+  | 'info'    // 7.5pt bold centrado
+  | 'fecha'   // 8pt condensed centrado
+  | 'modo'    // 6.5pt bold izquierda
+  | 'legal'   // 7.5pt bold centrado
+  | 'session' // 7.5pt bold centrado
+  | 'master'  // 9.5pt bold izquierda
+
+/** Un bloque del ticket */
+export interface TicketBlock {
+  /** Qué dato pinta este bloque */
+  source: TicketFieldSource
+  /** Estilo visual (sólo aplica a bloques de texto simple) */
+  style?: TicketBlockStyle
+  /** Separador de puntos encima del bloque */
+  separatorBefore?: boolean
+}
+
+/**
+ * Layout del ticket NORMAL (Factura Simplificada).
+ * Reproduce la estructura clásica de genTicket.
+ */
+export const TICKET_LAYOUT_DEFAULT: readonly TicketBlock[] = [
+  { source: 'logo' },
+  { source: 'feria', style: 'feria' },
+  { source: 'lugar', style: 'lugar' },
+  { source: 'empresa', style: 'info' },
+  { source: 'cif', style: 'info' },
+  { source: 'cp', style: 'info' },
+  { source: 'fecha', style: 'fecha' },
+  { source: 'modo', style: 'modo' },
+  { source: 'columnas' },
+  { source: 'items', separatorBefore: true },
+  { source: 'total', separatorBefore: true },
+  { source: 'legal1', style: 'legal', separatorBefore: true },
+  { source: 'legal2', style: 'legal' },
+  { source: 'legal3', style: 'legal' }
+] as const
+
+/**
+ * Layout del ticket FORMATO CORREO ESP.
+ * De momento igual que el default. Edita esta lista para diferenciarlo
+ * (añadir/quitar bloques, reordenar) sin tocar el código de render.
+ */
+export const TICKET_LAYOUT_CORREO_ESP: readonly TicketBlock[] = [
+  { source: 'logo' },
+  { source: 'feria', style: 'feria' },
+  { source: 'lugar', style: 'lugar' },
+  { source: 'empresa', style: 'info' },
+  { source: 'cif', style: 'info' },
+  { source: 'cp', style: 'info' },
+  { source: 'fecha', style: 'fecha' },
+  { source: 'modo', style: 'modo' },
+  { source: 'columnas' },
+  { source: 'items', separatorBefore: true },
+  { source: 'total', separatorBefore: true },
+  { source: 'legal1', style: 'legal', separatorBefore: true },
+  { source: 'legal2', style: 'legal' },
+  { source: 'legal3', style: 'legal' }
+  // Ejemplo para futuros campos exclusivos de Correo ESP:
+  // { source: 'session', style: 'session' }
+] as const
+
+/**
+ * Devuelve el layout de ticket activo según la configuración.
+ * @param formatoCorreoEsp - valor del check "Formato Correo ESP"
+ */
+export function getTicketLayout(formatoCorreoEsp: boolean): readonly TicketBlock[] {
+  return formatoCorreoEsp ? TICKET_LAYOUT_CORREO_ESP : TICKET_LAYOUT_DEFAULT
+}
+
+// ─────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────
 

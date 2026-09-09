@@ -55,6 +55,29 @@ export interface PrintOptions {
   /** Cut interval: number of pages after which the printer should auto-cut.
    * Used to configure the Brother driver's "cut every N labels" setting. */
   cutInterval?: number
+  /**
+   * Tamaño de papel explícito en mm. Cuando está presente, los backends que
+   * soportan tamaño por trabajo (Electron) lo usan tal cual en lugar de
+   * intentar parsear la cadena `media`.
+   *
+   * Necesario para las etiquetas: su `media` es un nombre ("DC55x25") que no
+   * lleva las dimensiones en un formato parseable.
+   */
+  mediaSizeMm?: { widthMm: number; heightMm: number }
+  /**
+   * Si el contenido debe girarse 90° al imprimir. Se pasa directamente a
+   * `webContents.print({ landscape })`.
+   */
+  landscape?: boolean
+  /**
+   * Tipo del contenido del buffer que se envía a imprimir.
+   *  - 'html': se imprime con Electron (Chromium lo renderiza nativo). Método
+   *     fiable para etiquetas y tickets (control real de tamaño de papel).
+   *  - 'pdf' (por defecto): buffer PDF. Sólo lo imprime bien Electron cuando el
+   *     PDF trae fondo propio; en la práctica se reserva para el fallback
+   *     SumatraPDF.
+   */
+  contentType?: 'html' | 'pdf'
 }
 
 /** Result from submitting a print job */
@@ -197,6 +220,20 @@ export interface PrinterAssignments {
 
 /** Media size for stamp labels: 55mm x 25mm */
 export const STAMP_MEDIA = 'DC55x55'
+
+/**
+ * Tamaño físico de la etiqueta en mm: 55 de ancho x 25 de alto (medido).
+ *
+ * Se pasa explícitamente en cada trabajo para que el backend de Electron lo
+ * inyecte en el DEVMODE (`webContents.print({ pageSize })`). Sin esto, la
+ * impresión quedaba a merced del tamaño que tuviera el driver por defecto: se
+ * encontró la TD-4520TN configurada en A4, lo que recortaba la etiqueta a una
+ * franja y rotaba el contenido.
+ */
+export const STAMP_SIZE_MM = { widthMm: 55, heightMm: 25 } as const
+
+/** Ancho fijo del ticket en mm (el alto es variable, se calcula por trabajo) */
+export const TICKET_WIDTH_MM_FOR_PRINT = 78
 
 /** Orientation for stamps: portrait (value 3 per IPP spec).
  * The PDF is already generated in landscape (55×25mm), so no driver rotation is needed.
@@ -375,6 +412,8 @@ export class PrinterManager {
     return this.print(target, pdfBuffer, {
       media: STAMP_MEDIA,
       orientation: STAMP_ORIENTATION,
+      // Tamaño explícito para que el backend de Electron lo mande en el DEVMODE
+      mediaSizeMm: { ...STAMP_SIZE_MM },
       jobName: jobName ?? `stamp_${target}`
     })
   }

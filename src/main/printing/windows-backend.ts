@@ -282,10 +282,16 @@ export class WindowsBackend implements PrinterBackend {
     const printerName = getWindowsPrinterName(printerUri)
     const jobName = options.jobName ?? `print_${Date.now()}`
 
-    // Write PDF to temp file
+    // El contenido puede ser HTML (método fiable por Electron) o PDF (fallback).
+    const isHtml = options.contentType === 'html'
+    const ext = isHtml ? 'html' : 'pdf'
+
+    // Escribir el contenido a un temporal con la extensión correcta: Chromium
+    // decide cómo renderizar por la extensión del fichero (HTML nativo vs visor
+    // de PDF).
     const tempDir = join(tmpdir(), 'stamp-sales-print')
     try { mkdirSync(tempDir, { recursive: true }) } catch { /* exists */ }
-    const tempFile = join(tempDir, `${jobName}_${Date.now()}.pdf`)
+    const tempFile = join(tempDir, `${jobName}_${Date.now()}.${ext}`)
 
     try {
       writeFileSync(tempFile, pdfBuffer)
@@ -293,10 +299,17 @@ export class WindowsBackend implements PrinterBackend {
       // Parse custom media (tickets have variable height)
       const customMedia = parseCustomMedia(options.media)
 
-      // ─── Primary method: Electron webContents.print() ───────────────────
-      // Used for tickets (custom paper size) — Chromium passes the pageSize
-      // directly in the print job's DEVMODE, overriding driver defaults.
-      if (customMedia) {
+      // ─── Método principal: Electron webContents.print() ─────────────────
+      // Se usa cuando el contenido es HTML, o cuando conocemos el tamaño de
+      // papel (tickets "Custom.NxMmm" / etiquetas con mediaSizeMm).
+      //
+      // Chromium manda el pageSize en el DEVMODE de cada trabajo, así que no
+      // depende de lo que tenga configurado el driver. SumatraPDF, en cambio,
+      // no controla ni tamaño ni orientación y auto-rota la página: medido en
+      // papel, una etiqueta de 55x25 salía girada y recortada a ~25mm.
+      const canUseElectron = isHtml || Boolean(customMedia) || Boolean(options.mediaSizeMm)
+
+      if (canUseElectron) {
         try {
           const electronBackend = new ElectronPrintBackend()
           const result = await electronBackend.print(printerName, tempFile, options)
@@ -308,11 +321,24 @@ export class WindowsBackend implements PrinterBackend {
             }, 10000)
             return result
           }
-          // If Electron print failed, fall through to SumatraPDF
-          console.warn('[WindowsBackend] Electron print failed, falling back to SumatraPDF:', result.error)
+          console.warn('[WindowsBackend] Electron print failed:', result.error)
         } catch (err) {
-          console.warn('[WindowsBackend] Electron print error, falling back to SumatraPDF:', err)
+          console.warn('[WindowsBackend] Electron print error:', err)
         }
+
+        // El contenido HTML NO puede imprimirse con SumatraPDF (sólo entiende
+        // PDF). Si Electron falla con HTML, no hay fallback posible: devolvemos
+        // el error de forma explícita en lugar de intentar Sumatra en vano.
+        if (isHtml) {
+          try { unlinkSync(tempFile) } catch { /* ignore */ }
+          console.error(
+            `[WindowsBackend] PRINT FAILED (html) printer="${printerName}" job="${jobName}": ` +
+            `Electron no pudo imprimir y SumatraPDF no soporta HTML`
+          )
+          return { success: false, error: 'Electron print failed for HTML content (no SumatraPDF fallback)' }
+        }
+        // Para PDF sí cae a SumatraPDF a continuación.
+        console.warn('[WindowsBackend] Falling back to SumatraPDF (pdf content)')
       }
 
       // ─── SumatraPDF method (stamps + fallback for tickets) ──────────────

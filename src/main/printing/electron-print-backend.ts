@@ -1,34 +1,38 @@
 /**
  * electron-print-backend.ts
  *
- * Prints PDFs using Electron's native webContents.print() API instead of SumatraPDF.
- * This approach sends the correct DEVMODE per-job (paper size, orientation) directly
- * to the Windows print spooler via Chromium's printing infrastructure.
+ * Imprime PDFs con la API nativa de Electron `webContents.print()`, en lugar de
+ * delegar en SumatraPDF.
  *
- * Advantages over SumatraPDF:
- * - Custom paper sizes are passed per-job in the DEVMODE (not dependent on driver defaults)
- * - No external executable dependency
- * - Better integration with the Electron app lifecycle
+ * ¿Por qué? SumatraPDF NO controla el tamaño de papel ni la orientación: sólo
+ * dice "imprime sin escalar" y deja todo al DEVMODE que tenga el driver en ese
+ * momento. Además auto-rota la página cuando cree que encaja mejor. Medido en
+ * papel con etiquetas de calibración: una página de 55x25mm salía girada y
+ * recortada a una franja de ~25mm.
  *
- * How it works:
- * 1. Creates a hidden BrowserWindow
- * 2. Loads the PDF file (Chromium has built-in PDF rendering)
- * 3. Calls webContents.print() with custom pageSize (in microns) and deviceName
- * 4. The print job carries the correct paper dimensions in its DEVMODE
- * 5. Destroys the window after printing
+ * Con `webContents.print()` el tamaño de papel (`pageSize`, en micras) y la
+ * orientación viajan en el DEVMODE de CADA trabajo, vía Chromium → spooler de
+ * Windows, sin depender de los valores por defecto del driver. Es el mismo
+ * principio por el que Acrobat imprime "bien": control real del DEVMODE.
  *
- * Limitations:
- * - Cannot control Brother-specific private DEVMODE fields (cut interval)
- *   For cut control, the groupLabels() approach (separate PDF per group) is used
- *   combined with the driver's "cut at end of job" setting.
+ * Cómo funciona:
+ *   1. Crea un BrowserWindow oculto
+ *   2. Carga el PDF (Chromium trae visor de PDF integrado)
+ *   3. Llama a webContents.print() con pageSize/landscape/márgenes y deviceName
+ *   4. Destruye la ventana al terminar
+ *
+ * Limitaciones:
+ *   - No permite tocar campos privados del DEVMODE de Brother (intervalo de
+ *     corte). Para el corte se sigue usando groupLabels() (un PDF por grupo)
+ *     junto al ajuste "cortar al final del trabajo" del driver.
  */
 
 import type { PrintOptions, PrintResult } from './printer-manager'
 
-// ─── Helper ───────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * Parses a media string like "Custom.78x177mm" into width and height in mm.
+ * Convierte una cadena de media tipo "Custom.78x177mm" a mm.
  */
 function parseMediaToMm(media: string): { widthMm: number; heightMm: number } | null {
   const match = media.match(/^Custom\.(\d+)x(\d+)mm$/)
@@ -36,119 +40,127 @@ function parseMediaToMm(media: string): { widthMm: number; heightMm: number } | 
   return { widthMm: parseInt(match[1], 10), heightMm: parseInt(match[2], 10) }
 }
 
+/**
+ * Resuelve el tamaño de papel en mm para un trabajo.
+ * Prioriza `mediaSizeMm` (explícito) y cae en el parseo de `media`.
+ */
+export function resolveMediaSizeMm(
+  options: PrintOptions
+): { widthMm: number; heightMm: number } | null {
+  if (options.mediaSizeMm) return options.mediaSizeMm
+  return parseMediaToMm(options.media)
+}
+
+/** 1 mm = 1000 micras */
+const MM_TO_MICRONS = 1000
+
 // ─── ElectronPrintBackend ─────────────────────────────────────────────────────
 
 /**
- * Prints PDFs using Electron's built-in webContents.print() API.
- * Paper size is passed per-job via Chromium → Windows DEVMODE, bypassing
- * the printer driver's default settings entirely.
+ * Imprime PDFs mediante `webContents.print()` de Electron.
+ * El tamaño de papel se envía por trabajo (Chromium → DEVMODE de Windows),
+ * ignorando por completo los valores por defecto del driver.
  */
 export class ElectronPrintBackend {
   /**
-   * Prints a PDF buffer to the specified printer with custom paper size.
+   * Imprime un PDF ya escrito en disco.
    *
-   * @param printerName - Windows printer name (decoded from URI)
-   * @param pdfPath - Path to the PDF file on disk
-   * @param options - Print options including media (paper size) and orientation
-   * @returns Promise resolving to print result
+   * @param printerName - Nombre de la impresora en Windows
+   * @param pdfPath - Ruta al PDF en disco
+   * @param options - Opciones de impresión (tamaño de papel, orientación, ...)
    */
   async print(printerName: string, pdfPath: string, options: PrintOptions): Promise<PrintResult> {
     const jobName = options.jobName ?? `electron_print_${Date.now()}`
 
-    // Strategy: Modify the per-user DevMode registry to set the correct paper size,
-    // then invoke SumatraPDF which will pick up the new defaults.
-    // Unlike the previous approach, we do NOT restore the original DevMode —
-    // we leave it set to the last printed size. This avoids race conditions
-    // where the spooler hasn't yet cached the DEVMODE before we revert it.
-    //
-    // This is safe because:
-    // - Each ticket print will set its own height before printing
-    // - The stamp printers don't use custom media (they use fixed DC55x55)
-
-    const customSize = parseMediaToMm(options.media)
-
-    if (customSize) {
-      // Write paper size directly to per-user DevMode registry
-      try {
-        const { execSync } = require('child_process')
-
-        // Build PowerShell script to modify the per-user DevMode bytes.
-        // Uses -EncodedCommand to avoid all quoting/escaping issues.
-        const widthTenths = customSize.widthMm * 10
-        const heightTenths = customSize.heightMm * 10
-        const psScript = [
-          `$regPath = 'HKCU:\\Printers\\DevModePerUser'`,
-          `$pn = '${printerName.replace(/'/g, "''")}'`,
-          `$dm = (Get-ItemProperty $regPath).$pn`,
-          `if ($dm -and $dm.Length -gt 84) {`,
-          `  [BitConverter]::GetBytes([int16]256).CopyTo($dm, 78)`,
-          `  [BitConverter]::GetBytes([int16]${heightTenths}).CopyTo($dm, 80)`,
-          `  [BitConverter]::GetBytes([int16]${widthTenths}).CopyTo($dm, 82)`,
-          `  $f = [BitConverter]::ToInt32($dm, 72) -bor 0xE`,
-          `  [BitConverter]::GetBytes([int32]$f).CopyTo($dm, 72)`,
-          `  Set-ItemProperty -Path $regPath -Name $pn -Value $dm -Type Binary`,
-          `  Write-Host "OK:${heightTenths}"`,
-          `} else { Write-Host "SKIP:no-dm" }`
-        ].join('\n')
-
-        // Encode as Base64 UTF-16LE (what PowerShell -EncodedCommand expects)
-        const encoded = Buffer.from(psScript, 'utf16le').toString('base64')
-        const result = execSync(
-          `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encoded}`,
-          { timeout: 5000, encoding: 'utf8' }
-        )
-        console.log(`[ElectronPrintBackend] Registry update: ${result.trim()}`)
-
-        // Wait for spooler to pick up registry change
-        await new Promise((resolve) => setTimeout(resolve, 500))
-      } catch (err) {
-        console.warn('[ElectronPrintBackend] Failed to set paper size in registry:', err)
-        // Continue anyway — SumatraPDF will use whatever the driver has
+    // electron sólo está disponible dentro del proceso principal de Electron.
+    let BrowserWindow: typeof import('electron').BrowserWindow
+    try {
+      ;({ BrowserWindow } = require('electron'))
+      if (!BrowserWindow) throw new Error('BrowserWindow no disponible')
+    } catch (err) {
+      return {
+        success: false,
+        error: `Electron no disponible para imprimir: ${err instanceof Error ? err.message : String(err)}`
       }
     }
 
-    // Now print with SumatraPDF (which reads the updated per-user DevMode)
-    const sumatraPath = this.getSumatraPdfPath()
-    if (!sumatraPath) {
-      return { success: false, error: 'SumatraPDF not found' }
+    const size = resolveMediaSizeMm(options)
+    if (!size) {
+      return { success: false, error: `No se pudo determinar el tamaño de papel de "${options.media}"` }
     }
 
-    const { execFile } = require('child_process')
-    const { promisify } = require('util')
-    const execFileAsync = promisify(execFile)
+    // pageSize de Electron va en MICRAS y debe ser entero.
+    const pageSize = {
+      width: Math.round(size.widthMm * MM_TO_MICRONS),
+      height: Math.round(size.heightMm * MM_TO_MICRONS)
+    }
 
-    const args = [
-      '-print-to', printerName,
-      '-print-settings', 'noscale',
-      '-silent',
-      pdfPath
-    ]
+    let win: import('electron').BrowserWindow | null = null
 
     try {
-      await execFileAsync(sumatraPath, args, { timeout: 30000 })
-      console.log(`[ElectronPrintBackend] SumatraPDF printed successfully: ${pdfPath}`)
-      return { success: true, jobId: jobName }
+      win = new BrowserWindow({
+        show: false,
+        webPreferences: {
+          // Necesario para que Chromium renderice el PDF con su visor interno
+          plugins: true,
+          sandbox: false
+        }
+      })
+
+      const { pathToFileURL } = require('url')
+      await win.loadURL(pathToFileURL(pdfPath).toString())
+
+      // El visor de PDF de Chromium necesita un instante para paginar.
+      await new Promise((resolve) => setTimeout(resolve, 700))
+
+      console.log(
+        `[ElectronPrintBackend] PRINT job="${jobName}" printer="${printerName}" ` +
+          `pageSize=${size.widthMm}x${size.heightMm}mm (${pageSize.width}x${pageSize.height} micras) ` +
+          `landscape=${options.landscape ?? false} pdf="${pdfPath}"`
+      )
+
+      const result = await new Promise<PrintResult>((resolve) => {
+        const contents = win!.webContents
+        contents.print(
+          {
+            silent: true,
+            deviceName: printerName,
+            // Debe ser TRUE: al cargar el PDF en un BrowserWindow, Chromium lo
+            // pinta con su visor interno y, si esto es false, no imprime nada
+            // (etiqueta en blanco).
+            //
+            // Contrapartida: el visor tiene fondo gris oscuro y en monocromo
+            // saldría un cuadrado negro. Por eso el PDF DEBE pintar su propio
+            // fondo blanco (ver drawWhitePageBackground en stamp-renderer).
+            printBackground: true,
+            color: false,
+            // Sin márgenes: el PDF ya tiene el tamaño exacto de la etiqueta.
+            margins: { marginType: 'none' },
+            landscape: options.landscape ?? false,
+            // 100 = tamaño original, sin reescalado.
+            scaleFactor: 100,
+            copies: options.copies ?? 1,
+            pageSize
+          },
+          (success: boolean, failureReason: string) => {
+            if (success) {
+              resolve({ success: true, jobId: jobName })
+            } else {
+              resolve({ success: false, error: `webContents.print falló: ${failureReason}` })
+            }
+          }
+        )
+      })
+
+      return result
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err)
-      return { success: false, error: `SumatraPDF print failed: ${message}` }
+      console.error(`[ElectronPrintBackend] ERROR job="${jobName}": ${message}`)
+      return { success: false, error: `Electron print falló: ${message}` }
+    } finally {
+      if (win && !win.isDestroyed()) {
+        win.destroy()
+      }
     }
-  }
-
-  private getSumatraPdfPath(): string {
-    const { join } = require('path')
-    const { existsSync } = require('fs')
-
-    let sumatraPath = join(
-      require.resolve('pdf-to-printer'),
-      '..',
-      'SumatraPDF-3.4.6-32.exe'
-    )
-
-    if (sumatraPath.includes('app.asar')) {
-      sumatraPath = sumatraPath.replace('app.asar', 'app.asar.unpacked')
-    }
-
-    if (existsSync(sumatraPath)) return sumatraPath
-    return ''
   }
 }

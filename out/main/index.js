@@ -28,7 +28,7 @@ const utils = require("@electron-toolkit/utils");
 const Database = require("better-sqlite3");
 const child_process = require("child_process");
 const util = require("util");
-const PDFDocument = require("pdfkit");
+require("pdfkit");
 const nodeMachineId = require("node-machine-id");
 const crypto = require("crypto");
 const https = require("https");
@@ -1020,85 +1020,98 @@ function parseMediaToMm(media) {
   if (!match) return null;
   return { widthMm: parseInt(match[1], 10), heightMm: parseInt(match[2], 10) };
 }
+function resolveMediaSizeMm(options) {
+  if (options.mediaSizeMm) return options.mediaSizeMm;
+  return parseMediaToMm(options.media);
+}
+const MM_TO_MICRONS = 1e3;
 class ElectronPrintBackend {
   /**
-   * Prints a PDF buffer to the specified printer with custom paper size.
+   * Imprime un PDF ya escrito en disco.
    *
-   * @param printerName - Windows printer name (decoded from URI)
-   * @param pdfPath - Path to the PDF file on disk
-   * @param options - Print options including media (paper size) and orientation
-   * @returns Promise resolving to print result
+   * @param printerName - Nombre de la impresora en Windows
+   * @param pdfPath - Ruta al PDF en disco
+   * @param options - Opciones de impresión (tamaño de papel, orientación, ...)
    */
   async print(printerName, pdfPath, options) {
     const jobName = options.jobName ?? `electron_print_${Date.now()}`;
-    const customSize = parseMediaToMm(options.media);
-    if (customSize) {
-      try {
-        const { execSync } = require("child_process");
-        const widthTenths = customSize.widthMm * 10;
-        const heightTenths = customSize.heightMm * 10;
-        const psScript = [
-          `$regPath = 'HKCU:\\Printers\\DevModePerUser'`,
-          `$pn = '${printerName.replace(/'/g, "''")}'`,
-          `$dm = (Get-ItemProperty $regPath).$pn`,
-          `if ($dm -and $dm.Length -gt 84) {`,
-          `  [BitConverter]::GetBytes([int16]256).CopyTo($dm, 78)`,
-          `  [BitConverter]::GetBytes([int16]${heightTenths}).CopyTo($dm, 80)`,
-          `  [BitConverter]::GetBytes([int16]${widthTenths}).CopyTo($dm, 82)`,
-          `  $f = [BitConverter]::ToInt32($dm, 72) -bor 0xE`,
-          `  [BitConverter]::GetBytes([int32]$f).CopyTo($dm, 72)`,
-          `  Set-ItemProperty -Path $regPath -Name $pn -Value $dm -Type Binary`,
-          `  Write-Host "OK:${heightTenths}"`,
-          `} else { Write-Host "SKIP:no-dm" }`
-        ].join("\n");
-        const encoded = Buffer.from(psScript, "utf16le").toString("base64");
-        const result = execSync(
-          `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encoded}`,
-          { timeout: 5e3, encoding: "utf8" }
-        );
-        console.log(`[ElectronPrintBackend] Registry update: ${result.trim()}`);
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      } catch (err) {
-        console.warn("[ElectronPrintBackend] Failed to set paper size in registry:", err);
-      }
-    }
-    const sumatraPath = this.getSumatraPdfPath();
-    if (!sumatraPath) {
-      return { success: false, error: "SumatraPDF not found" };
-    }
-    const { execFile } = require("child_process");
-    const { promisify } = require("util");
-    const execFileAsync = promisify(execFile);
-    const args = [
-      "-print-to",
-      printerName,
-      "-print-settings",
-      "noscale",
-      "-silent",
-      pdfPath
-    ];
+    let BrowserWindow;
     try {
-      await execFileAsync(sumatraPath, args, { timeout: 3e4 });
-      console.log(`[ElectronPrintBackend] SumatraPDF printed successfully: ${pdfPath}`);
-      return { success: true, jobId: jobName };
+      ;
+      ({ BrowserWindow } = require("electron"));
+      if (!BrowserWindow) throw new Error("BrowserWindow no disponible");
+    } catch (err) {
+      return {
+        success: false,
+        error: `Electron no disponible para imprimir: ${err instanceof Error ? err.message : String(err)}`
+      };
+    }
+    const size = resolveMediaSizeMm(options);
+    if (!size) {
+      return { success: false, error: `No se pudo determinar el tamaño de papel de "${options.media}"` };
+    }
+    const pageSize = {
+      width: Math.round(size.widthMm * MM_TO_MICRONS),
+      height: Math.round(size.heightMm * MM_TO_MICRONS)
+    };
+    let win = null;
+    try {
+      win = new BrowserWindow({
+        show: false,
+        webPreferences: {
+          // Necesario para que Chromium renderice el PDF con su visor interno
+          plugins: true,
+          sandbox: false
+        }
+      });
+      const { pathToFileURL } = require("url");
+      await win.loadURL(pathToFileURL(pdfPath).toString());
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      console.log(
+        `[ElectronPrintBackend] PRINT job="${jobName}" printer="${printerName}" pageSize=${size.widthMm}x${size.heightMm}mm (${pageSize.width}x${pageSize.height} micras) landscape=${options.landscape ?? false} pdf="${pdfPath}"`
+      );
+      const result = await new Promise((resolve) => {
+        const contents = win.webContents;
+        contents.print(
+          {
+            silent: true,
+            deviceName: printerName,
+            // Debe ser TRUE: al cargar el PDF en un BrowserWindow, Chromium lo
+            // pinta con su visor interno y, si esto es false, no imprime nada
+            // (etiqueta en blanco).
+            //
+            // Contrapartida: el visor tiene fondo gris oscuro y en monocromo
+            // saldría un cuadrado negro. Por eso el PDF DEBE pintar su propio
+            // fondo blanco (ver drawWhitePageBackground en stamp-renderer).
+            printBackground: true,
+            color: false,
+            // Sin márgenes: el PDF ya tiene el tamaño exacto de la etiqueta.
+            margins: { marginType: "none" },
+            landscape: options.landscape ?? false,
+            // 100 = tamaño original, sin reescalado.
+            scaleFactor: 100,
+            copies: options.copies ?? 1,
+            pageSize
+          },
+          (success, failureReason) => {
+            if (success) {
+              resolve({ success: true, jobId: jobName });
+            } else {
+              resolve({ success: false, error: `webContents.print falló: ${failureReason}` });
+            }
+          }
+        );
+      });
+      return result;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return { success: false, error: `SumatraPDF print failed: ${message}` };
+      console.error(`[ElectronPrintBackend] ERROR job="${jobName}": ${message}`);
+      return { success: false, error: `Electron print falló: ${message}` };
+    } finally {
+      if (win && !win.isDestroyed()) {
+        win.destroy();
+      }
     }
-  }
-  getSumatraPdfPath() {
-    const { join } = require("path");
-    const { existsSync } = require("fs");
-    let sumatraPath = join(
-      require.resolve("pdf-to-printer"),
-      "..",
-      "SumatraPDF-3.4.6-32.exe"
-    );
-    if (sumatraPath.includes("app.asar")) {
-      sumatraPath = sumatraPath.replace("app.asar", "app.asar.unpacked");
-    }
-    if (existsSync(sumatraPath)) return sumatraPath;
-    return "";
   }
 }
 const defaultWindowsExecutor = {
@@ -1165,16 +1178,19 @@ class WindowsBackend {
     const { tmpdir } = require("os");
     const printerName = getWindowsPrinterName(printerUri);
     const jobName = options.jobName ?? `print_${Date.now()}`;
+    const isHtml = options.contentType === "html";
+    const ext = isHtml ? "html" : "pdf";
     const tempDir = join(tmpdir(), "stamp-sales-print");
     try {
       mkdirSync(tempDir, { recursive: true });
     } catch {
     }
-    const tempFile = join(tempDir, `${jobName}_${Date.now()}.pdf`);
+    const tempFile = join(tempDir, `${jobName}_${Date.now()}.${ext}`);
     try {
       writeFileSync(tempFile, pdfBuffer);
       const customMedia = parseCustomMedia(options.media);
-      if (customMedia) {
+      const canUseElectron = isHtml || Boolean(customMedia) || Boolean(options.mediaSizeMm);
+      if (canUseElectron) {
         try {
           const electronBackend = new ElectronPrintBackend();
           const result = await electronBackend.print(printerName, tempFile, options);
@@ -1187,10 +1203,21 @@ class WindowsBackend {
             }, 1e4);
             return result;
           }
-          console.warn("[WindowsBackend] Electron print failed, falling back to SumatraPDF:", result.error);
+          console.warn("[WindowsBackend] Electron print failed:", result.error);
         } catch (err) {
-          console.warn("[WindowsBackend] Electron print error, falling back to SumatraPDF:", err);
+          console.warn("[WindowsBackend] Electron print error:", err);
         }
+        if (isHtml) {
+          try {
+            unlinkSync(tempFile);
+          } catch {
+          }
+          console.error(
+            `[WindowsBackend] PRINT FAILED (html) printer="${printerName}" job="${jobName}": Electron no pudo imprimir y SumatraPDF no soporta HTML`
+          );
+          return { success: false, error: "Electron print failed for HTML content (no SumatraPDF fallback)" };
+        }
+        console.warn("[WindowsBackend] Falling back to SumatraPDF (pdf content)");
       }
       const sumatraPath = getSumatraPdfPath();
       const dpi = this.dpiCache?.get(printerName) ?? FALLBACK_DPI;
@@ -1306,6 +1333,8 @@ const DEFAULT_THERMAL_CONFIG = {
   forceSingleCopy: true
 };
 const STAMP_MEDIA = "DC55x55";
+const STAMP_SIZE_MM = { widthMm: 55, heightMm: 25 };
+const TICKET_WIDTH_MM_FOR_PRINT = 78;
 const STAMP_ORIENTATION = 6;
 const TICKET_ORIENTATION = 0;
 function buildTicketMedia(heightMm) {
@@ -1428,6 +1457,8 @@ class PrinterManager {
     return this.print(target, pdfBuffer, {
       media: STAMP_MEDIA,
       orientation: STAMP_ORIENTATION,
+      // Tamaño explícito para que el backend de Electron lo mande en el DEVMODE
+      mediaSizeMm: { ...STAMP_SIZE_MM },
       jobName: jobName ?? `stamp_${target}`
     });
   }
@@ -1762,7 +1793,7 @@ class PrintQueueService {
   repository;
   printerManager;
   options;
-  /** In-memory buffer cache for jobs awaiting printing (jobId → PDF buffer + metadata) */
+  /** In-memory buffer cache for jobs awaiting printing (jobId → contenido + metadata) */
   bufferCache = /* @__PURE__ */ new Map();
   /** Whether the background processing loop is running */
   running = false;
@@ -1797,7 +1828,11 @@ class PrintQueueService {
         pdfType: pdf.pdfType,
         filePath: null
       });
-      this.bufferCache.set(id, { buffer: pdf.buffer, ticketHeightMm: pdf.ticketHeightMm });
+      this.bufferCache.set(id, {
+        buffer: pdf.buffer,
+        ticketHeightMm: pdf.ticketHeightMm,
+        contentType: pdf.contentType
+      });
       jobIds.push(id);
     }
     return jobIds;
@@ -1895,14 +1930,18 @@ class PrintQueueService {
    */
   buildPrintOptions(job) {
     if (job.printerTarget === "ticket") {
-      const cached = this.bufferCache.get(job.id);
-      const heightMm = cached?.ticketHeightMm ?? this.options.defaultTicketHeightMm;
+      const cached2 = this.bufferCache.get(job.id);
+      const heightMm = cached2?.ticketHeightMm ?? this.options.defaultTicketHeightMm;
       const media = buildTicketMedia(heightMm);
-      console.log(`[PrintQueue] Ticket job ${job.id}: heightMm=${heightMm}, media=${media}, cached=${!!cached?.ticketHeightMm}`);
+      console.log(`[PrintQueue] Ticket job ${job.id}: heightMm=${heightMm}, media=${media}, cached=${!!cached2?.ticketHeightMm}, contentType=${cached2?.contentType ?? "pdf"}`);
       return {
         media,
         orientation: TICKET_ORIENTATION,
-        jobName: `${job.pdfType}_${job.id}`
+        jobName: `${job.pdfType}_${job.id}`,
+        contentType: cached2?.contentType,
+        // Tamaño explícito para que Electron lo mande en el DEVMODE del trabajo:
+        // ancho fijo 78mm, alto el calculado para este ticket.
+        mediaSizeMm: { widthMm: TICKET_WIDTH_MM_FOR_PRINT, heightMm: Math.ceil(heightMm) }
       };
     }
     let cutInterval;
@@ -1912,11 +1951,15 @@ class PrintQueueService {
     } catch {
       cutInterval = void 0;
     }
+    const cached = this.bufferCache.get(job.id);
     return {
       media: STAMP_MEDIA,
       orientation: STAMP_ORIENTATION,
       jobName: `${job.pdfType}_${job.id}`,
-      cutInterval
+      cutInterval,
+      contentType: cached?.contentType,
+      // Tamaño físico de la etiqueta (55x25mm) enviado en el DEVMODE por Electron.
+      mediaSizeMm: { ...STAMP_SIZE_MM }
     };
   }
   /**
@@ -3261,17 +3304,8 @@ function cancelSale(input, db2) {
     return { success: false, error: `Error en transacción de anulación: ${message}` };
   }
 }
-const MM_TO_PT$1 = 72 / 25.4;
 const STAMP_WIDTH_MM = 55;
-const STAMP_HEIGHT_MM = 55;
-const STAMP_WIDTH = STAMP_WIDTH_MM * MM_TO_PT$1;
-const STAMP_HEIGHT = STAMP_HEIGHT_MM * MM_TO_PT$1;
 const STAMP_PAGE_HEIGHT_MM = 25;
-const STAMP_PAGE_HEIGHT = STAMP_PAGE_HEIGHT_MM * MM_TO_PT$1;
-function applyPrinterRotation(doc) {
-  doc.translate(STAMP_WIDTH, 0);
-  doc.rotate(90);
-}
 const SELLO_LAYOUT = {
   tarifa: { x: 1, y: 1.4, size: 12.2 },
   descripcion: { x: 100, y: 5.4, size: 9 },
@@ -3283,13 +3317,6 @@ const SELLO_LAYOUT = {
   codigo2: { x: 1, y: 20, size: 5.9 }
   // CÓDIGO: letra P+MES+PAÍS+AÑO   CÓDIGO EVENTO+0001+001  = ejemplo: P9ES26 EX26-0001-001
 };
-const FONTS = {
-  regular: "FranklinGothic",
-  bold: "FranklinGothicBold",
-  condensed: "FranklinGothicCondensed"
-};
-const FECHA_LOCALIDAD_FONT_SIZE = 9;
-const FECHA_Y_MM = 43;
 function getFontsPath() {
   if (utils.is.dev) {
     return path.join(__dirname, "../../resources/fonts");
@@ -3318,281 +3345,209 @@ function formatCodigoLines(codigo) {
   const line2 = codigo.substring(spaceIdx + 1);
   return { line1, line2 };
 }
-function shouldRotate180() {
-  try {
-    const configRepo = new ConfigRepository();
-    return configRepo.getPrintRotation();
-  } catch {
-    return false;
-  }
-}
-function shouldUseFormatoCorreoEsp() {
-  try {
-    const configRepo = new ConfigRepository();
-    return configRepo.getFormatoCorreoEsp();
-  } catch {
-    return false;
-  }
-}
-const LABEL_HEIGHT_MM = 25;
-function applyRotation180(doc) {
-  const centerX = STAMP_WIDTH / 2;
-  const centerY = LABEL_HEIGHT_MM / 2 * MM_TO_PT$1;
-  doc.rotate(180, { origin: [centerX, centerY] });
-}
-function registerFonts$1(doc) {
+let _fontCssCache = null;
+function buildFontFaceCss() {
+  if (_fontCssCache !== null) return _fontCssCache;
   const fontsPath = getFontsPath();
-  const regularPath = path.join(fontsPath, "franklin_gothic.ttf");
-  const boldPath = path.join(fontsPath, "franklin_gothic_bold.ttf");
-  const condensedPath = path.join(fontsPath, "franklin_gothic_condensed.ttf");
-  if (fs.existsSync(regularPath)) {
-    doc.registerFont(FONTS.regular, regularPath);
-  }
-  if (fs.existsSync(boldPath)) {
-    doc.registerFont(FONTS.bold, boldPath);
-  }
-  if (fs.existsSync(condensedPath)) {
-    doc.registerFont(FONTS.condensed, condensedPath);
-  }
-}
-function bottomToTop(bottomY_mm, fontSizePt) {
-  const bottomYPt = bottomY_mm * MM_TO_PT$1;
-  return STAMP_HEIGHT - bottomYPt - fontSizePt;
-}
-function drawLocal(doc, text, fontName, pos) {
-  if (!text) return;
-  doc.font(fontName).fontSize(pos.size);
-  doc.text(text, pos.x * MM_TO_PT$1, pos.y * MM_TO_PT$1, { lineBreak: false });
-}
-function drawSelloFields(doc, params, formatoCorreoEsp = false) {
-  if (formatoCorreoEsp) {
-    drawLocal(doc, params.tarifa, FONTS.regular, SELLO_LAYOUT.tarifa);
-    return;
-  }
-  const { line1, line2 } = formatCodigoLines(params.codigo);
-  drawLocal(doc, params.tarifa, FONTS.regular, SELLO_LAYOUT.tarifa);
-  drawLocal(doc, params.tarifaDescripcion ?? "", FONTS.regular, SELLO_LAYOUT.descripcion);
-  drawLocal(doc, formatFechaMonthYear(params.fecha), FONTS.regular, SELLO_LAYOUT.fecha);
-  drawLocal(doc, params.evento, FONTS.regular, SELLO_LAYOUT.localidad);
-  drawLocal(doc, line1, FONTS.regular, SELLO_LAYOUT.codigo1);
-  drawLocal(doc, line2, FONTS.regular, SELLO_LAYOUT.codigo2);
-}
-function drawTextLeft(doc, text, fontName, fontSize, x_mm, yBottom_mm) {
-  doc.font(fontName).fontSize(fontSize);
-  const x = x_mm * MM_TO_PT$1;
-  const y = bottomToTop(yBottom_mm, fontSize);
-  doc.text(text, x, y, { lineBreak: false });
-}
-function buildImageCache(stamps) {
-  const cache = /* @__PURE__ */ new Map();
-  for (const stamp of stamps) {
-    for (const src of [stamp.backgroundImage, stamp.overlayImage, stamp.logoPngImage]) {
-      if (!src || cache.has(src)) continue;
-      if (src.startsWith("data:")) {
-        const base64Data = src.split(",")[1];
-        if (base64Data) {
-          try {
-            cache.set(src, Buffer.from(base64Data, "base64"));
-          } catch {
-          }
-        }
-      }
+  const faces = [
+    { family: "FranklinGothic", file: "franklin_gothic.ttf", weight: "normal" },
+    { family: "FranklinGothic", file: "franklin_gothic_bold.ttf", weight: "bold" },
+    { family: "FranklinGothicCondensed", file: "franklin_gothic_condensed.ttf", weight: "normal" }
+  ];
+  const css = [];
+  for (const face of faces) {
+    const full = path.join(fontsPath, face.file);
+    if (!fs.existsSync(full)) continue;
+    try {
+      const b64 = fs.readFileSync(full).toString("base64");
+      css.push(
+        `@font-face{font-family:'${face.family}';font-weight:${face.weight};font-style:normal;src:url(data:font/truetype;charset=utf-8;base64,${b64}) format('truetype');}`
+      );
+    } catch {
     }
   }
-  return cache;
+  _fontCssCache = css.join("\n");
+  return _fontCssCache;
 }
-function drawBackground(doc, imageSource, imageCache, boxWidth = STAMP_WIDTH, boxHeight = STAMP_HEIGHT) {
-  if (!imageSource) return;
+function escapeHtml(value) {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+function imageToSrc(image) {
+  if (!image) return null;
+  if (image.startsWith("data:")) return image;
+  if (!fs.existsSync(image)) return null;
   try {
-    if (imageSource.startsWith("data:")) {
-      const cached = imageCache?.get(imageSource);
-      if (cached) {
-        doc.image(cached, 0, 0, { width: boxWidth, height: boxHeight });
-      } else {
-        const base64Data = imageSource.split(",")[1];
-        if (base64Data) {
-          const buffer = Buffer.from(base64Data, "base64");
-          doc.image(buffer, 0, 0, { width: boxWidth, height: boxHeight });
-        }
-      }
-    } else if (fs.existsSync(imageSource)) {
-      doc.image(imageSource, 0, 0, { width: boxWidth, height: boxHeight });
-    }
+    const lower = image.toLowerCase();
+    const mime = lower.endsWith(".png") ? "image/png" : lower.endsWith(".svg") ? "image/svg+xml" : "image/jpeg";
+    return `data:${mime};base64,${fs.readFileSync(image).toString("base64")}`;
   } catch {
+    return null;
   }
 }
-function drawOverlay(doc, imageSource, imageCache, overlayX = 27.5 * MM_TO_PT$1, overlayWidth = 27.5 * MM_TO_PT$1, boxHeight = STAMP_HEIGHT) {
-  if (!imageSource) return;
-  try {
-    if (imageSource.startsWith("data:")) {
-      const cached = imageCache?.get(imageSource);
-      if (cached) {
-        doc.image(cached, overlayX, 0, { width: overlayWidth, height: boxHeight });
-      } else {
-        const base64Data = imageSource.split(",")[1];
-        if (base64Data) {
-          const buffer = Buffer.from(base64Data, "base64");
-          doc.image(buffer, overlayX, 0, { width: overlayWidth, height: boxHeight });
-        }
-      }
-    } else if (fs.existsSync(imageSource)) {
-      doc.image(imageSource, overlayX, 0, { width: overlayWidth, height: boxHeight });
-    }
-  } catch {
+function renderImageLayers(stamp) {
+  const parts = [];
+  const fondo = imageToSrc(stamp.backgroundImage);
+  if (fondo) {
+    parts.push(`<img class="layer" src="${fondo}" alt="">`);
   }
+  if (stamp.printLogoPng && stamp.logoPngImage) {
+    const logo = imageToSrc(stamp.logoPngImage);
+    if (logo) parts.push(`<img class="layer" src="${logo}" alt="">`);
+  } else {
+    const overlay = imageToSrc(stamp.overlayImage);
+    if (overlay) parts.push(`<img class="layer" src="${overlay}" alt="">`);
+  }
+  return parts.join("");
 }
-function computeLogoBox(doc, fecha, evento) {
-  doc.font(FONTS.regular).fontSize(FECHA_LOCALIDAD_FONT_SIZE);
-  doc.widthOfString(formatFechaMonthYear(fecha));
-  doc.widthOfString(evento);
-  const baseX = 88;
-  const x = baseX - 31 * MM_TO_PT$1;
-  const top = bottomToTop(FECHA_Y_MM, FECHA_LOCALIDAD_FONT_SIZE);
-  const height = 162;
-  const y = top - 25 * MM_TO_PT$1;
-  const width = 161;
-  return { x, y, width, height };
-}
-function drawLogoPng(doc, imageSource, fecha, evento, imageCache) {
-  if (!imageSource) return;
-  const box = computeLogoBox(doc, fecha, evento);
-  if (!box) return;
-  const options = {
-    fit: [box.width, box.height],
-    valign: "center"
+function renderTextFields(stamp, formatoCorreoEsp) {
+  const L = SELLO_LAYOUT;
+  const field = (text, pos) => {
+    if (!text) return "";
+    return `<div class="f" style="left:${pos.x}mm;top:${pos.y}mm;font-size:${pos.size}pt">${escapeHtml(text)}</div>`;
   };
-  try {
-    if (imageSource.startsWith("data:")) {
-      const cached = imageCache?.get(imageSource);
-      if (cached) {
-        doc.image(cached, box.x, box.y, options);
-      } else {
-        const base64Data = imageSource.split(",")[1];
-        if (base64Data) {
-          const buffer = Buffer.from(base64Data, "base64");
-          doc.image(buffer, box.x, box.y, options);
-        }
-      }
-    } else if (fs.existsSync(imageSource)) {
-      doc.image(imageSource, box.x, box.y, options);
-    }
-  } catch {
+  if (formatoCorreoEsp) {
+    return field(stamp.tarifa, L.tarifa);
   }
+  const { line1, line2 } = formatCodigoLines(stamp.codigo);
+  return [
+    field(stamp.tarifa, L.tarifa),
+    field(stamp.tarifaDescripcion ?? "", L.descripcion),
+    field(formatFechaMonthYear(stamp.fecha), L.fecha),
+    field(stamp.evento, L.localidad),
+    field(line1, L.codigo1),
+    field(line2, L.codigo2)
+  ].join("");
 }
-function collectPdf$1(doc) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    doc.on("data", (chunk) => chunks.push(chunk));
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
-    doc.on("error", reject);
-  });
+function renderStampsHtml(stamps, options = {}) {
+  const widthMm = options.widthMm ?? STAMP_WIDTH_MM;
+  const heightMm = options.heightMm ?? STAMP_PAGE_HEIGHT_MM;
+  const formatoCorreoEsp = options.formatoCorreoEsp ?? false;
+  const rotate180 = options.rotate180 ?? false;
+  const labels = stamps.map((stamp) => {
+    const inner = renderImageLayers(stamp) + renderTextFields(stamp, formatoCorreoEsp);
+    return `<div class="label"><div class="inner">${inner}</div></div>`;
+  }).join("\n");
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Etiquetas</title>
+<style>
+${buildFontFaceCss()}
+@page { size: ${widthMm}mm ${heightMm}mm; margin: 0; }
+html, body {
+  margin: 0;
+  padding: 0;
+  /* Fondo blanco explícito: sin esto, al imprimir en monocromo se hereda el
+     gris del navegador y la etiqueta sale negra. */
+  background: #ffffff;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
-async function renderStampMultiPage(stamps) {
-  if (stamps.length === 0) {
-    throw new Error("No stamps to render");
-  }
-  const doc = new PDFDocument({
-    // Página = etiqueta física 55x25mm (ver STAMP_PAGE_HEIGHT_MM).
-    size: [STAMP_WIDTH, STAMP_PAGE_HEIGHT],
-    margin: 0,
-    info: { Title: `Tira de ${stamps.length} etiquetas`, Author: "Stamp Sales App" }
-  });
-  const result = collectPdf$1(doc);
-  registerFonts$1(doc);
-  const imageCache = buildImageCache(stamps);
-  const rotate180 = shouldRotate180();
-  const formatoCorreoEsp = shouldUseFormatoCorreoEsp();
-  stamps.forEach((stamp, index) => {
-    if (index > 0) {
-      doc.addPage({ size: [STAMP_WIDTH, STAMP_PAGE_HEIGHT], margin: 0 });
-    }
-    applyPrinterRotation(doc);
-    if (rotate180) {
-      applyRotation180(doc);
-    }
-    drawBackground(doc, stamp.backgroundImage, imageCache, STAMP_PAGE_HEIGHT, STAMP_WIDTH);
-    if (stamp.printLogoPng && stamp.logoPngImage) {
-      drawLogoPng(doc, stamp.logoPngImage, stamp.fecha, stamp.evento, imageCache);
-    } else {
-      drawOverlay(doc, stamp.overlayImage, imageCache, 0, STAMP_PAGE_HEIGHT, STAMP_WIDTH);
-    }
-    drawSelloFields(doc, stamp, formatoCorreoEsp);
-  });
-  doc.end();
-  return result;
+.label {
+  position: relative;
+  width: ${widthMm}mm;
+  height: ${heightMm}mm;
+  background: #ffffff;
+  overflow: hidden;
+  box-sizing: border-box;
+  page-break-after: always;
+  break-after: page;
+  ${options.debugBorder ? "outline: 0.2mm solid #000; outline-offset: -0.2mm;" : ""}
 }
-async function renderStampEspecialStrip(codigos, especial, tarifa) {
-  const doc = new PDFDocument({
-    size: [STAMP_WIDTH, STAMP_PAGE_HEIGHT],
-    margin: 0,
-    layout: "portrait",
-    info: { Title: "Tira Especial", Author: "Stamp Sales App" }
-  });
-  const result = collectPdf$1(doc);
-  registerFonts$1(doc);
-  const pageWidth = doc.page.width;
-  const pageHeight = doc.page.height;
-  const rotate180 = shouldRotate180();
-  doc.save();
-  doc.rotate(90, { origin: [pageWidth / 2, pageHeight / 2] });
-  if (rotate180) {
-    applyRotation180(doc);
-  }
+.label:last-child { page-break-after: auto; break-after: auto; }
+.inner {
+  position: absolute;
+  inset: 0;
+  ${rotate180 ? "transform: rotate(180deg);" : ""}
+}
+/* Capas de imagen: cubren la etiqueta completa */
+.layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: ${widthMm}mm;
+  height: ${heightMm}mm;
+  object-fit: fill;
+}
+/* Campos de texto posicionados en mm desde la esquina superior izquierda */
+.f {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  color: #000;
+  font-family: 'FranklinGothic', Arial, Helvetica, sans-serif;
+  font-weight: normal;
+  line-height: 1;
+  white-space: nowrap;
+}
+</style>
+</head>
+<body>
+${labels}
+</body>
+</html>`;
+}
+const ESPECIAL_LAYOUT = {
+  codigo: { x: 1.5, y: 19.5, size: 6 },
+  especial: { x: 23.3, y: 19.5, size: 6 },
+  tarifa: { x: 1.5, y: 3, size: 12 }
+};
+const ESPECIAL_BG_FILES = [
+  "TiraEspecial1.png",
+  "TiraEspecial2.png",
+  "TiraEspecial3.png",
+  "TiraEspecial4.png"
+];
+function renderEspecialStripHtml(params, options = {}) {
+  const widthMm = options.widthMm ?? STAMP_WIDTH_MM;
+  const heightMm = options.heightMm ?? STAMP_PAGE_HEIGHT_MM;
+  const rotate180 = options.rotate180 ?? false;
   const imagesPath = getImagesPath();
-  const bg1 = path.join(imagesPath, "TiraEspecial1.png");
-  drawBackground(doc, fs.existsSync(bg1) ? bg1 : null);
-  drawTextLeft(doc, codigos[0], FONTS.regular, 6, 1.5, 2);
-  drawTextLeft(doc, especial, FONTS.regular, 6, 23.3, 2);
-  doc.addPage({ size: [STAMP_WIDTH, STAMP_PAGE_HEIGHT], margin: 0 });
-  doc.rotate(90, { origin: [pageWidth / 2, pageHeight / 2] });
-  if (rotate180) {
-    applyRotation180(doc);
-  }
-  const bg2 = path.join(imagesPath, "TiraEspecial2.png");
-  drawBackground(doc, fs.existsSync(bg2) ? bg2 : null);
-  drawTextLeft(doc, tarifa, FONTS.regular, 12, 1.5, 19.5);
-  drawTextLeft(doc, codigos[1], FONTS.regular, 6, 1.5, 2);
-  drawTextLeft(doc, especial, FONTS.regular, 6, 23.3, 2);
-  doc.addPage({ size: [STAMP_WIDTH, STAMP_PAGE_HEIGHT], margin: 0 });
-  doc.rotate(90, { origin: [pageWidth / 2, pageHeight / 2] });
-  if (rotate180) {
-    applyRotation180(doc);
-  }
-  const bg3 = path.join(imagesPath, "TiraEspecial3.png");
-  drawBackground(doc, fs.existsSync(bg3) ? bg3 : null);
-  drawTextLeft(doc, tarifa, FONTS.regular, 12, 1.5, 19.5);
-  drawTextLeft(doc, codigos[2], FONTS.regular, 6, 1.5, 2);
-  drawTextLeft(doc, especial, FONTS.regular, 6, 23.3, 2);
-  doc.addPage({ size: [STAMP_WIDTH, STAMP_PAGE_HEIGHT], margin: 0 });
-  doc.rotate(90, { origin: [pageWidth / 2, pageHeight / 2] });
-  if (rotate180) {
-    applyRotation180(doc);
-  }
-  const bg4 = path.join(imagesPath, "TiraEspecial4.png");
-  drawBackground(doc, fs.existsSync(bg4) ? bg4 : null);
-  drawTextLeft(doc, codigos[3], FONTS.regular, 6, 1.5, 2);
-  drawTextLeft(doc, especial, FONTS.regular, 6, 23.3, 2);
-  doc.end();
-  return result;
+  const L = ESPECIAL_LAYOUT;
+  const field = (text, pos) => {
+    if (!text) return "";
+    return `<div class="f" style="left:${pos.x}mm;top:${pos.y}mm;font-size:${pos.size}pt">${escapeHtml(text)}</div>`;
+  };
+  const labels = [0, 1, 2, 3].map((page) => {
+    const bgFull = path.join(imagesPath, ESPECIAL_BG_FILES[page]);
+    const bgSrc = imageToSrc(bgFull);
+    const bg = bgSrc ? `<img class="layer" src="${bgSrc}" alt="">` : "";
+    const showTarifa = page === 1 || page === 2;
+    const inner = bg + (showTarifa ? field(params.tarifa, L.tarifa) : "") + field(params.codigos[page], L.codigo) + field(params.especial, L.especial);
+    return `<div class="label"><div class="inner">${inner}</div></div>`;
+  }).join("\n");
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Tira Especial</title>
+<style>
+${buildFontFaceCss()}
+@page { size: ${widthMm}mm ${heightMm}mm; margin: 0; }
+html, body { margin: 0; padding: 0; background: #ffffff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.label {
+  position: relative;
+  width: ${widthMm}mm;
+  height: ${heightMm}mm;
+  background: #ffffff;
+  overflow: hidden;
+  box-sizing: border-box;
+  page-break-after: always;
+  break-after: page;
 }
-const MM_TO_PT = 72 / 25.4;
+.label:last-child { page-break-after: auto; break-after: auto; }
+.inner { position: absolute; inset: 0; ${rotate180 ? "transform: rotate(180deg);" : ""} }
+.layer { position: absolute; left: 0; top: 0; width: ${widthMm}mm; height: ${heightMm}mm; object-fit: fill; }
+.f { position: absolute; margin: 0; padding: 0; color: #000; font-family: 'FranklinGothic', Arial, Helvetica, sans-serif; font-weight: normal; line-height: 1; white-space: nowrap; }
+</style>
+</head>
+<body>
+${labels}
+</body>
+</html>`;
+}
 const TICKET_WIDTH_MM = 78;
-const TICKET_WIDTH = TICKET_WIDTH_MM * MM_TO_PT;
-function registerFonts(doc) {
-  const fontsPath = getFontsPath();
-  const regularPath = path.join(fontsPath, "franklin_gothic.ttf");
-  const boldPath = path.join(fontsPath, "franklin_gothic_bold.ttf");
-  const condensedPath = path.join(fontsPath, "franklin_gothic_condensed.ttf");
-  if (fs.existsSync(regularPath)) {
-    doc.registerFont(FONTS.regular, regularPath);
-  }
-  if (fs.existsSync(boldPath)) {
-    doc.registerFont(FONTS.bold, boldPath);
-  }
-  if (fs.existsSync(condensedPath)) {
-    doc.registerFont(FONTS.condensed, condensedPath);
-  }
-}
 function countActiveItems(items) {
   return items.filter((item) => item.cantidad > 0).length;
 }
@@ -3605,68 +3560,6 @@ function formatClientId(id) {
 function formatPrice(value, currencySymbol = "€") {
   const str = value.toFixed(2);
   return str + currencySymbol;
-}
-function drawCentered(doc, text, fontName, fontSize, y, pageWidth) {
-  doc.font(fontName).fontSize(fontSize);
-  const textWidth = doc.widthOfString(text);
-  const x = (pageWidth - textWidth) / 2;
-  doc.text(text, x, y, { lineBreak: false });
-}
-function drawCenteredWrapped(doc, text, fontName, fontSize, y, pageWidth, marginX) {
-  const maxWidth = pageWidth - 2 * marginX;
-  doc.font(fontName).fontSize(fontSize);
-  const textHeight = doc.heightOfString(text, { width: maxWidth, align: "center" });
-  doc.text(text, marginX, y, { width: maxWidth, align: "center" });
-  return textHeight;
-}
-function drawLeft(doc, text, fontName, fontSize, x, y, maxWidth) {
-  doc.font(fontName).fontSize(fontSize);
-  const options = maxWidth ? { width: maxWidth, lineBreak: true } : { lineBreak: false };
-  doc.text(text, x, y, options);
-  if (maxWidth) {
-    return doc.heightOfString(text, options);
-  }
-  return fontSize * 0.352778;
-}
-function drawRight(doc, text, fontName, fontSize, xRight, y) {
-  doc.font(fontName).fontSize(fontSize);
-  const textWidth = doc.widthOfString(text);
-  doc.text(text, xRight - textWidth, y, { lineBreak: false });
-}
-function drawLine(doc, x, y, width) {
-  doc.lineWidth(0.6);
-  doc.dash(1.5, { space: 0.4 });
-  doc.moveTo(x, y).lineTo(x + width, y).stroke();
-  doc.undash();
-}
-function drawImage(doc, imageName, x, y, width) {
-  const imgPath = path.join(getImagesPath(), imageName);
-  if (!fs.existsSync(imgPath)) return false;
-  try {
-    doc.image(imgPath, x, y, { width });
-    return true;
-  } catch {
-    return false;
-  }
-}
-function drawImageConstrained(doc, imageName, y, maxWidth, maxHeight, pageWidth) {
-  const imgPath = path.join(getImagesPath(), imageName);
-  if (!fs.existsSync(imgPath)) return false;
-  try {
-    const x = (pageWidth - maxWidth) / 2;
-    doc.image(imgPath, x, y, { fit: [maxWidth, maxHeight], align: "center", valign: "center" });
-    return true;
-  } catch {
-    return false;
-  }
-}
-function collectPdf(doc) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    doc.on("data", (chunk) => chunks.push(chunk));
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
-    doc.on("error", reject);
-  });
 }
 function calcTicketHeightMm(numItems) {
   return TICKET_MARGIN_TOP + TICKET_LOGO_HEIGHT + TICKET_HEADER_HEIGHT + TICKET_COLUMNS_HEIGHT + numItems * TICKET_ITEM_ROW_HEIGHT + TICKET_TOTAL_HEIGHT + TICKET_FOOTER_HEIGHT + TICKET_MARGIN_BOTTOM + TICKET_HEIGHT_SAFETY_MARGIN;
@@ -3694,15 +3587,96 @@ const MASTER_MARGIN_BOTTOM = 5;
 function calcTicketMasterHeightMm(numItems) {
   return MASTER_MARGIN_TOP + MASTER_LOGO_HEIGHT + MASTER_HEADER_HEIGHT + MASTER_COLUMNS_HEIGHT + numItems * MASTER_ITEM_ROW_HEIGHT + MASTER_TOTAL_HEIGHT + MASTER_FOOTER_HEIGHT + MASTER_MARGIN_BOTTOM + TICKET_HEIGHT_SAFETY_MARGIN;
 }
-async function genTicket(params) {
+function imageFileToSrc(imageName) {
+  const full = path.join(getImagesPath(), imageName);
+  if (!fs.existsSync(full)) return null;
+  try {
+    const lower = imageName.toLowerCase();
+    const mime = lower.endsWith(".png") ? "image/png" : lower.endsWith(".svg") ? "image/svg+xml" : "image/jpeg";
+    return `data:${mime};base64,${fs.readFileSync(full).toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
+function itemRow(name, qty, price, total) {
+  return `<div class="row"><span class="c-name">${escapeHtml(name)}</span><span class="c-qty">${escapeHtml(qty)}</span><span class="c-price">${escapeHtml(price)}</span><span class="c-total">${escapeHtml(total)}</span></div>`;
+}
+function ticketDocument(title, heightMm, body) {
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>${escapeHtml(title)}</title>
+<style>
+${buildFontFaceCss()}
+@page { size: ${TICKET_WIDTH_MM}mm ${Math.ceil(heightMm)}mm; margin: 0; }
+html, body {
+  margin: 0; padding: 0; background: #ffffff;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.ticket {
+  position: relative;
+  width: ${TICKET_WIDTH_MM}mm;
+  min-height: ${Math.ceil(heightMm)}mm;
+  background: #ffffff;
+  box-sizing: border-box;
+  padding: 4mm 5mm 5mm 5mm;
+  color: #000;
+  font-family: 'FranklinGothic', Arial, Helvetica, sans-serif;
+}
+.logo { display:block; margin: 0 auto 1mm auto; }
+.center { text-align: center; }
+.bold { font-family: 'FranklinGothicBold', 'FranklinGothic', Arial, sans-serif; font-weight: bold; }
+.cond { font-family: 'FranklinGothicCondensed', 'FranklinGothic', Arial, sans-serif; }
+.feria { font-size: 12pt; }
+.lugar { font-size: 10pt; margin-top: 1mm; }
+.info { font-size: 7.5pt; margin-top: 0.6mm; }
+.fecha { font-size: 8pt; margin-top: 1.5mm; }
+.modo { font-size: 6.5pt; margin-top: 1.5mm; }
+.sep { border: 0; border-top: 0.2mm dashed #000; margin: 1mm 0; }
+.sep-total { border: 0; border-top: 0.2mm dashed #000; margin: 1mm 0 1mm 25mm; }
+.cols, .row {
+  position: relative;
+  font-size: 8pt;
+  min-height: 3.2mm;
+}
+.cols { font-weight: normal; }
+.c-name { display: inline-block; width: 38mm; vertical-align: top; }
+.c-qty { position: absolute; left: 40mm; width: 10mm; text-align: right; }
+.c-price { position: absolute; left: 50mm; width: 12mm; text-align: right; }
+.c-total { position: absolute; left: 62mm; width: 13mm; text-align: right; }
+.h-name { display:inline-block; width: 38mm; }
+.h-qty { position:absolute; left: 40mm; }
+.h-price { position:absolute; left: 50mm; }
+.h-total { position:absolute; left: 60mm; }
+.total-row { position: relative; font-size: 8pt; margin-top: 1mm; }
+.t-label { position:absolute; left: 30mm; }
+.t-qty { position:absolute; left: 40mm; width:10mm; text-align:right; }
+.t-total { position:absolute; left: 62mm; width:13mm; text-align:right; }
+.legal { font-size: 7.5pt; margin-top: 1.5mm; }
+.session { font-size: 7.5pt; margin-top: 1.5mm; }
+.pay { font-size: 12pt; margin-top: 2mm; }
+.pay-line { display:inline-block; border-bottom: 0.2mm solid #000; width: 20mm; margin-left: 2mm; }
+.masterlabel { font-size: 9.5pt; margin-top: 1mm; }
+</style>
+</head>
+<body>
+<div class="ticket">
+${body}
+</div>
+</body>
+</html>`;
+}
+function columnsHeader() {
+  return `<div class="cols cond"><span class="h-name">Producto</span><span class="h-qty">Cant.</span><span class="h-price">Precio</span><span class="h-total">Importe</span></div>`;
+}
+function renderTicketHtml(params) {
   const {
     fechaTicket,
     modoTicket,
     modelo1Ticket,
     modelo2Ticket,
     items,
-    idCliente,
-    nombreMaquina,
     productos,
     feria,
     lugar,
@@ -3715,86 +3689,51 @@ async function genTicket(params) {
     currencySymbol = "€"
   } = params;
   const numItems = countActiveItems(items);
-  const pageHeightMm = calcTicketHeightMm(numItems);
-  const pageHeight = pageHeightMm * MM_TO_PT;
-  const doc = new PDFDocument({
-    size: [TICKET_WIDTH, pageHeight],
-    margin: 0,
-    info: { Title: "Factura Simplificada", Author: "Stamp Sales App" }
-  });
-  const result = collectPdf(doc);
-  registerFonts(doc);
-  const pageWidth = TICKET_WIDTH;
-  let y = TICKET_MARGIN_TOP;
-  const logoWidth = 30 * MM_TO_PT;
-  const logoHeight = 23 * MM_TO_PT;
-  drawImageConstrained(doc, "image2.jpg", y * MM_TO_PT, logoWidth, logoHeight, pageWidth);
-  y += TICKET_LOGO_HEIGHT;
-  drawImage(doc, "fondoticketori.png", 5 * MM_TO_PT, y * MM_TO_PT, 20 * MM_TO_PT);
-  const titleHeightPt = drawCenteredWrapped(doc, feria, FONTS.bold, 12, y * MM_TO_PT, pageWidth, 3 * MM_TO_PT);
-  const titleHeightMm = titleHeightPt / MM_TO_PT;
-  y += Math.max(5, titleHeightMm + 1);
-  drawCentered(doc, lugar, FONTS.bold, 10, y * MM_TO_PT, pageWidth);
-  y += 4;
-  drawCentered(doc, empresa, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
-  y += 3;
-  drawCentered(doc, cif, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
-  y += 3;
-  drawCentered(doc, cp, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
-  y += 4;
-  drawCentered(doc, `Fecha ${fechaTicket}`, FONTS.condensed, 8, y * MM_TO_PT, pageWidth);
-  y += 4;
+  const heightMm = calcTicketHeightMm(numItems);
+  const logo = imageFileToSrc("image2.jpg");
   const codigoFeriaDisplay = params.codigoTicket || [params.codigoFeria1, params.codigoFeria2].filter(Boolean).join("-");
   const modoLine = codigoFeriaDisplay ? `${modoTicket}: ${codigoFeriaDisplay}` : modoTicket;
-  drawLeft(doc, modoLine, FONTS.bold, 6.5, 5 * MM_TO_PT, y * MM_TO_PT);
-  y += 6;
-  drawLeft(doc, "Producto", FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT);
-  drawLeft(doc, "Cant.", FONTS.condensed, 8, 45 * MM_TO_PT, y * MM_TO_PT);
-  drawLeft(doc, "Precio", FONTS.condensed, 8, 55 * MM_TO_PT, y * MM_TO_PT);
-  drawLeft(doc, "Importe", FONTS.condensed, 8, 65 * MM_TO_PT, y * MM_TO_PT);
-  y += 3;
-  drawLine(doc, 5 * MM_TO_PT, y * MM_TO_PT, pageWidth - 2 * 5 * MM_TO_PT);
-  y += 2;
   let totalProductos = 0;
   let totalImporte = 0;
-  const itemNameMaxWidth = 40 * MM_TO_PT;
-  for (let index = 0; index < items.length; index++) {
-    const item = items[index];
-    if (item.cantidad > 0) {
-      const producto = productos[index];
-      const modeloTicket = item.idProducto.slice(-1) === "1" ? modelo1Ticket : modelo2Ticket;
-      totalProductos += item.cantidad;
-      totalImporte += item.cantidad * producto.precio;
-      const itemName = modeloTicket + " " + producto.nombre_ticket;
-      const quantity = String(item.cantidad);
-      const price = formatPrice(producto.precio, currencySymbol);
-      const total = formatPrice(item.cantidad * producto.precio, currencySymbol);
-      const textHeightPt = drawLeft(doc, itemName, FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT, itemNameMaxWidth);
-      const textHeightMm = textHeightPt / MM_TO_PT;
-      drawRight(doc, quantity, FONTS.condensed, 8, 50 * MM_TO_PT, y * MM_TO_PT);
-      drawRight(doc, price, FONTS.condensed, 8, 62 * MM_TO_PT, y * MM_TO_PT);
-      drawRight(doc, total, FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT);
-      y += Math.max(TICKET_ITEM_ROW_HEIGHT, textHeightMm + 0.5);
-    }
+  const rows = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (item.cantidad <= 0) continue;
+    const producto = productos[i];
+    const modeloTicket = item.idProducto.slice(-1) === "1" ? modelo1Ticket : modelo2Ticket;
+    totalProductos += item.cantidad;
+    totalImporte += item.cantidad * producto.precio;
+    rows.push(
+      itemRow(
+        `${modeloTicket} ${producto.nombre_ticket}`,
+        String(item.cantidad),
+        formatPrice(producto.precio, currencySymbol),
+        formatPrice(item.cantidad * producto.precio, currencySymbol)
+      )
+    );
   }
-  y += 1;
-  drawLine(doc, 30 * MM_TO_PT, y * MM_TO_PT, pageWidth - 30 * MM_TO_PT - 5 * MM_TO_PT);
-  y += 3;
-  drawLeft(doc, "Total:", FONTS.condensed, 8, 35 * MM_TO_PT, y * MM_TO_PT);
-  drawRight(doc, String(totalProductos), FONTS.condensed, 8, 50 * MM_TO_PT, y * MM_TO_PT);
-  drawRight(doc, formatPrice(totalImporte, currencySymbol), FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT);
-  y += 4;
-  drawLine(doc, 5 * MM_TO_PT, y * MM_TO_PT, pageWidth - 2 * 5 * MM_TO_PT);
-  y += 4;
-  drawCentered(doc, l1, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
-  y += 4;
-  drawCentered(doc, l2, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
-  y += 4;
-  drawCentered(doc, l3, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
-  doc.end();
-  return result;
+  const body = [
+    logo ? `<img class="logo" src="${logo}" style="width:30mm">` : "",
+    `<div class="center bold feria">${escapeHtml(feria)}</div>`,
+    `<div class="center bold lugar">${escapeHtml(lugar)}</div>`,
+    `<div class="center bold info">${escapeHtml(empresa)}</div>`,
+    `<div class="center bold info">${escapeHtml(cif)}</div>`,
+    `<div class="center bold info">${escapeHtml(cp)}</div>`,
+    `<div class="center cond fecha">Fecha ${escapeHtml(fechaTicket)}</div>`,
+    `<div class="bold modo">${escapeHtml(modoLine)}</div>`,
+    columnsHeader(),
+    `<hr class="sep">`,
+    rows.join(""),
+    `<hr class="sep-total">`,
+    `<div class="total-row cond"><span class="t-label">Total:</span><span class="t-qty">${totalProductos}</span><span class="t-total">${escapeHtml(formatPrice(totalImporte, currencySymbol))}</span></div>`,
+    `<hr class="sep">`,
+    `<div class="center bold legal">${escapeHtml(l1)}</div>`,
+    `<div class="center bold legal">${escapeHtml(l2)}</div>`,
+    `<div class="center bold legal">${escapeHtml(l3)}</div>`
+  ].join("\n");
+  return ticketDocument("Factura Simplificada", heightMm, body);
 }
-async function genTicketCaja(params) {
+function renderTicketCajaHtml(params) {
   const {
     items,
     idCliente,
@@ -3807,92 +3746,56 @@ async function genTicketCaja(params) {
     currencySymbol = "€"
   } = params;
   const numItems = countActiveItems(items);
-  const pageHeightMm = calcTicketCajaHeightMm(numItems);
-  const pageHeight = pageHeightMm * MM_TO_PT;
-  const doc = new PDFDocument({
-    size: [TICKET_WIDTH, pageHeight],
-    margin: 0,
-    info: { Title: "Copia Ticket Caja", Author: "Stamp Sales App" }
-  });
-  const result = collectPdf(doc);
-  registerFonts(doc);
-  const pageWidth = TICKET_WIDTH;
-  let y = 4;
-  const logoWidth = 30 * MM_TO_PT;
-  const logoHeight = 11 * MM_TO_PT;
-  drawImageConstrained(doc, "image2.jpg", y * MM_TO_PT, logoWidth, logoHeight, pageWidth);
-  y += 12;
-  drawImage(doc, "fondoticketcop-nada.png", 5 * MM_TO_PT, (y + 2) * MM_TO_PT, 20 * MM_TO_PT);
-  drawCentered(doc, feria, FONTS.bold, 12, y * MM_TO_PT, pageWidth);
-  y += 5;
-  drawLeft(doc, modoTicket, FONTS.bold, 6.5, 5 * MM_TO_PT, y * MM_TO_PT);
-  y += 4;
-  drawLeft(doc, "TARJETA P.:", FONTS.bold, 12, 20 * MM_TO_PT, y * MM_TO_PT);
-  drawLine(doc, 55 * MM_TO_PT, y * MM_TO_PT + 12, pageWidth - 55 * MM_TO_PT - 5 * MM_TO_PT);
-  y += 6;
-  drawLeft(doc, "TP TUSELLO:", FONTS.bold, 12, 20 * MM_TO_PT, y * MM_TO_PT);
-  drawLine(doc, 55 * MM_TO_PT, y * MM_TO_PT + 12, pageWidth - 55 * MM_TO_PT - 5 * MM_TO_PT);
-  y += 6;
-  drawLeft(doc, "ATM SOBRE:", FONTS.bold, 12, 20 * MM_TO_PT, y * MM_TO_PT);
-  drawLine(doc, 55 * MM_TO_PT, y * MM_TO_PT + 12, pageWidth - 55 * MM_TO_PT - 5 * MM_TO_PT);
-  y += 6;
-  drawLeft(doc, "ATM Tarifa A:", FONTS.bold, 12, 20 * MM_TO_PT, y * MM_TO_PT);
-  drawLine(doc, 55 * MM_TO_PT, y * MM_TO_PT + 12, pageWidth - 55 * MM_TO_PT - 5 * MM_TO_PT);
-  y += 7;
-  drawLeft(doc, "Producto", FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT);
-  drawLeft(doc, "Cantidad", FONTS.condensed, 8, 30 * MM_TO_PT, y * MM_TO_PT);
-  y += 3;
-  drawLine(doc, 5 * MM_TO_PT, y * MM_TO_PT, pageWidth - 2 * 5 * MM_TO_PT);
-  y += 2;
+  const heightMm = calcTicketCajaHeightMm(numItems);
+  const logo = imageFileToSrc("image2.jpg");
   let totalProductos = 0;
   let totalImporte = 0;
   let inicioMod2 = false;
-  const itemNameMaxWidth = 25 * MM_TO_PT;
-  for (let index = 0; index < items.length; index++) {
-    const item = items[index];
-    if (item.cantidad > 0) {
-      const producto = productos[index];
-      const isModel2 = item.idProducto.slice(-1) === "2";
-      const modeloTicket = isModel2 ? modelo2Ticket : modelo1Ticket;
-      if (isModel2 && !inicioMod2) {
-        drawLine(doc, 5 * MM_TO_PT, y * MM_TO_PT, pageWidth - 2 * 5 * MM_TO_PT);
-        inicioMod2 = true;
-        y += 2;
-      }
-      totalProductos += item.cantidad;
-      totalImporte += item.cantidad * producto.precio;
-      const itemName = modeloTicket + " " + producto.nombre_ticket;
-      const quantity = String(item.cantidad);
-      const price = formatPrice(producto.precio, currencySymbol);
-      const total = formatPrice(item.cantidad * producto.precio, currencySymbol);
-      const textHeightPt = drawLeft(doc, itemName, FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT, itemNameMaxWidth);
-      const textHeightMm = textHeightPt / MM_TO_PT;
-      drawRight(doc, quantity, FONTS.condensed, 8, 50 * MM_TO_PT, y * MM_TO_PT);
-      drawRight(doc, price, FONTS.condensed, 8, 62 * MM_TO_PT, y * MM_TO_PT);
-      drawRight(doc, total, FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT);
-      y += Math.max(3.5, textHeightMm + 0.5);
+  const rows = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (item.cantidad <= 0) continue;
+    const producto = productos[i];
+    const isModel2 = item.idProducto.slice(-1) === "2";
+    const modeloTicket = isModel2 ? modelo2Ticket : modelo1Ticket;
+    if (isModel2 && !inicioMod2) {
+      rows.push('<hr class="sep">');
+      inicioMod2 = true;
     }
+    totalProductos += item.cantidad;
+    totalImporte += item.cantidad * producto.precio;
+    rows.push(
+      itemRow(
+        `${modeloTicket} ${producto.nombre_ticket}`,
+        String(item.cantidad),
+        formatPrice(producto.precio, currencySymbol),
+        formatPrice(item.cantidad * producto.precio, currencySymbol)
+      )
+    );
   }
-  y += 2;
-  drawLine(doc, 30 * MM_TO_PT, y * MM_TO_PT, pageWidth - 30 * MM_TO_PT - 5 * MM_TO_PT);
-  y += 3;
-  drawLeft(doc, "Total:", FONTS.condensed, 8, 35 * MM_TO_PT, y * MM_TO_PT);
-  drawRight(doc, String(totalProductos), FONTS.condensed, 8, 50 * MM_TO_PT, y * MM_TO_PT);
-  drawRight(doc, formatPrice(totalImporte, currencySymbol), FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT);
-  y += 4;
-  drawLine(doc, 5 * MM_TO_PT, y * MM_TO_PT, pageWidth - 2 * 5 * MM_TO_PT);
-  y += 4;
-  const clienteStr = formatClientId(idCliente);
-  const sessionText = `${nombreMaquina} - Sesión: ${clienteStr}`;
-  drawCentered(doc, sessionText, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
-  y += 4;
-  drawCentered(doc, "PARA RECOGER SU PEDIDO", FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
-  y += 4;
-  drawCentered(doc, "PASE POR CAJA y ENTREGUE ESTE RESGUARDO", FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
-  doc.end();
-  return result;
+  const payField = (label) => `<div class="bold pay">${escapeHtml(label)}<span class="pay-line"></span></div>`;
+  const body = [
+    logo ? `<img class="logo" src="${logo}" style="width:30mm">` : "",
+    `<div class="center bold feria">${escapeHtml(feria)}</div>`,
+    `<div class="bold modo">${escapeHtml(modoTicket)}</div>`,
+    payField("TARJETA P.:"),
+    payField("TP TUSELLO:"),
+    payField("ATM SOBRE:"),
+    payField("ATM Tarifa A:"),
+    `<div class="cols cond"><span class="h-name">Producto</span><span class="h-qty">Cantidad</span></div>`,
+    `<hr class="sep">`,
+    rows.join(""),
+    `<hr class="sep-total">`,
+    `<div class="total-row cond"><span class="t-label">Total:</span><span class="t-qty">${totalProductos}</span><span class="t-total">${escapeHtml(formatPrice(totalImporte, currencySymbol))}</span></div>`,
+    `<hr class="sep">`,
+    `<div class="center bold session">${escapeHtml(`${nombreMaquina} - Sesión: ${formatClientId(idCliente)}`)}</div>`,
+    `<div class="center bold legal">PARA RECOGER SU PEDIDO</div>`,
+    `<div class="center bold legal">PASE POR CAJA y ENTREGUE ESTE RESGUARDO</div>`
+  ].join("\n");
+  return ticketDocument("Copia Ticket Caja", heightMm, body);
 }
-async function genTicketMaster(params) {
+const MASTER_SET_PRICE = 31.05;
+function renderTicketMasterHtml(params) {
   const {
     fechaTicket,
     modoTicket,
@@ -3912,80 +3815,47 @@ async function genTicketMaster(params) {
     currencySymbol = "€"
   } = params;
   const numItems = countActiveItems(items);
-  const pageHeightMm = calcTicketMasterHeightMm(numItems);
-  const pageHeight = pageHeightMm * MM_TO_PT;
-  const doc = new PDFDocument({
-    size: [TICKET_WIDTH, pageHeight],
-    margin: 0,
-    info: { Title: "Master Set Ticket", Author: "Stamp Sales App" }
-  });
-  const result = collectPdf(doc);
-  registerFonts(doc);
-  const pageWidth = TICKET_WIDTH;
-  let y = 4;
-  drawImageConstrained(doc, "image2.jpg", y * MM_TO_PT, 30 * MM_TO_PT, 11 * MM_TO_PT, pageWidth);
-  y += 12;
-  drawImage(doc, "fondoticketcop.png", 5 * MM_TO_PT, y * MM_TO_PT, 70 * MM_TO_PT);
-  drawCentered(doc, feria, FONTS.bold, 12, y * MM_TO_PT, pageWidth);
-  y += 5;
-  drawCentered(doc, lugar, FONTS.bold, 10, y * MM_TO_PT, pageWidth);
-  y += 4;
-  drawCentered(doc, empresa, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
-  y += 3;
-  drawCentered(doc, cif, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
-  y += 3;
-  drawCentered(doc, cp, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
-  y += 4;
-  drawCentered(doc, fechaTicket, FONTS.condensed, 8, y * MM_TO_PT, pageWidth);
-  y += 4;
-  drawLeft(doc, "MASTER SET", FONTS.bold, 9.5, 5 * MM_TO_PT, y * MM_TO_PT);
-  y += 3;
-  drawLeft(doc, modoTicket, FONTS.bold, 6.5, 5 * MM_TO_PT, y * MM_TO_PT);
-  y += 4;
-  drawLeft(doc, "Producto", FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT);
-  drawLeft(doc, "Cant.", FONTS.condensed, 8, 45 * MM_TO_PT, y * MM_TO_PT);
-  drawLeft(doc, "Precio", FONTS.condensed, 8, 55 * MM_TO_PT, y * MM_TO_PT);
-  drawLeft(doc, "Importe", FONTS.condensed, 8, 65 * MM_TO_PT, y * MM_TO_PT);
-  y += 3;
-  drawLine(doc, 5 * MM_TO_PT, y * MM_TO_PT, pageWidth - 2 * 5 * MM_TO_PT);
-  y += 2;
-  const MASTER_SET_PRICE = 31.05;
+  const heightMm = calcTicketMasterHeightMm(numItems);
+  const logo = imageFileToSrc("image2.jpg");
   let totalItems = 0;
-  const itemNameMaxWidth = 40 * MM_TO_PT;
-  for (let index = 0; index < items.length; index++) {
-    const item = items[index];
-    if (item.cantidad > 0) {
-      const modeloTicket = item.idProducto.slice(-1) === "1" ? modelo1Ticket : modelo2Ticket;
-      totalItems++;
-      const itemName = modeloTicket + " Master Set";
-      const textHeightPt = drawLeft(doc, itemName, FONTS.condensed, 8, 5 * MM_TO_PT, y * MM_TO_PT, itemNameMaxWidth);
-      const textHeightMm = textHeightPt / MM_TO_PT;
-      drawRight(doc, "1", FONTS.condensed, 8, 50 * MM_TO_PT, y * MM_TO_PT);
-      drawRight(doc, formatPrice(MASTER_SET_PRICE, currencySymbol), FONTS.condensed, 8, 62 * MM_TO_PT, y * MM_TO_PT);
-      drawRight(doc, formatPrice(MASTER_SET_PRICE, currencySymbol), FONTS.condensed, 8, 73 * MM_TO_PT, y * MM_TO_PT);
-      y += Math.max(3, textHeightMm + 0.5);
-    }
+  const rows = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (item.cantidad <= 0) continue;
+    const modeloTicket = item.idProducto.slice(-1) === "1" ? modelo1Ticket : modelo2Ticket;
+    totalItems++;
+    rows.push(
+      itemRow(
+        `${modeloTicket} Master Set`,
+        "1",
+        formatPrice(MASTER_SET_PRICE, currencySymbol),
+        formatPrice(MASTER_SET_PRICE, currencySymbol)
+      )
+    );
   }
-  y += 2;
-  drawLine(doc, 30 * MM_TO_PT, y * MM_TO_PT, pageWidth - 30 * MM_TO_PT - 5 * MM_TO_PT);
-  y += 3;
   const masterTotal = totalItems * MASTER_SET_PRICE;
-  drawLeft(doc, `Total:     ${totalItems}`, FONTS.condensed, 8, 40 * MM_TO_PT, y * MM_TO_PT);
-  drawLeft(doc, formatPrice(masterTotal, currencySymbol), FONTS.condensed, 8, 65 * MM_TO_PT, y * MM_TO_PT);
-  y += 4;
-  drawLine(doc, 5 * MM_TO_PT, y * MM_TO_PT, pageWidth - 2 * 5 * MM_TO_PT);
-  y += 4;
-  const clienteStr = formatClientId(idCliente);
-  const sessionText = `${nombreMaquina} - Sesión: ${clienteStr}`;
-  drawCentered(doc, sessionText, FONTS.condensed, 9, y * MM_TO_PT, pageWidth);
-  y += 5;
-  drawCentered(doc, l1, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
-  y += 4;
-  drawCentered(doc, l2, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
-  y += 4;
-  drawCentered(doc, l3, FONTS.bold, 7.5, y * MM_TO_PT, pageWidth);
-  doc.end();
-  return result;
+  const body = [
+    logo ? `<img class="logo" src="${logo}" style="width:30mm">` : "",
+    `<div class="center bold feria">${escapeHtml(feria)}</div>`,
+    `<div class="center bold lugar">${escapeHtml(lugar)}</div>`,
+    `<div class="center bold info">${escapeHtml(empresa)}</div>`,
+    `<div class="center bold info">${escapeHtml(cif)}</div>`,
+    `<div class="center bold info">${escapeHtml(cp)}</div>`,
+    `<div class="center cond fecha">${escapeHtml(fechaTicket)}</div>`,
+    `<div class="bold masterlabel">MASTER SET</div>`,
+    `<div class="bold modo">${escapeHtml(modoTicket)}</div>`,
+    columnsHeader(),
+    `<hr class="sep">`,
+    rows.join(""),
+    `<hr class="sep-total">`,
+    `<div class="total-row cond"><span class="t-label">Total: ${totalItems}</span><span class="t-total">${escapeHtml(formatPrice(masterTotal, currencySymbol))}</span></div>`,
+    `<hr class="sep">`,
+    `<div class="center cond session">${escapeHtml(`${nombreMaquina} - Sesión: ${formatClientId(idCliente)}`)}</div>`,
+    `<div class="center bold legal">${escapeHtml(l1)}</div>`,
+    `<div class="center bold legal">${escapeHtml(l2)}</div>`,
+    `<div class="center bold legal">${escapeHtml(l3)}</div>`
+  ].join("\n");
+  return ticketDocument("Master Set Ticket", heightMm, body);
 }
 const MIN_CUT_NUMBER = 2;
 const MAX_CUT_NUMBER = 16;
@@ -4029,6 +3899,9 @@ function resolveImageLayers(options) {
     backgroundImage = fondoImage;
   }
   return { backgroundImage, overlayImage, notifications };
+}
+function htmlBuffer(html) {
+  return Buffer.from(html, "utf8");
 }
 function formatMes(mesCfg) {
   const month = mesCfg === 0 ? (/* @__PURE__ */ new Date()).getMonth() + 1 : mesCfg;
@@ -4198,13 +4071,16 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
   const notifications = [];
   let cutNumber;
   let formatoCorreoEsp = false;
+  let rotate180 = false;
   try {
     const configRepo = new ConfigRepository();
     cutNumber = configRepo.getCutNumber();
     formatoCorreoEsp = configRepo.getFormatoCorreoEsp();
+    rotate180 = configRepo.getPrintRotation();
   } catch {
     cutNumber = 4;
   }
+  const stampHtmlOpts = { rotate180, formatoCorreoEsp };
   let productoCounter = 1;
   let stampFecha;
   let stampEvento;
@@ -4289,9 +4165,10 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
         }
         const groups = groupLabels(stamps, cutNumber);
         for (const group of groups) {
-          const pdfBuffer = await renderStampMultiPage(group);
+          const html = renderStampsHtml(group, stampHtmlOpts);
           pdfs.push({
-            buffer: pdfBuffer,
+            buffer: htmlBuffer(html),
+            contentType: "html",
             target: "printer1",
             pdfType: "stamp_simple",
             description: `${tariff.name} modelo1 x${group.length}`
@@ -4321,9 +4198,10 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
         }
         const groups = groupLabels(stamps, cutNumber);
         for (const group of groups) {
-          const pdfBuffer = await renderStampMultiPage(group);
+          const html = renderStampsHtml(group, stampHtmlOpts);
           pdfs.push({
-            buffer: pdfBuffer,
+            buffer: htmlBuffer(html),
+            contentType: "html",
             target: "printer2",
             pdfType: "stamp_simple",
             description: `${tariff.name} modelo2 x${group.length}`
@@ -4358,9 +4236,10 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
             });
             productoCounter++;
           }
-          const pdfBuffer = await renderStampMultiPage(stripStamps);
+          const html = renderStampsHtml(stripStamps, stampHtmlOpts);
           pdfs.push({
-            buffer: pdfBuffer,
+            buffer: htmlBuffer(html),
+            contentType: "html",
             target,
             pdfType: "stamp_tira",
             description: `Tira ${strip.name} modelo${model} unidad ${i + 1}/${qty} (${stripStamps.length} sellos)`
@@ -4411,9 +4290,10 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
               productoCounter++;
             }
           }
-          const pdfBuffer = await renderStampMultiPage(stripStamps);
+          const html = renderStampsHtml(stripStamps, stampHtmlOpts);
           pdfs.push({
-            buffer: pdfBuffer,
+            buffer: htmlBuffer(html),
+            contentType: "html",
             target: tariff.target,
             pdfType: "stamp_tira",
             description: `Tira ${tariff.label} modelo${tariff.model} unidad ${i + 1}/${qty} (${stripStamps.length} sellos)`
@@ -4437,9 +4317,10 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
         }
         const groups = groupLabels(stamps, cutNumber);
         for (const group of groups) {
-          const pdfBuffer = await renderStampMultiPage(group);
+          const html = renderStampsHtml(group, stampHtmlOpts);
           pdfs.push({
-            buffer: pdfBuffer,
+            buffer: htmlBuffer(html),
+            contentType: "html",
             target: tariff.target,
             pdfType: "stamp_simple",
             description: `${tariff.label} modelo${tariff.model} x${group.length}`
@@ -4450,7 +4331,7 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
   }
   if (!dynamicTariffCtx) {
     const counterRef = { value: productoCounter };
-    await generateEspecialStrips(config, quantities, counterRef, pdfs);
+    await generateEspecialStrips(config, quantities, counterRef, pdfs, rotate180);
     productoCounter = counterRef.value;
   }
   let items;
@@ -4543,9 +4424,10 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
       codigoTicket
     };
     const ticketHeightMm = calcTicketHeightMm(countActiveItems(items));
-    const ticketBuffer = await genTicket(mainTicketParams);
+    const ticketHtml = renderTicketHtml(mainTicketParams);
     pdfs.push({
-      buffer: ticketBuffer,
+      buffer: htmlBuffer(ticketHtml),
+      contentType: "html",
       target: "ticket",
       pdfType: "ticket",
       description: "Ticket principal",
@@ -4581,9 +4463,10 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
               codigoTicket
             };
             const singleTiraHeightMm = calcTicketHeightMm(countActiveItems(singleTiraItems));
-            const singleTiraBuffer = await genTicket(singleTiraParams);
+            const singleTiraHtml = renderTicketHtml(singleTiraParams);
             pdfs.push({
-              buffer: singleTiraBuffer,
+              buffer: htmlBuffer(singleTiraHtml),
+              contentType: "html",
               target: "ticket",
               pdfType: "ticket",
               description: `Ticket tira ${productos[idx].nombre_ticket} unidad ${t + 1}`,
@@ -4606,9 +4489,10 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
         currencySymbol
       };
       const ticketCajaHeightMm = calcTicketCajaHeightMm(countActiveItems(items));
-      const ticketCajaBuffer = await genTicketCaja(ticketCajaParams);
+      const ticketCajaHtml = renderTicketCajaHtml(ticketCajaParams);
       pdfs.push({
-        buffer: ticketCajaBuffer,
+        buffer: htmlBuffer(ticketCajaHtml),
+        contentType: "html",
         target: "ticket",
         pdfType: "ticket_caja",
         description: "Ticket copia (caja)",
@@ -4616,7 +4500,7 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
       });
     }
     if (config.ticket.ImprimeMasterTicket === "S") {
-      const ticketMasterBuffer = await genTicketMaster({
+      const ticketMasterHtml = renderTicketMasterHtml({
         fechaTicket,
         modoTicket: "Master Set",
         modelo1Ticket,
@@ -4635,7 +4519,8 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
         currencySymbol
       });
       pdfs.push({
-        buffer: ticketMasterBuffer,
+        buffer: htmlBuffer(ticketMasterHtml),
+        contentType: "html",
         target: "ticket",
         pdfType: "ticket_master",
         description: "Ticket master set",
@@ -4651,7 +4536,7 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
   ).length;
   return { pdfs, stampCount, ticketCount, nextProducto: productoCounter, notifications };
 }
-async function generateEspecialStrips(config, quantities, counterRef, pdfs) {
+async function generateEspecialStrips(config, quantities, counterRef, pdfs, rotate180 = false) {
   const { ticket } = config;
   const hasTiras1 = quantities.tarifaAT1 > 0 || quantities.tarifa4T1 > 0;
   const hasTiras2 = quantities.tarifaAT2 > 0 || quantities.tarifa4T2 > 0;
@@ -4667,9 +4552,10 @@ async function generateEspecialStrips(config, quantities, counterRef, pdfs) {
           buildLabelCode(config, counterRef.value++)
         ];
         const tarifa = `Tarifa A${idx + 1 > 1 ? idx + 1 : ""}`;
-        const buffer = await renderStampEspecialStrip(codigos, "  -E", tarifa);
+        const html = renderEspecialStripHtml({ codigos, especial: "  -E", tarifa }, { rotate180 });
         pdfs.push({
-          buffer,
+          buffer: htmlBuffer(html),
+          contentType: "html",
           target: "printer1",
           pdfType: "stamp_especial",
           description: `Tira especial ${idx + 1} modelo1`
@@ -4689,9 +4575,10 @@ async function generateEspecialStrips(config, quantities, counterRef, pdfs) {
           buildLabelCode(config, counterRef.value++)
         ];
         const tarifa = `Tarifa A${idx + 1 > 1 ? idx + 1 : ""}`;
-        const buffer = await renderStampEspecialStrip(codigos, "  -E", tarifa);
+        const html = renderEspecialStripHtml({ codigos, especial: "  -E", tarifa }, { rotate180 });
         pdfs.push({
-          buffer,
+          buffer: htmlBuffer(html),
+          contentType: "html",
           target: "printer2",
           pdfType: "stamp_especial",
           description: `Tira especial ${idx + 1} modelo2`

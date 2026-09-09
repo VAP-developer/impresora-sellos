@@ -24,7 +24,9 @@ import {
   PrintOptions,
   STAMP_MEDIA,
   STAMP_ORIENTATION,
+  STAMP_SIZE_MM,
   TICKET_ORIENTATION,
+  TICKET_WIDTH_MM_FOR_PRINT,
   buildTicketMedia
 } from './printer-manager'
 import { GeneratedPdf } from './pdf-generator'
@@ -75,8 +77,11 @@ export class PrintQueueService {
   private printerManager: PrinterManager
   private options: Required<PrintQueueServiceOptions>
 
-  /** In-memory buffer cache for jobs awaiting printing (jobId → PDF buffer + metadata) */
-  private bufferCache: Map<number, { buffer: Buffer; ticketHeightMm?: number }> = new Map()
+  /** In-memory buffer cache for jobs awaiting printing (jobId → contenido + metadata) */
+  private bufferCache: Map<
+    number,
+    { buffer: Buffer; ticketHeightMm?: number; contentType?: 'html' | 'pdf' }
+  > = new Map()
 
   /** Whether the background processing loop is running */
   private running = false
@@ -125,7 +130,11 @@ export class PrintQueueService {
         pdfType: pdf.pdfType,
         filePath: null
       })
-      this.bufferCache.set(id, { buffer: pdf.buffer, ticketHeightMm: pdf.ticketHeightMm })
+      this.bufferCache.set(id, {
+        buffer: pdf.buffer,
+        ticketHeightMm: pdf.ticketHeightMm,
+        contentType: pdf.contentType
+      })
       jobIds.push(id)
     }
 
@@ -252,11 +261,15 @@ export class PrintQueueService {
       const cached = this.bufferCache.get(job.id)
       const heightMm = cached?.ticketHeightMm ?? this.options.defaultTicketHeightMm
       const media = buildTicketMedia(heightMm)
-      console.log(`[PrintQueue] Ticket job ${job.id}: heightMm=${heightMm}, media=${media}, cached=${!!cached?.ticketHeightMm}`)
+      console.log(`[PrintQueue] Ticket job ${job.id}: heightMm=${heightMm}, media=${media}, cached=${!!cached?.ticketHeightMm}, contentType=${cached?.contentType ?? 'pdf'}`)
       return {
         media,
         orientation: TICKET_ORIENTATION,
-        jobName: `${job.pdfType}_${job.id}`
+        jobName: `${job.pdfType}_${job.id}`,
+        contentType: cached?.contentType,
+        // Tamaño explícito para que Electron lo mande en el DEVMODE del trabajo:
+        // ancho fijo 78mm, alto el calculado para este ticket.
+        mediaSizeMm: { widthMm: TICKET_WIDTH_MM_FOR_PRINT, heightMm: Math.ceil(heightMm) }
       }
     }
 
@@ -275,11 +288,15 @@ export class PrintQueueService {
       cutInterval = undefined
     }
 
+    const cached = this.bufferCache.get(job.id)
     return {
       media: STAMP_MEDIA,
       orientation: STAMP_ORIENTATION,
       jobName: `${job.pdfType}_${job.id}`,
-      cutInterval
+      cutInterval,
+      contentType: cached?.contentType,
+      // Tamaño físico de la etiqueta (55x25mm) enviado en el DEVMODE por Electron.
+      mediaSizeMm: { ...STAMP_SIZE_MM }
     }
   }
 
