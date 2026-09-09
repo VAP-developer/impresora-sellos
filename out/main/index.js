@@ -2087,7 +2087,7 @@ function initServices() {
   });
 }
 const STAMP_PAGE_WIDTH_MM = 55;
-const STAMP_PAGE_HEIGHT_MM$1 = 55;
+const STAMP_PAGE_HEIGHT_MM$1 = 25;
 function findResourceScript(scriptName) {
   const { existsSync } = require("fs");
   const { join } = require("path");
@@ -3234,6 +3234,21 @@ const STAMP_WIDTH = STAMP_WIDTH_MM * MM_TO_PT$1;
 const STAMP_HEIGHT = STAMP_HEIGHT_MM * MM_TO_PT$1;
 const STAMP_PAGE_HEIGHT_MM = 25;
 const STAMP_PAGE_HEIGHT = STAMP_PAGE_HEIGHT_MM * MM_TO_PT$1;
+function applyPrinterRotation(doc) {
+  doc.translate(STAMP_WIDTH, 0);
+  doc.rotate(90);
+}
+const SELLO_LAYOUT = {
+  tarifa: { x: 1, y: 1.4, size: 12.2 },
+  descripcion: { x: 100, y: 5.4, size: 9 },
+  // esta línea NO SE USA
+  fecha: { x: 1, y: 11.2, size: 9 },
+  localidad: { x: 1, y: 15.2, size: 9 },
+  codigo1: { x: 100, y: 18.5, size: 5.9 },
+  // esta línea NO SE USA
+  codigo2: { x: 1, y: 20, size: 5.9 }
+  // CÓDIGO: letra P+MES+PAÍS+AÑO   CÓDIGO EVENTO+0001+001  = ejemplo: P9ES26 EX26-0001-001
+};
 const FONTS = {
   regular: "FranklinGothic",
   bold: "FranklinGothicBold",
@@ -3302,12 +3317,19 @@ function bottomToTop(bottomY_mm, fontSizePt) {
   const bottomYPt = bottomY_mm * MM_TO_PT$1;
   return STAMP_HEIGHT - bottomYPt - fontSizePt;
 }
-function drawTextRight(doc, text, fontName, fontSize, xRight_mm, yBottom_mm) {
-  doc.font(fontName).fontSize(fontSize);
-  const textWidth = doc.widthOfString(text);
-  const x = xRight_mm * MM_TO_PT$1 - textWidth;
-  const y = bottomToTop(yBottom_mm, fontSize);
-  doc.text(text, x, y, { lineBreak: false });
+function drawLocal(doc, text, fontName, pos) {
+  if (!text) return;
+  doc.font(fontName).fontSize(pos.size);
+  doc.text(text, pos.x * MM_TO_PT$1, pos.y * MM_TO_PT$1, { lineBreak: false });
+}
+function drawSelloFields(doc, params) {
+  const { line1, line2 } = formatCodigoLines(params.codigo);
+  drawLocal(doc, params.tarifa, FONTS.regular, SELLO_LAYOUT.tarifa);
+  drawLocal(doc, params.tarifaDescripcion ?? "", FONTS.regular, SELLO_LAYOUT.descripcion);
+  drawLocal(doc, formatFechaMonthYear(params.fecha), FONTS.regular, SELLO_LAYOUT.fecha);
+  drawLocal(doc, params.evento, FONTS.regular, SELLO_LAYOUT.localidad);
+  drawLocal(doc, line1, FONTS.regular, SELLO_LAYOUT.codigo1);
+  drawLocal(doc, line2, FONTS.regular, SELLO_LAYOUT.codigo2);
 }
 function drawTextLeft(doc, text, fontName, fontSize, x_mm, yBottom_mm) {
   doc.font(fontName).fontSize(fontSize);
@@ -3333,44 +3355,42 @@ function buildImageCache(stamps) {
   }
   return cache;
 }
-function drawBackground(doc, imageSource, imageCache) {
+function drawBackground(doc, imageSource, imageCache, boxWidth = STAMP_WIDTH, boxHeight = STAMP_HEIGHT) {
   if (!imageSource) return;
   try {
     if (imageSource.startsWith("data:")) {
       const cached = imageCache?.get(imageSource);
       if (cached) {
-        doc.image(cached, 0, 0, { width: STAMP_WIDTH, height: STAMP_HEIGHT });
+        doc.image(cached, 0, 0, { width: boxWidth, height: boxHeight });
       } else {
         const base64Data = imageSource.split(",")[1];
         if (base64Data) {
           const buffer = Buffer.from(base64Data, "base64");
-          doc.image(buffer, 0, 0, { width: STAMP_WIDTH, height: STAMP_HEIGHT });
+          doc.image(buffer, 0, 0, { width: boxWidth, height: boxHeight });
         }
       }
     } else if (fs.existsSync(imageSource)) {
-      doc.image(imageSource, 0, 0, { width: STAMP_WIDTH, height: STAMP_HEIGHT });
+      doc.image(imageSource, 0, 0, { width: boxWidth, height: boxHeight });
     }
   } catch {
   }
 }
-function drawOverlay(doc, imageSource, imageCache) {
+function drawOverlay(doc, imageSource, imageCache, overlayX = 27.5 * MM_TO_PT$1, overlayWidth = 27.5 * MM_TO_PT$1, boxHeight = STAMP_HEIGHT) {
   if (!imageSource) return;
-  const overlayX = 27.5 * MM_TO_PT$1;
-  const overlayWidth = 27.5 * MM_TO_PT$1;
   try {
     if (imageSource.startsWith("data:")) {
       const cached = imageCache?.get(imageSource);
       if (cached) {
-        doc.image(cached, overlayX, 0, { width: overlayWidth, height: STAMP_HEIGHT });
+        doc.image(cached, overlayX, 0, { width: overlayWidth, height: boxHeight });
       } else {
         const base64Data = imageSource.split(",")[1];
         if (base64Data) {
           const buffer = Buffer.from(base64Data, "base64");
-          doc.image(buffer, overlayX, 0, { width: overlayWidth, height: STAMP_HEIGHT });
+          doc.image(buffer, overlayX, 0, { width: overlayWidth, height: boxHeight });
         }
       }
     } else if (fs.existsSync(imageSource)) {
-      doc.image(imageSource, overlayX, 0, { width: overlayWidth, height: STAMP_HEIGHT });
+      doc.image(imageSource, overlayX, 0, { width: overlayWidth, height: boxHeight });
     }
   } catch {
   }
@@ -3382,9 +3402,9 @@ function computeLogoBox(doc, fecha, evento) {
   const baseX = 88;
   const x = baseX - 31 * MM_TO_PT$1;
   const top = bottomToTop(FECHA_Y_MM, FECHA_LOCALIDAD_FONT_SIZE);
-  const height = 160;
+  const height = 162;
   const y = top - 25 * MM_TO_PT$1;
-  const width = 155;
+  const width = 161;
   return { x, y, width, height };
 }
 function drawLogoPng(doc, imageSource, fecha, evento, imageCache) {
@@ -3439,46 +3459,17 @@ async function renderStampMultiPage(stamps) {
     if (index > 0) {
       doc.addPage({ size: [STAMP_WIDTH, STAMP_PAGE_HEIGHT], margin: 0 });
     }
+    applyPrinterRotation(doc);
     if (rotate180) {
       applyRotation180(doc);
     }
-    drawBackground(doc, stamp.backgroundImage, imageCache);
+    drawBackground(doc, stamp.backgroundImage, imageCache, STAMP_PAGE_HEIGHT, STAMP_WIDTH);
     if (stamp.printLogoPng && stamp.logoPngImage) {
       drawLogoPng(doc, stamp.logoPngImage, stamp.fecha, stamp.evento, imageCache);
     } else {
-      drawOverlay(doc, stamp.overlayImage, imageCache);
+      drawOverlay(doc, stamp.overlayImage, imageCache, 0, STAMP_PAGE_HEIGHT, STAMP_WIDTH);
     }
-    const { line1, line2 } = formatCodigoLines(stamp.codigo);
-    const layout = stamp.layout ?? "derecha";
-    if (layout === "derecha") {
-      drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12.2, 2, 50);
-      drawTextLeft(doc, stamp.tarifaDescripcion ?? "", FONTS.regular, 9, 2, 47.2);
-      drawTextLeft(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 2, 43);
-      drawTextLeft(doc, stamp.evento, FONTS.regular, 9, 2, 39.5);
-      drawTextLeft(doc, line1, FONTS.regular, 5.7, 2, 35.2);
-      drawTextLeft(doc, line2, FONTS.regular, 5.7, 2, 33);
-    } else if (layout === "izquierda") {
-      drawTextRight(doc, stamp.tarifa, FONTS.regular, 12.2, 53, 50);
-      drawTextRight(doc, stamp.tarifaDescripcion ?? "", FONTS.regular, 9, 53, 47.2);
-      drawTextRight(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 53, 43);
-      drawTextRight(doc, stamp.evento, FONTS.regular, 9, 53, 39.5);
-      drawTextRight(doc, line1, FONTS.regular, 5.7, 53, 35.2);
-      drawTextRight(doc, line2, FONTS.regular, 5.7, 53, 33);
-    } else if (layout === "inferior") {
-      drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12.2, 2, 50);
-      drawTextLeft(doc, stamp.tarifaDescripcion ?? "", FONTS.regular, 9, 2, 47.2);
-      drawTextRight(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 53, 50);
-      drawTextRight(doc, stamp.evento, FONTS.regular, 9, 53, 47.2);
-      drawTextLeft(doc, line1, FONTS.regular, 5.7, 22, 46);
-      drawTextLeft(doc, line2, FONTS.regular, 5.7, 22, 44.4);
-    } else if (layout === "superior") {
-      drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12.2, 2, 36.8);
-      drawTextLeft(doc, stamp.tarifaDescripcion ?? "", FONTS.regular, 9, 2, 34);
-      drawTextRight(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 53, 36.8);
-      drawTextRight(doc, stamp.evento, FONTS.regular, 9, 53, 34);
-      drawTextLeft(doc, line1, FONTS.regular, 5.7, 22, 35.2);
-      drawTextLeft(doc, line2, FONTS.regular, 5.7, 22, 33);
-    }
+    drawSelloFields(doc, stamp);
   });
   doc.end();
   return result;

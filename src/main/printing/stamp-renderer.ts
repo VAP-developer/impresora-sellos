@@ -33,10 +33,10 @@ import { ConfigRepository } from '../database/repositories/config.repository'
  es la unidad de pdfkit que usa internamente */
 const MM_TO_PT = 72 / 25.4 // ≈ 2.83465
 export const STAMP_WIDTH_MM = 55 // medida MAYOR (ROTACIÓN 90)
-export const STAMP_HEIGHT_MM = 55 // medida mayor O IGUAL (ROTACIÓN 0) COORDENADAS TEXTO EN BASE HEIGHT
-// Constantes finales
+export const STAMP_HEIGHT_MM = 55 // medida mayor O IGUAL (ROTACIÓN 0) COORDENADAS TEXTO EN BASE HEIGHT 55 OK POS ALTO / 75 POS MUY ABAJO LOGO ALTURA EN CÓDIGO
+// Constantes finales (HEIGHT 55 TXT Y LOGO OK / 25 TXT OK LOGO ajustar, no se ve)
 export const STAMP_WIDTH = STAMP_WIDTH_MM * MM_TO_PT // ~155.91 pt
-export const STAMP_HEIGHT = STAMP_HEIGHT_MM * MM_TO_PT // ~155.91 pt
+export const STAMP_HEIGHT = STAMP_HEIGHT_MM * MM_TO_PT // ~70,86 pt
 
 /**
  * Alto de la PÁGINA del PDF en mm — 25mm, el tamaño de la etiqueta física.
@@ -57,8 +57,67 @@ export const STAMP_HEIGHT = STAMP_HEIGHT_MM * MM_TO_PT // ~155.91 pt
  * recortadas por la página, que es el mismo recorte que antes hacía la impresora
  * al marcar sólo la franja superior. El resultado impreso es equivalente.
  */
-export const STAMP_PAGE_HEIGHT_MM = 25
+export const STAMP_PAGE_HEIGHT_MM = 25 // <<<<<<<<< OBLIGATORIO 25 >>>>>>>>>>>>>>>>>> ---- ALTO 55 OK LOGO Y TEXTO -54 OK - NO IMPRIME - PDF OK
 export const STAMP_PAGE_HEIGHT = STAMP_PAGE_HEIGHT_MM * MM_TO_PT // ~70.87 pt
+
+// ─────────────────────────────────────────────
+// Compensación de la rotación de la impresora
+// ─────────────────────────────────────────────
+
+/**
+ * Las Brother TD-4520TN giran el contenido 90° ANTIHORARIO al imprimir una
+ * página de 55x25mm. Medido en papel: una flecha vertical hacia arriba dibujada
+ * a la derecha del lienzo sale horizontal apuntando a la izquierda, arriba. Sin
+ * compensar, el texto cae fuera de la franja que la impresora marca y la
+ * etiqueta sale en blanco.
+ *
+ * `applyPrinterRotation()` pre-gira el lienzo 90° HORARIO para que los dos giros
+ * se cancelen y el texto quede horizontal y legible.
+ *
+ * Sistema de coordenadas resultante (LOCAL), en mm y con origen arriba-izquierda:
+ *     x local -> avanza hacia abajo en el papel  (límite: alto de página, 25mm)
+ *     y local -> avanza hacia la izquierda       (límite: ancho de página, 55mm)
+ *
+ * El área realmente imprimible medida en papel es de 25x25mm. <<<<<<<<<<<< ES DE 55x25 <<<<<<<<<<<<<<---------------------- OJO
+ */
+export const PRINT_AREA_W_MM = 55 // NO HACE NADA ¿?
+export const PRINT_AREA_H_MM = 25 // NO HACE NADA ¿?
+
+/**
+ * Pre-gira el lienzo 90° horario para cancelar el giro de la impresora.
+ * Debe llamarse al principio de cada página, antes de dibujar.
+ */
+function applyPrinterRotation(doc: PDFKit.PDFDocument): void {
+  doc.translate(STAMP_WIDTH, 0)
+  doc.rotate(90)
+}
+
+/**
+ * Posiciones (esquina superior izquierda, en mm) y tamaños (en pt) de cada campo
+ * del sello dentro del área local de 25x25mm.
+ *
+ * Estos valores se validaron imprimiendo en la TD-4520TN: es el tamaño de letra
+ * aprobado. Para agrandar o reducir el sello, ajustar aquí.
+ */
+// MAQUETACIÓN SELLO SvvS 
+//export const SELLO_LAYOUT = {
+//  tarifa: { x: 1, y: 1.2, size: 12.2 },
+//  descripcion: { x: 1, y: 5.2, size: 9 },
+//  fecha: { x: 1, y: 11, size: 9 },
+//  localidad: { x: 1, y: 14, size: 9 },
+//  codigo1: { x: 1, y: 18.5, size: 5.9 },
+//  codigo2: { x: 1, y: 20.5, size: 5.9 }
+//} as const
+
+// MAQUETACIÓN SELLO POST & GO
+export const SELLO_LAYOUT = {
+ tarifa: { x: 1, y: 1.4, size: 12.2 },
+ descripcion: { x: 100, y: 5.4, size: 9 }, // esta línea NO SE USA
+ fecha: { x: 1, y: 11.2, size: 9 },
+ localidad: { x: 1, y: 15.2, size: 9 },
+ codigo1: { x: 100, y: 18.5, size: 5.9 }, // esta línea NO SE USA
+ codigo2: { x: 1, y: 20, size: 5.9 } // CÓDIGO: letra P+MES+PAÍS+AÑO   CÓDIGO EVENTO+0001+001  = ejemplo: P9ES26 EX26-0001-001
+} as const
 
 // ─────────────────────────────────────────────
 // Font & Resource Path Helpers
@@ -90,7 +149,7 @@ export const FECHA_Y_MM = 43                //-------------------------------***
 /** yBottom of the localidad line (mm) */
 export const LOCALIDAD_Y_MM = 39.5          //-------------------------------***  4-CAMBIAR localidad ------ VAR ETI
 /** Horizontal gap between the fecha/localidad text and the logo PNG (mm) */
-export const LOGO_TEXT_GAP_MM = 5
+export const LOGO_TEXT_GAP_MM = 5 // NO HACE NADA ¿?
 
 /**
  * Resolves the path to the resources/fonts directory.
@@ -264,7 +323,7 @@ function shouldRotate180(): boolean {
 }
 
 /** Height of the physical label in mm (the printer only prints this area) */
-const LABEL_HEIGHT_MM = 25
+const LABEL_HEIGHT_MM = 25 // NO HACE NADA ¿?
 
 /**
  * Applies a 180° rotation for printers that feed labels inverted.
@@ -329,6 +388,38 @@ function drawTextRight(
 }
 
 /**
+ * Dibuja texto usando el sistema LOCAL que queda tras `applyPrinterRotation()`:
+ * coordenadas en mm con origen en la esquina superior izquierda del área
+ * imprimible (25x25mm). Es el sistema usado por SELLO_LAYOUT.
+ */
+function drawLocal(
+  doc: PDFKit.PDFDocument,
+  text: string,
+  fontName: string,
+  pos: { x: number; y: number; size: number }
+): void {
+  if (!text) return
+  doc.font(fontName).fontSize(pos.size)
+  doc.text(text, pos.x * MM_TO_PT, pos.y * MM_TO_PT, { lineBreak: false })
+}
+
+/**
+ * Dibuja los campos de un sello en el área local, con el layout validado.
+ */
+function drawSelloFields(
+  doc: PDFKit.PDFDocument,
+  params: { tarifa: string; tarifaDescripcion?: string; fecha: string; evento: string; codigo: string }
+): void {
+  const { line1, line2 } = formatCodigoLines(params.codigo)
+  drawLocal(doc, params.tarifa, FONTS.regular, SELLO_LAYOUT.tarifa)
+  drawLocal(doc, params.tarifaDescripcion ?? '', FONTS.regular, SELLO_LAYOUT.descripcion)
+  drawLocal(doc, formatFechaMonthYear(params.fecha), FONTS.regular, SELLO_LAYOUT.fecha)
+  drawLocal(doc, params.evento, FONTS.regular, SELLO_LAYOUT.localidad)
+  drawLocal(doc, line1, FONTS.regular, SELLO_LAYOUT.codigo1)
+  drawLocal(doc, line2, FONTS.regular, SELLO_LAYOUT.codigo2)
+}
+
+/**
  * Draws left-aligned text. x_mm is the left edge coordinate.
  */
 function drawTextLeft(
@@ -382,7 +473,13 @@ function buildImageCache(stamps: StampRenderParams[]): Map<string, Buffer> {
 function drawBackground(
   doc: PDFKit.PDFDocument,
   imageSource: string | null | undefined,
-  imageCache?: Map<string, Buffer>
+  imageCache?: Map<string, Buffer>,
+  // boxWidth/boxHeight: tamaño de la caja en el sistema de coordenadas ACTIVO
+  // en el momento de llamar (puede ser el sistema local post-rotación).
+  // Por defecto se mantiene STAMP_WIDTH x STAMP_HEIGHT para no romper a los
+  // llamadores que dibujan en el sistema SIN rotar (E1-E4).
+  boxWidth: number = STAMP_WIDTH,
+  boxHeight: number = STAMP_HEIGHT
 ): void {
   if (!imageSource) return
 
@@ -390,17 +487,17 @@ function drawBackground(
     if (imageSource.startsWith('data:')) {
       const cached = imageCache?.get(imageSource)
       if (cached) {
-        doc.image(cached, 0, 0, { width: STAMP_WIDTH, height: STAMP_HEIGHT })
+        doc.image(cached, 0, 0, { width: boxWidth, height: boxHeight })
       } else {
         // Fallback: decode inline (para llamadores sin caché, e.g. renderStamp individual)
         const base64Data = imageSource.split(',')[1]
         if (base64Data) {
           const buffer = Buffer.from(base64Data, 'base64')
-          doc.image(buffer, 0, 0, { width: STAMP_WIDTH, height: STAMP_HEIGHT })
+          doc.image(buffer, 0, 0, { width: boxWidth, height: boxHeight })
         }
       }
     } else if (existsSync(imageSource)) {
-      doc.image(imageSource, 0, 0, { width: STAMP_WIDTH, height: STAMP_HEIGHT })
+      doc.image(imageSource, 0, 0, { width: boxWidth, height: boxHeight })
     }
   } catch {
     // Gracefully ignore image errors (matches legacy behavior)
@@ -417,27 +514,31 @@ function drawBackground(
 function drawOverlay(
   doc: PDFKit.PDFDocument,
   imageSource: string | null | undefined,
-  imageCache?: Map<string, Buffer>
+  imageCache?: Map<string, Buffer>,
+  // Igual que en drawBackground: por defecto asume el sistema SIN rotar
+  // (eje x = STAMP_WIDTH). Los llamadores que ya rotaron el lienzo
+  // (renderStamp, renderStampMultiPage) deben pasar los valores del
+  // sistema local (eje x acotado a STAMP_PAGE_HEIGHT, eje y a STAMP_WIDTH).
+  overlayX: number = 27.5 * MM_TO_PT,
+  overlayWidth: number = 27.5 * MM_TO_PT,
+  boxHeight: number = STAMP_HEIGHT
 ): void {
   if (!imageSource) return
-
-  const overlayX = 27.5 * MM_TO_PT
-  const overlayWidth = 27.5 * MM_TO_PT
 
   try {
     if (imageSource.startsWith('data:')) {
       const cached = imageCache?.get(imageSource)
       if (cached) {
-        doc.image(cached, overlayX, 0, { width: overlayWidth, height: STAMP_HEIGHT })
+        doc.image(cached, overlayX, 0, { width: overlayWidth, height: boxHeight })
       } else {
         const base64Data = imageSource.split(',')[1]
         if (base64Data) {
           const buffer = Buffer.from(base64Data, 'base64')
-          doc.image(buffer, overlayX, 0, { width: overlayWidth, height: STAMP_HEIGHT })
+          doc.image(buffer, overlayX, 0, { width: overlayWidth, height: boxHeight })
         }
       }
     } else if (existsSync(imageSource)) {
-      doc.image(imageSource, overlayX, 0, { width: overlayWidth, height: STAMP_HEIGHT })
+      doc.image(imageSource, overlayX, 0, { width: overlayWidth, height: boxHeight })
     }
   } catch {
     // Gracefully ignore image errors (matches legacy behavior)
@@ -466,19 +567,19 @@ export function computeLogoBox(
 
   // X position: right of the text block + gap, shifted left
   //const baseX = TEXT_LEFT_MM * MM_TO_PT + textBlockWidth + LOGO_TEXT_GAP_MM * MM_TO_PT
-  const baseX = 88
-  const x = baseX - 31 * MM_TO_PT
+  const baseX = 88 // IZQUIERDA - / DERECHA +
+  const x = baseX -31 * MM_TO_PT
 
   // Vertical: use bottomToTop for the same coordinate system as text
   const top = bottomToTop(FECHA_Y_MM, FECHA_LOCALIDAD_FONT_SIZE)
   const bottom = bottomToTop(LOCALIDAD_Y_MM, FECHA_LOCALIDAD_FONT_SIZE) + FECHA_LOCALIDAD_FONT_SIZE
   const baseHeight = bottom - top
-  const height = 160
+  const height = 162 // POSSICIÓN ARRIBA - / ABAJO +
   const y = top - 25 * MM_TO_PT
 
   // Width scaled proportionally, capped to available space
-  const maxWidth = 100
-  const width = 155
+  const maxWidth = 200 // NO VALE PARA NADA
+  const width = 161 // TAMAÑO Ok
 
   if (width <= 0 || height <= 0) return null
 
@@ -583,65 +684,37 @@ export async function renderStamp(params: StampRenderParams): Promise<Buffer> {
 
   const result = collectPdf(doc)
 
-
-
   registerFonts(doc)
+
+  // Compensar el giro de 90° antihorario que aplica la impresora (ver
+  // applyPrinterRotation). A partir de aquí se dibuja en el sistema LOCAL:
+  // mm, origen arriba-izquierda, área imprimible 25x25mm.
+  applyPrinterRotation(doc)
 
   // Apply 180° rotation if enabled (for printers that feed labels inverted)
   if (shouldRotate180()) {
     applyRotation180(doc)
   }
 
-  drawBackground(doc, params.backgroundImage)
-  
+  // El lienzo ya está rotado (applyPrinterRotation): el eje x local está
+  // acotado a STAMP_PAGE_HEIGHT (25mm) y el eje y local a STAMP_WIDTH (55mm).
+  // Hay que pasarle esa caja, si no la imagen se dibuja con más "ancho" del
+  // que cabe en el eje x y sale recortada.
+    drawBackground(doc, params.backgroundImage, undefined, STAMP_PAGE_HEIGHT, STAMP_WIDTH) // NO VALE NO HACE NADA¿?
+
   // If printLogoPng is true, draw the logo to the right of fecha/localidad
   // instead of using the full right-half overlay
   if (params.printLogoPng && params.logoPngImage) {
-    drawLogoPng(doc, params.logoPngImage, params.fecha, params.evento)
+    drawLogoPng(doc, params.logoPngImage, params.fecha, params.evento) // NO VALE NO HACE NADA¿?
   } else {
-    // Otherwise, use the standard overlay behavior
-    drawOverlay(doc, params.overlayImage)
+    // Otherwise, use the standard overlay behavior. En este sistema local
+    // rotado, "hacia la derecha" cae en el eje y (acotado a STAMP_WIDTH).
+    drawOverlay(doc, params.overlayImage, undefined, 0, STAMP_PAGE_HEIGHT, STAMP_WIDTH) // NO VALE NO HACE NADA¿?
   }
 
-  // Layout vertical (yBottom_mm = distancia desde abajo):
-  //   Nombre Tarifa:       50mm desde abajo (arriba del todo)
-  //   Descripción tarifa:  46.5mm (pegado debajo de nombre)
-  //   Fecha evento:        43mm (pegado debajo de descripción)
-  //   Localidad evento:    39.5mm (pegado debajo de fecha)
-  //   Código L1:           36mm (pegado debajo de localidad)
-  //   Código L2:           32.5mm (pegado debajo de L1)
-  drawTextLeft(doc, params.tarifa, FONTS.regular, 14, TEXT_LEFT_MM, 50)
-  drawTextLeft(doc, params.tarifaDescripcion ?? '', FONTS.regular, 7, TEXT_LEFT_MM, 47.5)
-  drawTextLeft(
-    doc,
-    formatFechaMonthYear(params.fecha),
-    FONTS.regular,
-    FECHA_LOCALIDAD_FONT_SIZE,
-    TEXT_LEFT_MM,
-    FECHA_Y_MM
-  )
-  drawTextLeft(
-    doc,
-    params.evento,
-    FONTS.regular,
-    FECHA_LOCALIDAD_FONT_SIZE,
-    TEXT_LEFT_MM,
-    LOCALIDAD_Y_MM
-  )
+  drawSelloFields(doc, params)
 
-  // Código en 2 líneas: línea 1 = "P26-4ES", línea 2 = "0001-001"
-  const { line1, line2 } = formatCodigoLines(params.codigo)
-  drawTextLeft(doc, line1, FONTS.regular, 5, 2, 35.5)
-  drawTextLeft(doc, line2, FONTS.regular, 5, 2, 33.5)
-
-  // Como el "lienzo" ahora está rotado, para que el texto quede centrado
-  // y vertical hay que pensar las coordenadas como si el alto y ancho
-  // estuvieran invertidos
-
-      doc.end()
-
-
-  // ... resto del contenido que no quieras rotado
+  doc.end()
 
   return result
 }
@@ -804,61 +877,37 @@ export async function renderStampMultiPage(stamps: StampRenderParams[]): Promise
       doc.addPage({ size: [STAMP_WIDTH, STAMP_PAGE_HEIGHT], margin: 0 })
     }
 
+    // Compensar el giro de 90° antihorario de la impresora. Debe aplicarse en
+    // CADA página, porque addPage() reinicia la matriz de transformación.
+    applyPrinterRotation(doc)
+
     // Apply 180° rotation on each page if enabled
     if (rotate180) {
       applyRotation180(doc)
     }
 
-    drawBackground(doc, stamp.backgroundImage, imageCache)
-    
-    // If printLogoPng is true, draw the logo to the right of fecha/localidad
+    // Igual que en renderStamp: el lienzo aquí ya está rotado, así que hay
+    // que pasarle explícitamente la caja del sistema local (x acotado a
+    // STAMP_PAGE_HEIGHT/25mm, y acotado a STAMP_WIDTH/55mm).
+    drawBackground(doc, stamp.backgroundImage, imageCache, STAMP_PAGE_HEIGHT, STAMP_WIDTH)
+
+    // If printLogoPng is true, draw the logo to the right of fecha/localidad <<<<<<<<<<<---------- imprime logo -----<<>>>>>>>
     // instead of using the full right-half overlay
     if (stamp.printLogoPng && stamp.logoPngImage) {
       drawLogoPng(doc, stamp.logoPngImage, stamp.fecha, stamp.evento, imageCache)
     } else {
       // Otherwise, use the standard overlay behavior
-      drawOverlay(doc, stamp.overlayImage, imageCache)
+      drawOverlay(doc, stamp.overlayImage, imageCache, 0, STAMP_PAGE_HEIGHT, STAMP_WIDTH)
     }
 
-
-      // Layout vertical: DISEÑO 1 imagen DERECHA Post & Go + MOT 1 DIS 1 + MOT 2 DIS 2 --------------- IMG DCHA
-      //   Nombre Tarifa → Descripción → Fecha (mes+año) → Localidad → Código L1 → Código L2
-    const { line1, line2 } = formatCodigoLines(stamp.codigo)
-    const layout = stamp.layout ?? 'derecha'
-
-    if (layout === 'derecha') {
-      // Text on left, image on right
-      drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12.2, 2, 50)
-      drawTextLeft(doc, stamp.tarifaDescripcion ?? '', FONTS.regular, 9, 2, 47.2)
-      drawTextLeft(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 2, 43)
-      drawTextLeft(doc, stamp.evento, FONTS.regular, 9, 2, 39.5)
-      drawTextLeft(doc, line1, FONTS.regular, 5.7, 2, 35.2)
-      drawTextLeft(doc, line2, FONTS.regular, 5.7, 2, 33)
-    } else if (layout === 'izquierda') {
-      // Text on right, image on left
-      drawTextRight(doc, stamp.tarifa, FONTS.regular, 12.2, 53, 50)
-      drawTextRight(doc, stamp.tarifaDescripcion ?? '', FONTS.regular, 9, 53, 47.2)
-      drawTextRight(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 53, 43)
-      drawTextRight(doc, stamp.evento, FONTS.regular, 9, 53, 39.5)
-      drawTextRight(doc, line1, FONTS.regular, 5.7, 53, 35.2)
-      drawTextRight(doc, line2, FONTS.regular, 5.7, 53, 33)
-    } else if (layout === 'inferior') {
-      // Image on bottom, text on top split left/right
-      drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12.2, 2, 50)
-      drawTextLeft(doc, stamp.tarifaDescripcion ?? '', FONTS.regular, 9, 2, 47.2)
-      drawTextRight(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 53, 50)
-      drawTextRight(doc, stamp.evento, FONTS.regular, 9, 53, 47.2)
-      drawTextLeft(doc, line1, FONTS.regular, 5.7, 22, 46)
-      drawTextLeft(doc, line2, FONTS.regular, 5.7, 22, 44.4)
-    } else if (layout === 'superior') {
-      // Image on top, text on bottom split left/right
-      drawTextLeft(doc, stamp.tarifa, FONTS.regular, 12.2, 2, 36.8)
-      drawTextLeft(doc, stamp.tarifaDescripcion ?? '', FONTS.regular, 9, 2, 34)
-      drawTextRight(doc, formatFechaMonthYear(stamp.fecha), FONTS.regular, 9, 53, 36.8)
-      drawTextRight(doc, stamp.evento, FONTS.regular, 9, 53, 34)
-      drawTextLeft(doc, line1, FONTS.regular, 5.7, 22, 35.2)
-      drawTextLeft(doc, line2, FONTS.regular, 5.7, 22, 33)
-    }
+    // Todos los campos usan el layout local validado (SELLO_LAYOUT).
+    //
+    // Nota sobre `layout` (derecha / izquierda / inferior / superior): esas
+    // variantes repartían el texto sobre un lienzo de 55x25mm. El área
+    // imprimible real de la TD-4520TN es de 25x25mm, así que no hay espacio
+    // para repartirlo en columnas; por ahora todas las variantes usan el mismo
+    // layout vertical. Queda pendiente rediseñarlas para el área real.
+    drawSelloFields(doc, stamp)
   })
 
   doc.end()

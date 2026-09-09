@@ -112,16 +112,17 @@ export function initServices(): void {
 }
 
 /**
- * Stamp page size in millimetres.
+ * Stamp page size in millimetres — the physical label size.
  *
- * IMPORTANT: 55x55, NOT 55x25. The physical label is 55x25mm, but the page must
- * be 55x55mm because that's how stamp-renderer.ts builds the PDF
- * (STAMP_WIDTH_MM = 55, STAMP_HEIGHT_MM = 55, LABEL_HEIGHT_MM = 25 — the
- * content sits in the top 25mm strip, which is the part the printer marks).
- * Verified on paper: with 55x25 the content comes out cut in half.
+ * Verified on paper with the TD-4520TN: 55x25 prints; 55x55 prints NOTHING,
+ * because the printer's gap sensor expects 25mm labels and aborts the job when
+ * told the paper is 55mm tall (the spooler still reports success).
+ *
+ * The PDF page is generated at this same size, and stamp-renderer.ts compensates
+ * for the 90° rotation the printer applies — see applyPrinterRotation().
  */
-const STAMP_PAGE_WIDTH_MM = 55
-const STAMP_PAGE_HEIGHT_MM = 55
+const STAMP_PAGE_WIDTH_MM = 55 // NO HACE NADA
+const STAMP_PAGE_HEIGHT_MM = 25 // NO HACE NADA
 
 /**
  * Resolves a resource script path across dev and packaged layouts.

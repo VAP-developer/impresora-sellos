@@ -350,8 +350,8 @@ Cada sello requiere exactamente dos archivos con el nombre del sello como prefij
   -LogoPath ".\images\Boston 2026-sello.png"
 
 # Desde una carpeta (modo bulk)
-.\aws\scripts\upload-stamps.ps1 -Username "admin.svvs" -Year "2026" -StampName "Boston 2026" `
-  -BulkFolder ".\bbdd-ferias\2026\Boston 2026"
+.\aws\scripts\upload-stamps.ps1 -Username "vjc.home" -Year "2026" -StampName "test" `
+  -BulkFolder ".\bbdd-ferias\2026\test"
 ```
 
 #### Opción B: Manualmente con AWS CLI

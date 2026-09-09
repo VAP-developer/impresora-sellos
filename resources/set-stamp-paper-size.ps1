@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory=$true)][string]$PrinterName,
     [int]$WidthMm = 55,
-    [int]$HeightMm = 55
+    [int]$HeightMm = 25
 )
 
 # set-stamp-paper-size.ps1
@@ -9,21 +9,18 @@ param(
 # Deja el tamaño de papel del driver listo para imprimir sellos.
 #
 # ┌──────────────────────────────────────────────────────────────────────────┐
-# │  EL TAMAÑO ES 55x55mm — **NO** 55x25mm. NO CAMBIAR A 25.                 │
+# │  EL TAMAÑO ES 55x25mm — el de la etiqueta física. NO PONER 55x55.        │
 # │                                                                          │
-# │  La etiqueta FÍSICA mide 55x25mm, pero la página debe ser 55x55mm porque │
-# │  así genera el PDF la aplicación:                                        │
+# │  Verificado en papel en la TD-4520TN:                                    │
+# │    - Con 55x25 imprime.                                                  │
+# │    - Con 55x55 NO imprime NADA: la impresora lleva sensor de huecos y     │
+# │      espera etiquetas de 25mm; si se le declara un papel de 55mm de alto  │
+# │      intenta avanzar 55mm, no encuentra el hueco y descarta el trabajo    │
+# │      (el spooler informa de "impreso correctamente" y no sale papel).     │
 # │                                                                          │
-# │    src/main/printing/stamp-renderer.ts                                   │
-# │      STAMP_WIDTH_MM  = 55                                                │
-# │      STAMP_HEIGHT_MM = 55   <- lienzo cuadrado                           │
-# │      LABEL_HEIGHT_MM = 25   <- franja que la impresora marca             │
-# │                                                                          │
-# │  El contenido se dibuja con coordenadas medidas DESDE ABAJO sobre el     │
-# │  lienzo de 55mm, por lo que queda en la franja superior de 25mm, la      │
-# │  única que la impresora imprime.                                        │
-# │                                                                          │
-# │  Verificado en papel: con 55x25 el contenido sale cortado por la mitad.  │
+# │  La aplicación genera la página del PDF también a 55x25mm y compensa el   │
+# │  giro de 90° que aplica la impresora — ver applyPrinterRotation() en      │
+# │  src/main/printing/stamp-renderer.ts                                     │
 # └──────────────────────────────────────────────────────────────────────────┘
 #
 # POR QUÉ EL PRINTTICKET Y NO EL REGISTRO
