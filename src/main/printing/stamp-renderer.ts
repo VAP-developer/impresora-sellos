@@ -322,6 +322,20 @@ function shouldRotate180(): boolean {
   }
 }
 
+/**
+ * Reads the "Formato Correo ESP" setting from the config repository.
+ * When enabled, labels print a simplified layout showing only the tariff name.
+ * Returns false if the DB is unavailable (e.g. in unit tests).
+ */
+function shouldUseFormatoCorreoEsp(): boolean {
+  try {
+    const configRepo = new ConfigRepository()
+    return configRepo.getFormatoCorreoEsp()
+  } catch {
+    return false
+  }
+}
+
 /** Height of the physical label in mm (the printer only prints this area) */
 const LABEL_HEIGHT_MM = 25 // NO HACE NADA ¿?
 
@@ -408,8 +422,15 @@ function drawLocal(
  */
 function drawSelloFields(
   doc: PDFKit.PDFDocument,
-  params: { tarifa: string; tarifaDescripcion?: string; fecha: string; evento: string; codigo: string }
+  params: { tarifa: string; tarifaDescripcion?: string; fecha: string; evento: string; codigo: string },
+  formatoCorreoEsp = false
 ): void {
+  // Formato Correo ESP: la etiqueta muestra únicamente el nombre de la tarifa.
+  if (formatoCorreoEsp) {
+    drawLocal(doc, params.tarifa, FONTS.regular, SELLO_LAYOUT.tarifa)
+    return
+  }
+
   const { line1, line2 } = formatCodigoLines(params.codigo)
   drawLocal(doc, params.tarifa, FONTS.regular, SELLO_LAYOUT.tarifa)
   drawLocal(doc, params.tarifaDescripcion ?? '', FONTS.regular, SELLO_LAYOUT.descripcion)
@@ -712,7 +733,7 @@ export async function renderStamp(params: StampRenderParams): Promise<Buffer> {
     drawOverlay(doc, params.overlayImage, undefined, 0, STAMP_PAGE_HEIGHT, STAMP_WIDTH) // NO VALE NO HACE NADA¿?
   }
 
-  drawSelloFields(doc, params)
+  drawSelloFields(doc, params, shouldUseFormatoCorreoEsp())
 
   doc.end()
 
@@ -871,6 +892,8 @@ export async function renderStampMultiPage(stamps: StampRenderParams[]): Promise
 
   // Read rotation setting once for the entire batch
   const rotate180 = shouldRotate180()
+  // Read "Formato Correo ESP" once for the entire batch
+  const formatoCorreoEsp = shouldUseFormatoCorreoEsp()
 
   stamps.forEach((stamp, index) => {
     if (index > 0) {
@@ -907,7 +930,7 @@ export async function renderStampMultiPage(stamps: StampRenderParams[]): Promise
     // imprimible real de la TD-4520TN es de 25x25mm, así que no hay espacio
     // para repartirlo en columnas; por ahora todas las variantes usan el mismo
     // layout vertical. Queda pendiente rediseñarlas para el área real.
-    drawSelloFields(doc, stamp)
+    drawSelloFields(doc, stamp, formatoCorreoEsp)
   })
 
   doc.end()

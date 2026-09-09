@@ -19,6 +19,7 @@ export interface SettingsState {
   printRotation180: boolean
   virtualKeyboardEnabled: boolean
   virtualKeyboardLanguage: AppLanguage
+  formatoCorreoEsp: boolean
   loading: boolean
   error: string | null
 
@@ -29,6 +30,7 @@ export interface SettingsState {
   setPrintRotation(value: boolean): Promise<void>
   setVirtualKeyboardEnabled(enabled: boolean): Promise<void>
   setVirtualKeyboardLanguage(lang: AppLanguage): Promise<void>
+  setFormatoCorreoEsp(value: boolean): Promise<void>
 }
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
@@ -51,6 +53,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   printRotation180: false,
   virtualKeyboardEnabled: false,
   virtualKeyboardLanguage: 'es',
+  formatoCorreoEsp: false,
   loading: false,
   error: null,
 
@@ -58,12 +61,13 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     set({ loading: true, error: null })
 
     try {
-      const [cutNumber, language, printRotation180, virtualKeyboardEnabled, virtualKeyboardLanguage] = await Promise.all([
+      const [cutNumber, language, printRotation180, virtualKeyboardEnabled, virtualKeyboardLanguage, formatoCorreoEsp] = await Promise.all([
         getAPI().config.getCutNumber(),
         getAPI().config.getLanguage(),
         getAPI().config.getPrintRotation(),
         getAPI().config.getVirtualKeyboardEnabled(),
-        getAPI().config.getVirtualKeyboardLanguage()
+        getAPI().config.getVirtualKeyboardLanguage(),
+        getAPI().config.getFormatoCorreoEsp()
       ])
 
       const validLanguage: AppLanguage = language === 'en' ? 'en' : 'es'
@@ -75,6 +79,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
         printRotation180: !!printRotation180,
         virtualKeyboardEnabled: !!virtualKeyboardEnabled,
         virtualKeyboardLanguage: validKeyboardLanguage,
+        formatoCorreoEsp: !!formatoCorreoEsp,
         loading: false
       })
 
@@ -147,6 +152,19 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       set({ virtualKeyboardLanguage: lang })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to set virtual keyboard language'
+      set({ error: message })
+      throw err
+    }
+  },
+
+  setFormatoCorreoEsp: async (value: boolean) => {
+    set({ error: null })
+
+    try {
+      await getAPI().config.setFormatoCorreoEsp(value)
+      set({ formatoCorreoEsp: value })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to set formato Correo ESP'
       set({ error: message })
       throw err
     }

@@ -558,9 +558,12 @@ export async function generateSalePdfs(
 
   // Read cut number from config for label grouping
   let cutNumber: number
+  // Read "Formato Correo ESP": when enabled the ticket title is prefixed with "ESP"
+  let formatoCorreoEsp = false
   try {
     const configRepo = new ConfigRepository()
     cutNumber = configRepo.getCutNumber()
+    formatoCorreoEsp = configRepo.getFormatoCorreoEsp()
   } catch {
     // DB not available (e.g. in unit tests) — use default
     cutNumber = 4
@@ -967,9 +970,11 @@ export async function generateSalePdfs(
     const modelo2Ticket = model2Name || 'Modelo 2'
 
     // Determine ticket header: use event name when dynamic tariff is active
-    const ticketFeria = dynamicTariffCtx
+    const baseFeria = dynamicTariffCtx
       ? (dynamicTariffCtx.eventName || dynamicTariffCtx.title || config.ticket.feria)
       : config.ticket.feria
+    // Formato Correo ESP: prefija "ESP" al principio del título del ticket
+    const ticketFeria = formatoCorreoEsp ? `ESP ${baseFeria}` : baseFeria
     const ticketLugar = dynamicTariffCtx
       ? (dynamicTariffCtx.eventNlugar || config.ticket.lugar)
       : config.ticket.lugar

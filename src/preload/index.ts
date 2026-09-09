@@ -373,6 +373,8 @@ export interface ElectronAPI {
     setVirtualKeyboardEnabled(enabled: boolean): Promise<void>
     getVirtualKeyboardLanguage(): Promise<string>
     setVirtualKeyboardLanguage(lang: string): Promise<void>
+    getFormatoCorreoEsp(): Promise<boolean>
+    setFormatoCorreoEsp(value: boolean): Promise<void>
     onChange(callback: (config: AppConfig) => void): () => void
   }
   orders: {
@@ -494,6 +496,8 @@ const api: ElectronAPI = {
     setVirtualKeyboardEnabled: (enabled) => ipcRenderer.invoke('config:setVirtualKeyboardEnabled', enabled),
     getVirtualKeyboardLanguage: () => ipcRenderer.invoke('config:getVirtualKeyboardLanguage'),
     setVirtualKeyboardLanguage: (lang) => ipcRenderer.invoke('config:setVirtualKeyboardLanguage', lang),
+    getFormatoCorreoEsp: () => ipcRenderer.invoke('config:getFormatoCorreoEsp'),
+    setFormatoCorreoEsp: (value) => ipcRenderer.invoke('config:setFormatoCorreoEsp', value),
     onChange: (callback) => {
       const handler = (_event: Electron.IpcRendererEvent, config: AppConfig): void => {
         callback(config)

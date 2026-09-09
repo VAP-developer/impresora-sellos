@@ -24,6 +24,7 @@ import { LicenseSection } from '@renderer/components/settings/LicenseSection'
 import { PrintRotationSection } from '@renderer/components/settings/PrintRotationSection'
 import { VirtualKeyboardSection } from '@renderer/components/settings/VirtualKeyboardSection'
 import { StampDatabaseSection } from '@renderer/components/settings/StampDatabaseSection'
+import { FormatoCorreoEspSection } from '@renderer/components/settings/FormatoCorreoEspSection'
 
 export default function SettingsView(): JSX.Element {
   const { t } = useTranslation()
@@ -37,6 +38,7 @@ export default function SettingsView(): JSX.Element {
   const [licenseOpen, setLicenseOpen] = useState(false)
   const [stampDbOpen, setStampDbOpen] = useState(false)
   const [printRotOpen, setPrintRotOpen] = useState(false)
+  const [formatoEspOpen, setFormatoEspOpen] = useState(false)
 
   useEffect(() => {
     loadSettings()
@@ -328,6 +330,40 @@ export default function SettingsView(): JSX.Element {
                 aria-label="Base de datos sellos"
               >
                 <StampDatabaseSection />
+              </div>
+            )}
+          </div>
+
+          {/* Section: Formato Correo ESP */}
+          <div>
+            <button
+              type="button"
+              className="w-full bg-[rgb(255,192,0)] p-2 rounded cursor-pointer flex items-center gap-2
+                         text-left focus:outline-none focus:ring-2 focus:ring-yellow-500"
+              onClick={() => setFormatoEspOpen(!formatoEspOpen)}
+              aria-expanded={formatoEspOpen}
+              aria-controls="settings-formato-correo-esp-content"
+            >
+              <input
+                type="checkbox"
+                checked={formatoEspOpen}
+                readOnly
+                className="cursor-pointer"
+                tabIndex={-1}
+                aria-hidden="true"
+              />
+              <h3 className="text-lg font-bold m-0">
+                FORMATO CORREO ESP
+              </h3>
+            </button>
+            {formatoEspOpen && (
+              <div
+                id="settings-formato-correo-esp-content"
+                className="border border-gray-200 rounded-b p-4 bg-white"
+                role="region"
+                aria-label="Formato Correo ESP"
+              >
+                <FormatoCorreoEspSection />
               </div>
             )}
           </div>

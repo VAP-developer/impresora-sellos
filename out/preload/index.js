@@ -26,6 +26,8 @@ const api = {
     setVirtualKeyboardEnabled: (enabled) => electron.ipcRenderer.invoke("config:setVirtualKeyboardEnabled", enabled),
     getVirtualKeyboardLanguage: () => electron.ipcRenderer.invoke("config:getVirtualKeyboardLanguage"),
     setVirtualKeyboardLanguage: (lang) => electron.ipcRenderer.invoke("config:setVirtualKeyboardLanguage", lang),
+    getFormatoCorreoEsp: () => electron.ipcRenderer.invoke("config:getFormatoCorreoEsp"),
+    setFormatoCorreoEsp: (value) => electron.ipcRenderer.invoke("config:setFormatoCorreoEsp", value),
     onChange: (callback) => {
       const handler = (_event, config) => {
         callback(config);

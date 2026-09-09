@@ -486,6 +486,34 @@ class ConfigRepository {
     };
     this.set(config);
   }
+  /**
+   * Get the "Formato Correo ESP" setting, returns default false if unset.
+   */
+  getFormatoCorreoEsp() {
+    const config = this.get();
+    return config?.settings?.formatoCorreoEsp ?? false;
+  }
+  /**
+   * Set the "Formato Correo ESP" setting.
+   * When enabled, labels show only the tariff name and tickets get an "ESP"
+   * prefix on their title.
+   */
+  setFormatoCorreoEsp(value) {
+    const config = this.get();
+    if (!config) {
+      throw new Error("Config not initialized. Call initConfig() first.");
+    }
+    config.settings = {
+      ...config.settings,
+      cutNumber: config.settings?.cutNumber ?? 4,
+      language: config.settings?.language ?? "es",
+      printRotation180: config.settings?.printRotation180 ?? false,
+      virtualKeyboardEnabled: config.settings?.virtualKeyboardEnabled ?? false,
+      virtualKeyboardLanguage: config.settings?.virtualKeyboardLanguage ?? "es",
+      formatoCorreoEsp: value
+    };
+    this.set(config);
+  }
 }
 function registerConfigHandlers() {
   const repo = new ConfigRepository();
@@ -555,6 +583,12 @@ function registerConfigHandlers() {
   });
   handleIpc("config:setVirtualKeyboardLanguage", (value) => {
     repo.setVirtualKeyboardLanguage(value);
+  });
+  handleIpc("config:getFormatoCorreoEsp", () => {
+    return repo.getFormatoCorreoEsp();
+  });
+  handleIpc("config:setFormatoCorreoEsp", (value) => {
+    repo.setFormatoCorreoEsp(value);
   });
 }
 class OrdersRepository {
@@ -3292,6 +3326,14 @@ function shouldRotate180() {
     return false;
   }
 }
+function shouldUseFormatoCorreoEsp() {
+  try {
+    const configRepo = new ConfigRepository();
+    return configRepo.getFormatoCorreoEsp();
+  } catch {
+    return false;
+  }
+}
 const LABEL_HEIGHT_MM = 25;
 function applyRotation180(doc) {
   const centerX = STAMP_WIDTH / 2;
@@ -3322,7 +3364,11 @@ function drawLocal(doc, text, fontName, pos) {
   doc.font(fontName).fontSize(pos.size);
   doc.text(text, pos.x * MM_TO_PT$1, pos.y * MM_TO_PT$1, { lineBreak: false });
 }
-function drawSelloFields(doc, params) {
+function drawSelloFields(doc, params, formatoCorreoEsp = false) {
+  if (formatoCorreoEsp) {
+    drawLocal(doc, params.tarifa, FONTS.regular, SELLO_LAYOUT.tarifa);
+    return;
+  }
   const { line1, line2 } = formatCodigoLines(params.codigo);
   drawLocal(doc, params.tarifa, FONTS.regular, SELLO_LAYOUT.tarifa);
   drawLocal(doc, params.tarifaDescripcion ?? "", FONTS.regular, SELLO_LAYOUT.descripcion);
@@ -3455,6 +3501,7 @@ async function renderStampMultiPage(stamps) {
   registerFonts$1(doc);
   const imageCache = buildImageCache(stamps);
   const rotate180 = shouldRotate180();
+  const formatoCorreoEsp = shouldUseFormatoCorreoEsp();
   stamps.forEach((stamp, index) => {
     if (index > 0) {
       doc.addPage({ size: [STAMP_WIDTH, STAMP_PAGE_HEIGHT], margin: 0 });
@@ -3469,7 +3516,7 @@ async function renderStampMultiPage(stamps) {
     } else {
       drawOverlay(doc, stamp.overlayImage, imageCache, 0, STAMP_PAGE_HEIGHT, STAMP_WIDTH);
     }
-    drawSelloFields(doc, stamp);
+    drawSelloFields(doc, stamp, formatoCorreoEsp);
   });
   doc.end();
   return result;
@@ -4150,9 +4197,11 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
   const pdfs = [];
   const notifications = [];
   let cutNumber;
+  let formatoCorreoEsp = false;
   try {
     const configRepo = new ConfigRepository();
     cutNumber = configRepo.getCutNumber();
+    formatoCorreoEsp = configRepo.getFormatoCorreoEsp();
   } catch {
     cutNumber = 4;
   }
@@ -4447,7 +4496,8 @@ async function generateSalePdfs(config, quantities, profile, _imagesRepo, imageL
     const modoTicket = baseTitle;
     const modelo1Ticket = model1Name || "Modelo 1";
     const modelo2Ticket = model2Name || "Modelo 2";
-    const ticketFeria = dynamicTariffCtx ? dynamicTariffCtx.eventName || dynamicTariffCtx.title || config.ticket.feria : config.ticket.feria;
+    const baseFeria = dynamicTariffCtx ? dynamicTariffCtx.eventName || dynamicTariffCtx.title || config.ticket.feria : config.ticket.feria;
+    const ticketFeria = formatoCorreoEsp ? `ESP ${baseFeria}` : baseFeria;
     const ticketLugar = dynamicTariffCtx ? dynamicTariffCtx.eventNlugar || config.ticket.lugar : config.ticket.lugar;
     if (imageLayerOptions?.useSecondaryPrice && dynamicTariffCtx) {
       for (const producto of productos) {

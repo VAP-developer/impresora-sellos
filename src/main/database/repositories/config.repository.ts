@@ -13,6 +13,7 @@ export interface GlobalSettings {
   printRotation180: boolean // true = rotate PDF 180° for special printers, default false
   virtualKeyboardEnabled: boolean // true = virtual keyboard active, default false
   virtualKeyboardLanguage: AppLanguage // 'es' | 'en', default 'es'
+  formatoCorreoEsp: boolean // true = formato Correo ESP (etiqueta solo nombre tarifa + ticket con prefijo "ESP"), default false
 }
 
 /** Error constants for config validation */
@@ -527,6 +528,37 @@ export class ConfigRepository {
       printRotation180: config.settings?.printRotation180 ?? false,
       virtualKeyboardEnabled: config.settings?.virtualKeyboardEnabled ?? false,
       virtualKeyboardLanguage: value
+    }
+    this.set(config)
+  }
+
+  /**
+   * Get the "Formato Correo ESP" setting, returns default false if unset.
+   */
+  getFormatoCorreoEsp(): boolean {
+    const config = this.get()
+    return config?.settings?.formatoCorreoEsp ?? false
+  }
+
+  /**
+   * Set the "Formato Correo ESP" setting.
+   * When enabled, labels show only the tariff name and tickets get an "ESP"
+   * prefix on their title.
+   */
+  setFormatoCorreoEsp(value: boolean): void {
+    const config = this.get()
+    if (!config) {
+      throw new Error('Config not initialized. Call initConfig() first.')
+    }
+
+    config.settings = {
+      ...config.settings,
+      cutNumber: config.settings?.cutNumber ?? 4,
+      language: config.settings?.language ?? 'es',
+      printRotation180: config.settings?.printRotation180 ?? false,
+      virtualKeyboardEnabled: config.settings?.virtualKeyboardEnabled ?? false,
+      virtualKeyboardLanguage: config.settings?.virtualKeyboardLanguage ?? 'es',
+      formatoCorreoEsp: value
     }
     this.set(config)
   }

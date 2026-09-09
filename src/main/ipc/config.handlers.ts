@@ -25,6 +25,8 @@ import { ConfigRepository, type AppLanguage } from '../database/repositories/con
  * - config:setVirtualKeyboardEnabled
  * - config:getVirtualKeyboardLanguage
  * - config:setVirtualKeyboardLanguage
+ * - config:getFormatoCorreoEsp
+ * - config:setFormatoCorreoEsp
  */
 export function registerConfigHandlers(): void {
   const repo = new ConfigRepository()
@@ -114,5 +116,13 @@ export function registerConfigHandlers(): void {
 
   handleIpc('config:setVirtualKeyboardLanguage', (value: unknown) => {
     repo.setVirtualKeyboardLanguage(value as AppLanguage)
+  })
+
+  handleIpc('config:getFormatoCorreoEsp', () => {
+    return repo.getFormatoCorreoEsp()
+  })
+
+  handleIpc('config:setFormatoCorreoEsp', (value: unknown) => {
+    repo.setFormatoCorreoEsp(value as boolean)
   })
 }
