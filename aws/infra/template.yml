@@ -115,6 +115,18 @@ Resources:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
+      # CORS: permite que la web (servida desde CloudFront) suba archivos
+      # directamente al bucket con las presigned POST URLs. Sin esto, el
+      # navegador bloquea la subida cross-origin. Restringido al dominio de
+      # CloudFront (más seguro que '*').
+      CorsConfiguration:
+        CorsRules:
+          - AllowedMethods: [POST, GET, PUT]
+            AllowedOrigins:
+              - !Sub 'https://${WebDistribution.DomainName}'
+            AllowedHeaders: ['*']
+            ExposedHeaders: [ETag]
+            MaxAge: 3000
       Tags:
         - Key: Project
           Value: !Ref ProjectName
@@ -239,9 +251,18 @@ Resources:
       AttributeDefinitions:
         - AttributeName: username
           AttributeType: S
+        - AttributeName: apiKey
+          AttributeType: S
       KeySchema:
         - AttributeName: username
           KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: apiKey-index
+          KeySchema:
+            - AttributeName: apiKey
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
       Tags:
         - Key: Project
           Value: !Ref ProjectName
@@ -305,7 +326,9 @@ Resources:
                   - dynamodb:PutItem
                   - dynamodb:UpdateItem
                   - dynamodb:Scan
-                Resource: !GetAtt UsersTable.Arn
+                Resource:
+                  - !GetAtt UsersTable.Arn
+                  - !Sub '${UsersTable.Arn}/index/apiKey-index'
         - PolicyName: S3ReadReleases
           PolicyDocument:
             Version: '2012-10-17'
@@ -326,6 +349,7 @@ Resources:
                 Action:
                   - s3:GetObject
                   - s3:PutObject
+                  - s3:DeleteObject
                 Resource: !Sub '${StampsBucket.Arn}/*'
         - PolicyName: DynamoDBStampCatalogAccess
           PolicyDocument:
@@ -519,6 +543,10 @@ Resources:
       - DeactivateOptionsMethod
       - SyncStampsMethod
       - SyncStampsOptionsMethod
+      - UploadUrlMethod
+      - UploadUrlOptionsMethod
+      - DeleteStampMethod
+      - DeleteStampOptionsMethod
     Properties:
       RestApiId: !Ref KioskoApi
 
@@ -528,6 +556,15 @@ Resources:
       RestApiId: !Ref KioskoApi
       DeploymentId: !Ref ApiDeployment
       StageName: prod
+      # Throttling efectivo a nivel de stage (Opción A): limita la tasa de
+      # peticiones para TODOS los clientes sin necesitar API keys. Protege
+      # contra ráfagas y bucles, que es el principal riesgo de coste.
+      # La identidad real se valida dentro de cada Lambda (apiKey + machineId).
+      MethodSettings:
+        - ResourcePath: '/*'
+          HttpMethod: '*'
+          ThrottlingRateLimit: 5
+          ThrottlingBurstLimit: 10
 
   # Permisos para que API Gateway invoque las Lambdas
   LoginFunctionPermission:
@@ -794,6 +831,168 @@ Resources:
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${KioskoApi}/*/POST/api/stamps/sync'
+
+  # --------------------------------------------------------------------------
+  # Lambda: Upload URL (genera presigned POST para subir un sello)
+  # --------------------------------------------------------------------------
+  UploadUrlFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-upload-url'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 10
+      MemorySize: 128
+      Environment:
+        Variables:
+          USERS_TABLE: !Ref UsersTable
+          STAMPS_BUCKET: !Ref StampsBucket
+          STAMP_CATALOG_TABLE: !Ref StampCatalogTable
+      Code:
+        ZipFile: |
+          // Placeholder - se actualiza con deploy de lambda
+          exports.handler = async (event) => {
+            return { statusCode: 200, body: 'upload-url placeholder' };
+          };
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # --------------------------------------------------------------------------
+  # Lambda: Delete Stamp (borra un sello del usuario en S3 + catálogo)
+  # --------------------------------------------------------------------------
+  DeleteStampFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-delete-stamp'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 15
+      MemorySize: 256
+      Environment:
+        Variables:
+          USERS_TABLE: !Ref UsersTable
+          STAMPS_BUCKET: !Ref StampsBucket
+          STAMP_CATALOG_TABLE: !Ref StampCatalogTable
+      Code:
+        ZipFile: |
+          // Placeholder - se actualiza con deploy de lambda
+          exports.handler = async (event) => {
+            return { statusCode: 200, body: 'delete-stamp placeholder' };
+          };
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # /api/stamps/upload-url
+  StampsUploadUrlResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref KioskoApi
+      ParentId: !Ref StampsResource
+      PathPart: upload-url
+
+  UploadUrlMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref KioskoApi
+      ResourceId: !Ref StampsUploadUrlResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${UploadUrlFunction.Arn}/invocations'
+
+  UploadUrlOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref KioskoApi
+      ResourceId: !Ref StampsUploadUrlResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: '200'
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: ''
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: '200'
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # /api/stamps/delete
+  StampsDeleteResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref KioskoApi
+      ParentId: !Ref StampsResource
+      PathPart: delete
+
+  DeleteStampMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref KioskoApi
+      ResourceId: !Ref StampsDeleteResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DeleteStampFunction.Arn}/invocations'
+
+  DeleteStampOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref KioskoApi
+      ResourceId: !Ref StampsDeleteResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: '200'
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: ''
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: '200'
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  UploadUrlFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref UploadUrlFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${KioskoApi}/*/POST/api/stamps/upload-url'
+
+  DeleteStampFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref DeleteStampFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${KioskoApi}/*/POST/api/stamps/delete'
 
 # ============================================================================
 # OUTPUTS

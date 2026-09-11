@@ -462,6 +462,10 @@ export interface ElectronAPI {
     sync(): Promise<{ ok: boolean; added: number; removed: number; total: number; error?: string; blocked?: boolean }>
     getAll(): Promise<Array<{ id: number; stampId: string; year: string; stampName: string; fondoPath: string | null; logoPath: string | null; status: string; syncedAt: string; createdAt: string }>>
     getStatus(): Promise<{ totalStamps: number; lastSyncAt: string | null; isBlocked: boolean }>
+    pickFiles(): Promise<{ fondoPath: string | null; logoPath: string | null; error?: string }>
+    existsInYear(args: { year: string; stampName: string }): Promise<boolean>
+    upload(args: { year: string; stampName: string; fondoPath: string; logoPath: string }): Promise<{ ok: boolean; error?: string; blocked?: boolean }>
+    delete(args: { year: string; stampName: string }): Promise<{ ok: boolean; deleted?: number; error?: string; blocked?: boolean }>
   }
 }
 
@@ -577,7 +581,11 @@ const api: ElectronAPI = {
   stamps: {
     sync: () => ipcRenderer.invoke('stamps:sync'),
     getAll: () => ipcRenderer.invoke('stamps:getAll'),
-    getStatus: () => ipcRenderer.invoke('stamps:getStatus')
+    getStatus: () => ipcRenderer.invoke('stamps:getStatus'),
+    pickFiles: () => ipcRenderer.invoke('stamps:pickFiles'),
+    existsInYear: (args) => ipcRenderer.invoke('stamps:existsInYear', args),
+    upload: (args) => ipcRenderer.invoke('stamps:upload', args),
+    delete: (args) => ipcRenderer.invoke('stamps:delete', args)
   }
 }
 

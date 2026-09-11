@@ -1,0 +1,10 @@
+{
+  "name": "svvs-kiosko-delete-stamp",
+  "version": "1.0.0",
+  "description": "Lambda que borra un sello del usuario en S3 y en el catálogo",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.600.0",
+    "@aws-sdk/client-dynamodb": "^3.600.0"
+  }
+}

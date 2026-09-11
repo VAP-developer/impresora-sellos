@@ -9,6 +9,8 @@ import { useState, useEffect } from 'react'
 import { useOnlineStatus } from '@renderer/lib/useOnlineStatus'
 import { SyncButton } from './SyncButton'
 import { StampList } from './StampList'
+import { UploadStampButton } from './UploadStampButton'
+import { DeleteStampButton } from './DeleteStampButton'
 
 interface StampStatus {
   totalStamps: number
@@ -35,6 +37,12 @@ export function StampDatabaseSection(): JSX.Element {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Shared refresh after sync/upload/delete: reload status and remount the list.
+  function refresh(): void {
+    loadStatus()
+    setRefreshKey((k) => k + 1)
   }
 
   function formatDate(dateStr: string): string {
@@ -88,10 +96,29 @@ export function StampDatabaseSection(): JSX.Element {
       <SyncButton
         disabled={!isOnline}
         offlineReason={!isOnline ? 'Se requiere conexión a internet' : undefined}
-        onSyncComplete={() => {
-          loadStatus()
-          setRefreshKey((k) => k + 1)
-        }}
+        onSyncComplete={refresh}
+      />
+
+      {/* Normas de subida (visibles para el usuario) */}
+      <div className="rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+        <p className="mb-1 font-semibold">Normas para subir un sello</p>
+        <ul className="list-disc space-y-0.5 pl-5">
+          <li>Debe subir exactamente 2 archivos: uno terminado en <code>-fondo.jpg</code> y otro en <code>-sello.png</code>.</li>
+          <li>Si no se cumplen estos sufijos, no se podrá subir ningún archivo.</li>
+          <li>El año debe estar entre 2020 y 2100.</li>
+          <li>El nombre que escriba será el que se use en la base de datos. Si ya existe en ese año, se le avisará para que decida si sobrescribirlo.</li>
+          <li>Cada archivo debe ocupar entre 3 KB y 2 MB.</li>
+        </ul>
+      </div>
+
+      <UploadStampButton
+        disabled={!isOnline}
+        onUploadComplete={refresh}
+      />
+
+      <DeleteStampButton
+        disabled={!isOnline}
+        onDeleteComplete={refresh}
       />
     </div>
   )

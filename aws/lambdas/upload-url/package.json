@@ -1,0 +1,11 @@
+{
+  "name": "svvs-kiosko-upload-url",
+  "version": "1.0.0",
+  "description": "Lambda que genera presigned POST URLs para subir sellos a S3",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.600.0",
+    "@aws-sdk/client-dynamodb": "^3.600.0",
+    "@aws-sdk/s3-presigned-post": "^3.600.0"
+  }
+}

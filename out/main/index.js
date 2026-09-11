@@ -5230,7 +5230,7 @@ function getMachineId() {
   }
   return cachedMachineId;
 }
-const API_BASE = "https://md6oe7qpfk.execute-api.eu-west-1.amazonaws.com/prod/api";
+const API_BASE$1 = "https://md6oe7qpfk.execute-api.eu-west-1.amazonaws.com/prod/api";
 let licenseStatus = { ok: false, error: "No validado aún" };
 let authToken = null;
 function setAuthToken(token) {
@@ -5261,7 +5261,7 @@ async function activateLicense() {
     return licenseStatus;
   }
   try {
-    const result = await httpPost$1(`${API_BASE}/activate`, {
+    const result = await httpPost$1(`${API_BASE$1}/activate`, {
       machineId,
       apiKey
     });
@@ -5319,7 +5319,7 @@ async function deactivateLicense() {
     return { ok: false, error: "No hay apiKey configurada" };
   }
   try {
-    const result = await httpPost$1(`${API_BASE}/deactivate`, {
+    const result = await httpPost$1(`${API_BASE$1}/deactivate`, {
       machineId,
       apiKey
     });
@@ -5687,6 +5687,227 @@ function downloadFile(url$1, destPath) {
     req.end();
   });
 }
+const API_BASE = "https://md6oe7qpfk.execute-api.eu-west-1.amazonaws.com/prod/api";
+const UPLOAD_URL_ENDPOINT = `${API_BASE}/stamps/upload-url`;
+const DELETE_ENDPOINT = `${API_BASE}/stamps/delete`;
+const MIN_BYTES = 3 * 1024;
+const MAX_BYTES = 2 * 1024 * 1024;
+const MIN_YEAR = 2020;
+const MAX_YEAR = 2100;
+const FONDO_SUFFIX$1 = "-fondo.jpg";
+const SELLO_SUFFIX$1 = "-sello.png";
+function validateYear(year) {
+  if (!/^\d{4}$/.test(year)) return "El año debe ser un número de 4 dígitos";
+  const n = Number(year);
+  if (n < MIN_YEAR || n > MAX_YEAR) {
+    return `El año debe estar entre ${MIN_YEAR} y ${MAX_YEAR}`;
+  }
+  return null;
+}
+function validateStampName(stampName) {
+  if (!stampName || !stampName.trim()) return "El nombre del sello es obligatorio";
+  if (/[\\/]/.test(stampName)) return "El nombre del sello no puede contener / ni \\";
+  return null;
+}
+function validateUploadFiles(fondoPath, logoPath) {
+  const fondoName = path.basename(fondoPath).toLowerCase();
+  const logoName = path.basename(logoPath).toLowerCase();
+  if (!fondoName.endsWith(FONDO_SUFFIX$1)) {
+    return `El archivo de fondo debe terminar en "${FONDO_SUFFIX$1}"`;
+  }
+  if (!logoName.endsWith(SELLO_SUFFIX$1)) {
+    return `El archivo de sello debe terminar en "${SELLO_SUFFIX$1}"`;
+  }
+  for (const [label, p] of [["fondo", fondoPath], ["sello", logoPath]]) {
+    let size;
+    try {
+      size = fs.statSync(p).size;
+    } catch {
+      return `No se pudo leer el archivo de ${label}`;
+    }
+    if (size < MIN_BYTES) {
+      return `El archivo de ${label} es demasiado pequeño (mínimo 3 KB)`;
+    }
+    if (size > MAX_BYTES) {
+      return `El archivo de ${label} supera el máximo de 2 MB`;
+    }
+  }
+  return null;
+}
+async function uploadStamp(input) {
+  const { year, stampName, fondoPath, logoPath } = input;
+  const yearErr = validateYear(year);
+  if (yearErr) return { ok: false, error: yearErr };
+  const nameErr = validateStampName(stampName);
+  if (nameErr) return { ok: false, error: nameErr };
+  const filesErr = validateUploadFiles(fondoPath, logoPath);
+  if (filesErr) return { ok: false, error: filesErr };
+  const config = getUserConfig();
+  const apiKey = config.license?.apiKey || "";
+  const machineId = getMachineId();
+  if (!apiKey) {
+    return { ok: false, error: "No se encontró apiKey en la configuración" };
+  }
+  try {
+    await uploadOneFile(apiKey, machineId, year, stampName, "fondo", fondoPath);
+    await uploadOneFile(apiKey, machineId, year, stampName, "sello", logoPath);
+  } catch (err) {
+    if (err instanceof AuthError) {
+      return { ok: false, error: "AUTH_FAILED", blocked: true };
+    }
+    const message = err instanceof Error ? err.message : "Error subiendo el sello";
+    return { ok: false, error: message };
+  }
+  return { ok: true };
+}
+async function deleteStamp(input) {
+  const { year, stampName } = input;
+  const yearErr = validateYear(year);
+  if (yearErr) return { ok: false, error: yearErr };
+  const nameErr = validateStampName(stampName);
+  if (nameErr) return { ok: false, error: nameErr };
+  const config = getUserConfig();
+  const apiKey = config.license?.apiKey || "";
+  const machineId = getMachineId();
+  if (!apiKey) {
+    return { ok: false, error: "No se encontró apiKey en la configuración" };
+  }
+  let response;
+  try {
+    response = await httpPostJson(DELETE_ENDPOINT, {
+      apiKey,
+      machineId,
+      year,
+      stampName
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Error de conexión";
+    return { ok: false, error: message };
+  }
+  if (!response.ok && response.error === "AUTH_FAILED") {
+    return { ok: false, error: "AUTH_FAILED", blocked: true };
+  }
+  if (!response.ok) {
+    return { ok: false, error: response.error || "Error desconocido del servidor" };
+  }
+  return { ok: true, deleted: response.deleted ?? 0 };
+}
+class AuthError extends Error {
+}
+async function uploadOneFile(apiKey, machineId, year, stampName, fileType, filePath) {
+  const presignedResp = await httpPostJson(UPLOAD_URL_ENDPOINT, {
+    apiKey,
+    machineId,
+    year,
+    stampName,
+    fileType
+  });
+  if (!presignedResp.ok && presignedResp.error === "AUTH_FAILED") {
+    throw new AuthError("AUTH_FAILED");
+  }
+  if (!presignedResp.ok || !presignedResp.upload) {
+    throw new Error(presignedResp.reason || presignedResp.error || "No se pudo obtener la URL de subida");
+  }
+  const contentType = fileType === "fondo" ? "image/jpeg" : "image/png";
+  const fileBuffer = fs.readFileSync(filePath);
+  await postMultipartToS3(presignedResp.upload, fileBuffer, path.basename(filePath), contentType);
+}
+function httpPostJson(url$1, body) {
+  return new Promise((resolve, reject) => {
+    const bodyStr = JSON.stringify(body);
+    const parsedUrl = new url.URL(url$1);
+    const options = {
+      hostname: parsedUrl.hostname,
+      port: 443,
+      path: parsedUrl.pathname + parsedUrl.search,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(bodyStr)
+      }
+    };
+    const req = https__namespace.request(options, (res) => {
+      let responseData = "";
+      res.on("data", (chunk) => {
+        responseData += chunk.toString();
+      });
+      res.on("end", () => {
+        try {
+          resolve(JSON.parse(responseData));
+        } catch {
+          reject(new Error(`Respuesta inválida del servidor: ${responseData.slice(0, 200)}`));
+        }
+      });
+    });
+    req.on("error", (err) => reject(err));
+    req.write(bodyStr);
+    req.end();
+  });
+}
+function postMultipartToS3(presigned, fileBuffer, fileName, contentType) {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new url.URL(presigned.url);
+    const boundary = `----svvsFormBoundary${Date.now().toString(16)}`;
+    const parts = [];
+    for (const [name, value] of Object.entries(presigned.fields)) {
+      parts.push(
+        Buffer.from(
+          `--${boundary}\r
+Content-Disposition: form-data; name="${name}"\r
+\r
+${value}\r
+`
+        )
+      );
+    }
+    parts.push(
+      Buffer.from(
+        `--${boundary}\r
+Content-Disposition: form-data; name="file"; filename="${fileName}"\r
+Content-Type: ${contentType}\r
+\r
+`
+      )
+    );
+    parts.push(fileBuffer);
+    parts.push(Buffer.from(`\r
+--${boundary}--\r
+`));
+    const requestBody = Buffer.concat(parts);
+    const options = {
+      hostname: parsedUrl.hostname,
+      port: 443,
+      path: parsedUrl.pathname + parsedUrl.search,
+      method: "POST",
+      headers: {
+        "Content-Type": `multipart/form-data; boundary=${boundary}`,
+        "Content-Length": requestBody.length
+      }
+    };
+    const req = https__namespace.request(options, (res) => {
+      let responseData = "";
+      res.on("data", (chunk) => {
+        responseData += chunk.toString();
+      });
+      res.on("end", () => {
+        if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+          resolve();
+        } else {
+          reject(
+            new Error(
+              `S3 rechazó la subida (HTTP ${res.statusCode}). ${responseData.slice(0, 200)}`
+            )
+          );
+        }
+      });
+    });
+    req.on("error", (err) => reject(err));
+    req.write(requestBody);
+    req.end();
+  });
+}
+const FONDO_SUFFIX = "-fondo.jpg";
+const SELLO_SUFFIX = "-sello.png";
 function registerStampsHandlers() {
   handleIpc("stamps:sync", async () => {
     return await syncStamps();
@@ -5705,6 +5926,55 @@ function registerStampsHandlers() {
       lastSyncAt: lastSync,
       isBlocked: appStateRepo.isBlocked()
     };
+  });
+  handleIpc("stamps:pickFiles", async () => {
+    const win = electron.BrowserWindow.getFocusedWindow() ?? electron.BrowserWindow.getAllWindows()[0];
+    const result = win ? await electron.dialog.showOpenDialog(win, {
+      title: "Seleccione el fondo (-fondo.jpg) y el sello (-sello.png)",
+      properties: ["openFile", "multiSelections"],
+      filters: [{ name: "Imágenes de sello", extensions: ["jpg", "png"] }]
+    }) : await electron.dialog.showOpenDialog({
+      title: "Seleccione el fondo (-fondo.jpg) y el sello (-sello.png)",
+      properties: ["openFile", "multiSelections"],
+      filters: [{ name: "Imágenes de sello", extensions: ["jpg", "png"] }]
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return { fondoPath: null, logoPath: null };
+    }
+    if (result.filePaths.length !== 2) {
+      return {
+        fondoPath: null,
+        logoPath: null,
+        error: "Debe seleccionar exactamente 2 archivos: uno -fondo.jpg y otro -sello.png"
+      };
+    }
+    let fondoPath = null;
+    let logoPath = null;
+    for (const p of result.filePaths) {
+      const name = path.basename(p).toLowerCase();
+      if (name.endsWith(FONDO_SUFFIX)) fondoPath = p;
+      else if (name.endsWith(SELLO_SUFFIX)) logoPath = p;
+    }
+    if (!fondoPath || !logoPath) {
+      return {
+        fondoPath: null,
+        logoPath: null,
+        error: 'Los archivos deben ser uno "-fondo.jpg" y otro "-sello.png"'
+      };
+    }
+    return { fondoPath, logoPath };
+  });
+  handleIpc("stamps:existsInYear", (...args) => {
+    const { year, stampName } = args[0];
+    const repo = new StampsRepository();
+    const stampId = `${year}#${stampName}`;
+    return repo.getByYear(year).some((s) => s.stampId === stampId);
+  });
+  handleIpc("stamps:upload", async (...args) => {
+    return await uploadStamp(args[0]);
+  });
+  handleIpc("stamps:delete", async (...args) => {
+    return await deleteStamp(args[0]);
   });
 }
 function registerAllHandlers() {

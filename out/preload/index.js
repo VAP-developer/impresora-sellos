@@ -109,7 +109,11 @@ const api = {
   stamps: {
     sync: () => electron.ipcRenderer.invoke("stamps:sync"),
     getAll: () => electron.ipcRenderer.invoke("stamps:getAll"),
-    getStatus: () => electron.ipcRenderer.invoke("stamps:getStatus")
+    getStatus: () => electron.ipcRenderer.invoke("stamps:getStatus"),
+    pickFiles: () => electron.ipcRenderer.invoke("stamps:pickFiles"),
+    existsInYear: (args) => electron.ipcRenderer.invoke("stamps:existsInYear", args),
+    upload: (args) => electron.ipcRenderer.invoke("stamps:upload", args),
+    delete: (args) => electron.ipcRenderer.invoke("stamps:delete", args)
   }
 };
 if (process.contextIsolated) {
