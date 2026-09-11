@@ -19,6 +19,7 @@ import TariffTableSplit from '@renderer/components/kiosko/TariffTableSplit'
 import DynamicTariffTable from '@renderer/components/kiosko/DynamicTariffTable'
 import CartControls from '@renderer/components/kiosko/CartControls'
 import { useVirtualKeyboard } from '@renderer/components/virtual-keyboard/VirtualKeyboardContext'
+import { NumericKeypad } from '@renderer/components/virtual-keyboard/NumericKeypad'
 
 export default function KioskoView(): JSX.Element {
   const config = useConfigStore((state) => state.config)
@@ -45,9 +46,17 @@ export default function KioskoView(): JSX.Element {
   const rollo1Installed = (ticket?.rollo1 ?? 0) !== -1
   const rollo2Installed = (ticket?.rollo2 ?? 0) !== -1
 
-  // When the on-screen keyboard is visible we reserve a blank column on the
-  // right so the keyboard can appear there instead of overlapping the table.
-  const { isVisible: keyboardVisible } = useVirtualKeyboard()
+  // En la vista Kiosko el teclado numérico se ancla: ocupa un espacio fijo en
+  // la mitad derecha y permanece siempre visible (no aparece/desaparece al
+  // enfocar un input). Se desancla al salir de la vista para que el resto de
+  // la app mantenga el teclado flotante dinámico.
+  const { enabled: keyboardEnabled, setPinned } = useVirtualKeyboard()
+
+  useEffect(() => {
+    if (!keyboardEnabled) return
+    setPinned(true)
+    return () => setPinned(false)
+  }, [keyboardEnabled, setPinned])
 
   // Load the tariff group from the active event when the view mounts
   // or when the active event changes (config.sello.elevento)
@@ -95,9 +104,9 @@ export default function KioskoView(): JSX.Element {
   }, [activeEventId, setActiveTariffGroup, setActiveEvento])
 
   return (
-    <div className="flex flex-col p-2 gap-2">
+    <div className="flex flex-col h-full min-h-0 p-2 gap-2">
       {/* Top: Roll1 counter | Sello A | Cart Controls | Sello B | Roll2 counter */}
-      <div className="flex items-center justify-center gap-4 bg-white rounded px-8 py-3">
+      <div className="flex items-center justify-center gap-4 bg-white rounded px-8 py-3 shrink-0">
         {/* Roll 1 remaining - left of Sello A */}
         <div className="flex flex-col items-center justify-center min-w-[50px]">
           <span className="text-xs text-gray-500 font-medium">Rollo</span>
@@ -120,21 +129,20 @@ export default function KioskoView(): JSX.Element {
       </div>
 
       {/*
-        Middle: tariff table on the LEFT side. A blank column is reserved on the
-        right side; when the virtual keyboard is active it slides into that gap
-        so it never covers the table.
+        Middle: tariff table on the LEFT half. The RIGHT half is a fixed area
+        that permanently hosts the numeric keyboard while this view is mounted
+        (pinned mode), so it never overlaps the table and is always available.
       */}
-      <div className="flex items-start gap-2">
-        <div className="w-1/2 min-w-0">
+      <div className="flex items-stretch gap-2 flex-1 min-h-0">
+        {/* Left 65%: tariff table (scrolls internally if it doesn't fit) */}
+        <div className="w-[65%] min-w-0 h-full overflow-auto">
           {activeTariffGroup ? <DynamicTariffTable /> : <TariffTableSplit />}
         </div>
 
-        {/* Right-side blank space reserved for the on-screen keyboard */}
-        <div
-          className="w-1/2 shrink-0"
-          data-keyboard-slot="true"
-          aria-hidden={!keyboardVisible}
-        />
+        {/* Right 35%: always-visible numeric keyboard, fills its area */}
+        <div className="w-[35%] min-w-0 h-full min-h-0" data-keyboard-slot="true">
+          {keyboardEnabled && <NumericKeypad pinned />}
+        </div>
       </div>
     </div>
   )

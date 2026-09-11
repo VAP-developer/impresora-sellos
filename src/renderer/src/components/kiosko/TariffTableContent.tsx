@@ -45,6 +45,7 @@ export default function TariffTableContent({
   rows,
   quantities,
   setQuantity,
+  limits,
   showSecondary,
   toggleSecondary,
   currencySymbol,
@@ -61,7 +62,10 @@ export default function TariffTableContent({
   return (
     <div role="table" aria-label="Tabla de tarifas">
       {/* ─── Header row ─── */}
-      <div className="grid grid-cols-[3fr_4fr_2fr_3fr] bg-[rgb(24,62,117)] border-b-2 border-blue-800">
+      <div className="grid grid-cols-[1.2fr_3fr_4fr_2fr_3fr_1.2fr] bg-[rgb(24,62,117)] border-b-2 border-blue-800">
+        <div className="px-1 py-2 text-center text-xs font-bold text-white uppercase tracking-wide">
+          Límite
+        </div>
         <div className="px-2 py-2 text-center text-sm font-bold text-white uppercase tracking-wide">
           Cantidad
         </div>
@@ -82,12 +86,17 @@ export default function TariffTableContent({
         <div className="px-2 py-2 text-center text-sm font-bold text-white uppercase tracking-wide">
           Cantidad
         </div>
+        <div className="px-1 py-2 text-center text-xs font-bold text-white uppercase tracking-wide">
+          Límite
+        </div>
       </div>
 
       {/* ─── Data rows ─── */}
       {rows.map((row, idx) => {
         const qtyS1 = quantities[row.qtyFieldS1] ?? 0
         const qtyS2 = quantities[row.qtyFieldS2] ?? 0
+        const limitS1 = limits[row.limitFieldS1] ?? 0
+        const limitS2 = limits[row.limitFieldS2] ?? 0
         const activePrice = showSecondary ? row.secondaryPrice : row.localPrice
 
         const stripBg = row.isStrip ? 'bg-[rgb(255,203,48)] border-l-4 border-l-amber-500' : ''
@@ -97,10 +106,18 @@ export default function TariffTableContent({
         return (
           <div
             key={`${row.qtyFieldS1}-${row.qtyFieldS2}`}
-            className={`grid grid-cols-[3fr_4fr_2fr_3fr] items-center ${stripBg}  ${labelBg} ${rowBorder}`}
+            className={`grid grid-cols-[1.2fr_3fr_4fr_2fr_3fr_1.2fr] items-center ${stripBg}  ${labelBg} ${rowBorder}`}
             role="row"
             aria-label={row.label}
           >
+            {/* Límite Sello A */}
+            <div
+              className="px-1 py-2 text-center text-sm font-bold text-[rgb(24,62,117)]"
+              aria-label={`Límite ${row.label} Sello A: ${limitS1}`}
+            >
+              {limitS1}
+            </div>
+
             {/* Cantidad Sello A */}
             <div className="px-2 py-2 flex justify-center">
               <input
@@ -108,7 +125,7 @@ export default function TariffTableContent({
                 min="0"
                 value={qtyS1}
                 onChange={handleChange(row.qtyFieldS1)}
-                className="w-40 h-12 text-center text-[30px] font-bold border-2 border-gray-400 rounded-lg
+                className="no-spinner w-40 h-12 text-center text-[30px] font-bold border-2 border-gray-400 rounded-lg
                            focus:border-blue-600 focus:ring-2 focus:ring-blue-300 outline-none transition-colors
                            bg-white shadow-sm"
                 aria-label={`Cantidad ${row.label} Sello A`}
@@ -134,11 +151,19 @@ export default function TariffTableContent({
                 min="0"
                 value={qtyS2}
                 onChange={handleChange(row.qtyFieldS2)}
-                className="w-40 h-12 text-center text-[30px] font-bold border-2 border-gray-400 rounded-lg
+                className="no-spinner w-40 h-12 text-center text-[30px] font-bold border-2 border-gray-400 rounded-lg
                            focus:border-green-600 focus:ring-2 focus:ring-green-300 outline-none transition-colors
                            bg-white shadow-sm"
                 aria-label={`Cantidad ${row.label} Sello B`}
               />
+            </div>
+
+            {/* Límite Sello B */}
+            <div
+              className="px-1 py-2 text-center text-sm font-bold text-[rgb(24,62,117)]"
+              aria-label={`Límite ${row.label} Sello B: ${limitS2}`}
+            >
+              {limitS2}
             </div>
           </div>
         )

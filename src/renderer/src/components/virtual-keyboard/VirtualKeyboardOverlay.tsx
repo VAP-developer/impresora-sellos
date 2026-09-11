@@ -14,7 +14,7 @@ import { FullKeyboard } from './FullKeyboard'
 import { cn } from '@renderer/lib/utils'
 
 export function VirtualKeyboardOverlay(): React.JSX.Element | null {
-  const { isVisible, keyboardType, keyboardLanguage } = useVirtualKeyboard()
+  const { isVisible, keyboardType, keyboardLanguage, pinned } = useVirtualKeyboard()
 
   // Keep the component mounted briefly during exit animation
   const [shouldRender, setShouldRender] = useState(false)
@@ -38,6 +38,10 @@ export function VirtualKeyboardOverlay(): React.JSX.Element | null {
       return () => clearTimeout(timer)
     }
   }, [isVisible])
+
+  // En modo anclado el teclado se renderiza fijo dentro de la vista (Kiosko),
+  // así que el overlay flotante global no debe mostrarse.
+  if (pinned) return null
 
   if (!shouldRender || !keyboardType) return null
 

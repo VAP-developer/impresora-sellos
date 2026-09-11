@@ -66,7 +66,7 @@ export default function TariffRowSplit({
           min="0"
           value={qty}
           onChange={handleChange}
-          className={`w-14 text-center border rounded py-0.5 ${textSize} ${inputClassName}`}
+          className={`no-spinner w-14 text-center border rounded py-0.5 ${textSize} ${inputClassName}`}
           aria-label={`Cantidad ${label}`}
         />
       </div>

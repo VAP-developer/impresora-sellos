@@ -12,15 +12,20 @@ import { useVirtualKeyboard } from '@renderer/components/virtual-keyboard/Virtua
  * requiring manual scroll.
  */
 export default function MainLayout(): JSX.Element {
-  const { isVisible, keyboardType } = useVirtualKeyboard()
+  const { isVisible, keyboardType, pinned } = useVirtualKeyboard()
 
-  const keyboardPadding = isVisible
-    ? keyboardType === 'full'
-      ? 'pb-[280px]'
-      : keyboardType === 'numeric'
-        ? 'pb-[220px]'
-        : ''
-    : ''
+  // El padding inferior solo es necesario para el teclado FLOTANTE (fixed en la
+  // parte baja). En modo anclado (Kiosko) el teclado se integra en el layout de
+  // la vista a la derecha, así que no debe reservarse espacio abajo (evita el
+  // hueco blanco inferior y que se recorte la tabla).
+  const keyboardPadding =
+    isVisible && !pinned
+      ? keyboardType === 'full'
+        ? 'pb-[280px]'
+        : keyboardType === 'numeric'
+          ? 'pb-[220px]'
+          : ''
+      : ''
 
   return (
     <div

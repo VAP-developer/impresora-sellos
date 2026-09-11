@@ -62,7 +62,7 @@ export default function DynamicTariffRow({
           max={limit}
           value={qty}
           onChange={handleChange}
-          className="w-14 text-center border border-gray-300 text-black rounded py-0.5 text-base"
+          className="no-spinner w-14 text-center border border-gray-300 text-black rounded py-0.5 text-base"
           aria-label={`Cantidad ${tariff.name} Sello ${model === 1 ? 'A' : 'B'}`}
         />
       </div>

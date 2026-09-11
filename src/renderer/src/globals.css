@@ -36,3 +36,17 @@
     font-family: 'Open Sans', sans-serif;
   }
 }
+
+/*
+ * Oculta las flechas (spinners) de los inputs numéricos que lleven la clase
+ * `no-spinner`, dejándolos como un campo de número entero normal.
+ */
+.no-spinner::-webkit-outer-spin-button,
+.no-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.no-spinner {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}

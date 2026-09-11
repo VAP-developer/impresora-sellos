@@ -11,7 +11,7 @@
  * La lógica avanzada de pulsación con posición de cursor se implementa en la tarea 5.3.
  */
 
-import React, { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import { setNativeValue } from './keyboard-utils'
 
@@ -28,6 +28,14 @@ export interface VirtualKeyboardContextValue {
   keyboardType: 'numeric' | 'full' | null
   /** Si el teclado está visible en pantalla */
   isVisible: boolean
+  /**
+   * Modo anclado: cuando está activo el teclado numérico permanece siempre
+   * visible ocupando un espacio fijo (usado en la vista Kiosko). No se oculta
+   * al hacer click fuera y el overlay flotante global queda suprimido.
+   */
+  pinned: boolean
+  /** Activa/desactiva el modo anclado */
+  setPinned(pinned: boolean): void
   /** Muestra el teclado para un input específico */
   showKeyboard(input: HTMLInputElement, type: 'numeric' | 'full'): void
   /** Oculta el teclado */
@@ -69,6 +77,27 @@ export function VirtualKeyboardProvider({ children }: VirtualKeyboardProviderPro
   const [activeInput, setActiveInput] = useState<HTMLInputElement | null>(null)
   const [keyboardType, setKeyboardType] = useState<'numeric' | 'full' | null>(null)
   const [isVisible, setIsVisible] = useState(false)
+  const [pinned, setPinned] = useState(false)
+
+  // Ref espejo de `pinned` para leerlo dentro de callbacks/handlers estables
+  // (hideKeyboard y los listeners del effect) sin recrearlos.
+  const pinnedRef = useRef(pinned)
+  useEffect(() => {
+    pinnedRef.current = pinned
+    if (pinned) {
+      // Al anclar, mostrar el teclado numérico de inmediato aunque no haya
+      // ningún input enfocado todavía.
+      setKeyboardType('numeric')
+      setIsVisible(true)
+    } else {
+      // Al desanclar (p. ej. al salir de la vista Kiosko), ocultar y limpiar el
+      // teclado para que no quede visible en la siguiente pestaña. Solo se
+      // volverá a abrir cuando el usuario enfoque un input.
+      setIsVisible(false)
+      setActiveInput(null)
+      setKeyboardType(null)
+    }
+  }, [pinned])
 
   // ─── Callbacks ────────────────────────────────────────────────────────────
 
@@ -79,6 +108,12 @@ export function VirtualKeyboardProvider({ children }: VirtualKeyboardProviderPro
   }, [])
 
   const hideKeyboard = useCallback(() => {
+    // En modo anclado el teclado nunca se oculta; solo se limpia el input activo
+    // para que la siguiente pulsación no escriba en un campo obsoleto.
+    if (pinnedRef.current) {
+      setActiveInput(null)
+      return
+    }
     setIsVisible(false)
     setActiveInput(null)
     setKeyboardType(null)
@@ -87,16 +122,22 @@ export function VirtualKeyboardProvider({ children }: VirtualKeyboardProviderPro
   const pressKey = useCallback((key: string) => {
     if (!activeInput || !document.contains(activeInput)) return
 
-    const isNumberInput = activeInput.type === 'number'
+    // Los campos decimales son inputs de texto con inputMode="decimal"
+    // (precios de tarifa, etc.). El resto de campos numéricos son enteros
+    // (nº de corte, unidades del kiosko, rollos...) y no admiten separador.
+    const allowsDecimal = activeInput.inputMode === 'decimal'
 
-    // Resolver la tecla decimal. En un input type="number" un valor intermedio
-    // como "12." es inválido y el DOM lo descarta (vacía el value), por eso el
-    // separador "borra" el contenido. Los inputs decimales deben ser
-    // type="text" inputMode="decimal", donde el separador es la coma y se
-    // conserva mientras el usuario escribe.
+    // En campos enteros, la tecla decimal no debe hacer nada: en un
+    // input type="number" insertar "." descartaría el valor (lo vaciaría).
+    if (key === 'decimal' && !allowsDecimal) return
+
+    // Resolver la tecla decimal. Siempre se inserta un PUNTO como separador,
+    // porque toda la app formatea y muestra los precios con punto
+    // (formatPrice usa value.toFixed(2) → "12.50"). Así lo que escribe el
+    // usuario coincide con lo que ve en el resto de la interfaz.
     let charToInsert = key
     if (key === 'decimal') {
-      charToInsert = isNumberInput ? '.' : ','
+      charToInsert = '.'
     }
 
     const currentValue = activeInput.value
@@ -113,6 +154,20 @@ export function VirtualKeyboardProvider({ children }: VirtualKeyboardProviderPro
     // Respetar maxLength: si no hay selección que reemplazar, no insertar
     const maxLength = activeInput.maxLength
     if (maxLength > 0 && currentValue.length >= maxLength && !hasSelection) return
+
+    // Sustituir el "0" inicial: si el valor es exactamente "0" y se pulsa un
+    // dígito (no el separador decimal), el dígito reemplaza al 0 en lugar de
+    // anteponerse (evita "04"). Un valor real como "2" no se ve afectado, y
+    // pulsar "." sobre "0" sí conserva el 0 → "0.".
+    if (currentValue === '0' && !hasSelection && key !== 'decimal') {
+      setNativeValue(activeInput, charToInsert)
+      try {
+        activeInput.setSelectionRange(charToInsert.length, charToInsert.length)
+      } catch {
+        // setSelectionRange throws on input type="number" — ignore
+      }
+      return
+    }
 
     // Insertar carácter en posición del cursor (o reemplazar selección)
     const before = currentValue.slice(0, selStart)
@@ -196,6 +251,14 @@ export function VirtualKeyboardProvider({ children }: VirtualKeyboardProviderPro
       const input = target as HTMLInputElement
       if (ignoredTypes.includes(input.type)) return
 
+      // En modo anclado (Kiosko) el teclado siempre es numérico y ya está
+      // visible: solo actualizamos el input activo para saber dónde escribir.
+      if (pinnedRef.current) {
+        setActiveInput(input)
+        setKeyboardType('numeric')
+        return
+      }
+
       // Mostrar el teclado numérico para inputs number y para inputs de texto
       // que declaren inputMode numérico/decimal (inputs de precio, etc.).
       const numericInputMode =
@@ -206,6 +269,9 @@ export function VirtualKeyboardProvider({ children }: VirtualKeyboardProviderPro
     }
 
     function handleMouseDown(e: MouseEvent): void {
+      // En modo anclado el teclado nunca se cierra por clicks fuera.
+      if (pinnedRef.current) return
+
       const target = e.target as HTMLElement
 
       // Don't close if the click is on the keyboard itself
@@ -234,6 +300,8 @@ export function VirtualKeyboardProvider({ children }: VirtualKeyboardProviderPro
     activeInput,
     keyboardType,
     isVisible,
+    pinned,
+    setPinned,
     showKeyboard,
     hideKeyboard,
     pressKey,

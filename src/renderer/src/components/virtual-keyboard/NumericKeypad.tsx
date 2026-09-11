@@ -2,8 +2,9 @@
  * NumericKeypad.tsx
  *
  * Teclado numérico compacto tipo calculadora para inputs type="number".
- * Se posiciona fijo en la mitad derecha inferior de la ventana (220px de alto),
- * ocupando el hueco reservado a la derecha de la tabla del kiosko.
+ * Se posiciona fijo en la mitad derecha de la ventana, ocupando la altura
+ * completa de la pantalla en el hueco reservado a la derecha de la tabla
+ * del kiosko.
  * Layout 4×4:
  *   7  8  9  ⌫
  *   4  5  6  C
@@ -17,7 +18,16 @@ import { LAYOUT_NUMERIC, type KeyDef } from './layouts'
 import { useVirtualKeyboard } from './VirtualKeyboardContext'
 import { cn } from '@renderer/lib/utils'
 
-export function NumericKeypad(): React.JSX.Element {
+interface NumericKeypadProps {
+  /**
+   * Cuando es true el teclado se integra en el layout que lo contiene
+   * (ocupa su hueco con `relative w-full h-full`) en lugar de flotar `fixed`,
+   * y no muestra el botón de cerrar. Usado por la vista Kiosko.
+   */
+  pinned?: boolean
+}
+
+export function NumericKeypad({ pinned = false }: NumericKeypadProps): React.JSX.Element {
   const { pressKey, pressBackspace, clearInput, hideKeyboard } = useVirtualKeyboard()
   const { t } = useTranslation()
   const [activeKey, setActiveKey] = useState<string | null>(null)
@@ -117,27 +127,34 @@ export function NumericKeypad(): React.JSX.Element {
   return (
     <div
       data-virtual-keyboard="true"
-      className="fixed bottom-0 right-0 left-1/2 z-50 h-[220px] bg-gray-100 border-t border-l border-gray-300 shadow-lg p-2"
+      className={cn(
+        'z-50 flex items-center justify-center bg-gray-100 border-gray-300 shadow-lg p-4',
+        pinned
+          ? 'relative w-full h-full rounded-lg border'
+          : 'fixed bottom-0 left-0 right-0 h-[220px] border-t'
+      )}
       role="group"
       aria-label={t('keyboard.numericKeyboard')}
     >
-      {/* Close button */}
-      <button
-        className={cn(
-          'absolute top-2 right-2 z-10',
-          'w-[36px] h-[36px] rounded-full',
-          'bg-gray-400 hover:bg-red-500 text-white',
-          'flex items-center justify-center',
-          'text-lg font-bold shadow-md',
-          'transition-colors duration-150',
-          'select-none cursor-pointer'
-        )}
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={() => hideKeyboard()}
-        aria-label={t('keyboard.close')}
-      >
-        ✕
-      </button>
+      {/* Close button — solo en modo flotante (no anclado) */}
+      {!pinned && (
+        <button
+          className={cn(
+            'absolute top-2 right-2 z-10',
+            'w-[36px] h-[36px] rounded-full',
+            'bg-gray-400 hover:bg-red-500 text-white',
+            'flex items-center justify-center',
+            'text-lg font-bold shadow-md',
+            'transition-colors duration-150',
+            'select-none cursor-pointer'
+          )}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => hideKeyboard()}
+          aria-label={t('keyboard.close')}
+        >
+          ✕
+        </button>
+      )}
 
       {/*
         Grid explícito de 4 columnas × 4 filas.
@@ -146,7 +163,12 @@ export function NumericKeypad(): React.JSX.Element {
         - Fila 3: 1 2 3  ┐
         - Fila 4: 0(x2) ,  ┘ ✓ (ocupa filas 3-4 en la columna 4)
       */}
-      <div className="max-w-[400px] mx-auto h-full grid grid-cols-4 grid-rows-4 gap-1">
+      <div
+        className={cn(
+          'grid grid-cols-4 grid-rows-4 gap-2',
+          pinned ? 'w-full h-full' : 'w-full max-w-[400px] h-full max-h-full'
+        )}
+      >
         {/* Fila 1 */}
         {renderKey(LAYOUT_NUMERIC[0][0], '0-0')}
         {renderKey(LAYOUT_NUMERIC[0][1], '0-1')}

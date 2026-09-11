@@ -114,7 +114,7 @@ export default function TariffRow({
           min="0"
           value={qty1}
           onChange={handleChange1}
-          className={`w-16 text-center border rounded ${textSizeClass} ${inputClassName}`}
+          className={`no-spinner w-16 text-center border rounded ${textSizeClass} ${inputClassName}`}
           aria-label={`Cantidad ${label} modelo 1`}
         />
       </div>
@@ -132,7 +132,7 @@ export default function TariffRow({
           min="0"
           value={qty2}
           onChange={handleChange2}
-          className={`w-16 text-center border rounded ${textSizeClass} ${inputClassName}`}
+          className={`no-spinner w-16 text-center border rounded ${textSizeClass} ${inputClassName}`}
           aria-label={`Cantidad ${label} modelo 2`}
         />
       </div>

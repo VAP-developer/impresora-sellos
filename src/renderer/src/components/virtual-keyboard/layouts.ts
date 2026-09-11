@@ -28,8 +28,8 @@ export type KeyboardLayout = KeyboardRow[]
  *
  * La colocación de las teclas grandes (0 de doble ancho y ✓ de doble alto)
  * se resuelve en NumericKeypad.tsx mediante posicionamiento explícito en grid.
- * La tecla decimal usa la coma ',' como etiqueta (locale ES), pero inserta
- * el separador correcto según el input activo (ver pressKey).
+ * La tecla decimal usa el punto '.' como etiqueta e inserta un punto, en
+ * coherencia con el formateo de precios de la app (ver pressKey y formatPrice).
  */
 export const LAYOUT_NUMERIC: KeyboardLayout = [
   [
@@ -51,7 +51,7 @@ export const LAYOUT_NUMERIC: KeyboardLayout = [
   ],
   [
     { key: '0', type: 'char', width: 2 },
-    { key: 'decimal', label: ',', type: 'char' }
+    { key: 'decimal', label: '.', type: 'char' }
   ]
 ]
 

@@ -87,6 +87,24 @@ function emptyTariffRow(): TariffFormRow {
   return { name: '', description: '', local_price: '', secondary_price: '' }
 }
 
+/**
+ * Convierte el texto de un precio a número aceptando coma o punto como
+ * separador decimal (el teclado virtual inserta coma en inputs de texto).
+ * Devuelve NaN si el texto no representa un número válido.
+ */
+function parsePrice(raw: string): number {
+  return Number(raw.trim().replace(',', '.'))
+}
+
+/**
+ * Filtra la entrada de un precio para conservar solo dígitos y un separador
+ * decimal (coma o punto). Mantiene el texto crudo mientras se escribe para que
+ * el teclado virtual no descarte valores intermedios como "12,".
+ */
+function sanitizePriceInput(value: string): string {
+  return value.replace(/[^0-9.,]/g, '')
+}
+
 function emptyStripRow(): StripFormRow {
   return { name: '', local_price: '', secondary_price: '', selected_tariff_indices: [] }
 }
@@ -203,12 +221,12 @@ export function TariffGroupSection(): JSX.Element {
           rowErr.name = t('validation.nameTooLong')
         }
 
-        const localPrice = Number(row.local_price)
+        const localPrice = parsePrice(row.local_price)
         if (!row.local_price.trim() || isNaN(localPrice) || !isFinite(localPrice) || localPrice <= 0) {
           rowErr.local_price = t('validation.localPricePositive')
         }
 
-        const secondaryPrice = Number(row.secondary_price)
+        const secondaryPrice = parsePrice(row.secondary_price)
         if (row.secondary_price.trim() && (isNaN(secondaryPrice) || !isFinite(secondaryPrice) || secondaryPrice < 0)) {
           rowErr.secondary_price = t('validation.secondaryPricePositive')
         }
@@ -228,12 +246,12 @@ export function TariffGroupSection(): JSX.Element {
           rowErr.name = t('validation.nameTooLong')
         }
 
-        const localPrice = Number(row.local_price)
+        const localPrice = parsePrice(row.local_price)
         if (!row.local_price.trim() || isNaN(localPrice) || !isFinite(localPrice) || localPrice <= 0) {
           rowErr.local_price = t('validation.localPricePositive')
         }
 
-        const secondaryPrice2 = Number(row.secondary_price)
+        const secondaryPrice2 = parsePrice(row.secondary_price)
         if (row.secondary_price.trim() && (isNaN(secondaryPrice2) || !isFinite(secondaryPrice2) || secondaryPrice2 < 0)) {
           rowErr.secondary_price = t('validation.secondaryPricePositive')
         }
@@ -300,16 +318,16 @@ export function TariffGroupSection(): JSX.Element {
         ...(row.id != null ? { id: row.id } : {}),
         name: row.name.trim(),
         description: row.description.trim(),
-        local_price: Number(row.local_price),
-        secondary_price: row.secondary_price.trim() ? Number(row.secondary_price) : 0,
+        local_price: parsePrice(row.local_price),
+        secondary_price: row.secondary_price.trim() ? parsePrice(row.secondary_price) : 0,
         position: i + 1
       }))
 
       const strips = form.strips.map((row, i) => ({
         ...(row.id != null ? { id: row.id } : {}),
         name: row.name.trim(),
-        local_price: Number(row.local_price),
-        secondary_price: row.secondary_price.trim() ? Number(row.secondary_price) : 0,
+        local_price: parsePrice(row.local_price),
+        secondary_price: row.secondary_price.trim() ? parsePrice(row.secondary_price) : 0,
         position: i + 1,
         tariff_ids: row.selected_tariff_indices.map((idx) => idx + 1) // position-based (1-indexed)
       }))
@@ -357,9 +375,11 @@ export function TariffGroupSection(): JSX.Element {
   // ─── Form Helpers ─────────────────────────────────────────────────────────
 
   function updateTariffRow(index: number, field: keyof TariffFormRow, value: string): void {
+    const nextValue =
+      field === 'local_price' || field === 'secondary_price' ? sanitizePriceInput(value) : value
     setForm((prev) => {
       const tariffs = [...prev.tariffs]
-      tariffs[index] = { ...tariffs[index], [field]: value }
+      tariffs[index] = { ...tariffs[index], [field]: nextValue }
       return { ...prev, tariffs }
     })
   }
@@ -386,9 +406,11 @@ export function TariffGroupSection(): JSX.Element {
   }
 
   function updateStripRow(index: number, field: keyof Omit<StripFormRow, 'selected_tariff_indices'>, value: string): void {
+    const nextValue =
+      field === 'local_price' || field === 'secondary_price' ? sanitizePriceInput(value) : value
     setForm((prev) => {
       const strips = [...prev.strips]
-      strips[index] = { ...strips[index], [field]: value }
+      strips[index] = { ...strips[index], [field]: nextValue }
       return { ...prev, strips }
     })
   }
@@ -721,12 +743,11 @@ export function TariffGroupSection(): JSX.Element {
               {/* Local Price */}
               <div className="w-24">
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   placeholder={t('settings.localPrice')}
                   value={row.local_price}
                   onChange={(e) => updateTariffRow(i, 'local_price', e.target.value)}
-                  step="0.01"
-                  min="0.01"
                   aria-invalid={!!rowErrors?.local_price}
                   className={cn(
                     'h-8 w-full px-2 rounded border text-sm',
@@ -742,12 +763,11 @@ export function TariffGroupSection(): JSX.Element {
               {/* Secondary Price */}
               <div className="w-24">
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   placeholder={t('settings.secondaryPrice')}
                   value={row.secondary_price}
                   onChange={(e) => updateTariffRow(i, 'secondary_price', e.target.value)}
-                  step="0.01"
-                  min="0"
                   aria-invalid={!!rowErrors?.secondary_price}
                   className={cn(
                     'h-8 w-full px-2 rounded border text-sm',
@@ -836,12 +856,11 @@ export function TariffGroupSection(): JSX.Element {
                 {/* Local Price */}
                 <div className="w-24">
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     placeholder={t('settings.localPrice')}
                     value={row.local_price}
                     onChange={(e) => updateStripRow(i, 'local_price', e.target.value)}
-                    step="0.01"
-                    min="0.01"
                     aria-invalid={!!rowErrors?.local_price}
                     className={cn(
                       'h-8 w-full px-2 rounded border text-sm',
@@ -857,12 +876,11 @@ export function TariffGroupSection(): JSX.Element {
                 {/* Secondary Price */}
                 <div className="w-24">
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     placeholder={t('settings.secondaryPrice')}
                     value={row.secondary_price}
                     onChange={(e) => updateStripRow(i, 'secondary_price', e.target.value)}
-                    step="0.01"
-                    min="0"
                     aria-invalid={!!rowErrors?.secondary_price}
                     className={cn(
                       'h-8 w-full px-2 rounded border text-sm',
