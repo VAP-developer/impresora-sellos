@@ -15,7 +15,7 @@ export default function PrinterSection(): JSX.Element {
   return (
     <section aria-labelledby="printer-section-heading" className="mb-6">
       {/* Section header with collapsible toggle */}
-      <div className="bg-[rgb(255,192,0)] p-2 mb-2 rounded shadow flex items-center gap-2">
+      <div className="bg-[rgb(234,190,63)] p-2 mb-2 rounded shadow flex items-center gap-2">
         <input
           id="toggle-printers"
           type="checkbox"

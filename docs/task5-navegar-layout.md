@@ -208,7 +208,7 @@ export default function MainLayout(): JSX.Element {
   return (
     <div id="app-root" className="min-h-screen bg-gray-50 flex flex-col">
       {/* NavComponent will be added here in Task 5.3 */}
-      <nav className="h-[100px] bg-[rgb(255,192,0)] flex items-center px-4 shrink-0">
+      <nav className="h-[100px] bg-[rgb(234,190,63)] flex items-center px-4 shrink-0">
         <span className="text-sm text-gray-700">
           [Navegación — se implementará en Task 5.3]
         </span>
@@ -268,7 +268,7 @@ Esto garantiza que la barra de navegación siempre sea visible y el contenido de
 
 #### Placeholder de navegación
 
-La barra incluye un placeholder temporal con el color dorado del legacy (`rgb(255,192,0)`) y la altura exacta (`100px`). En la tarea 5.3 se reemplazará por el componente `NavComponent` con los links reales.
+La barra incluye un placeholder temporal con el color dorado del legacy (`rgb(234,190,63)`) y la altura exacta (`100px`). En la tarea 5.3 se reemplazará por el componente `NavComponent` con los links reales.
 
 #### `<Outlet />` de React Router
 
@@ -345,7 +345,7 @@ Funcionalidades:
     return (
       <div id="app-root" className="min-h-screen bg-gray-50 flex flex-col">
 -       {/* NavComponent will be added here in Task 5.3 */}
--       <nav className="h-[100px] bg-[rgb(255,192,0)] flex items-center px-4 shrink-0">
+-       <nav className="h-[100px] bg-[rgb(234,190,63)] flex items-center px-4 shrink-0">
 -         <span className="text-sm text-gray-700">
 -           [Navegación — se implementará en Task 5.3]
 -         </span>

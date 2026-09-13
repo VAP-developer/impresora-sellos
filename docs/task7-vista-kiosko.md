@@ -314,7 +314,7 @@ export interface TariffRowProps {
   limitField2="limiteAS2"
   quantities={quantities}
   limits={limits}
-  className="bg-[rgb(255,192,0)]"
+  className="bg-[rgb(234,190,63)]"
 />
 ```
 
@@ -400,7 +400,7 @@ Se creó el componente **TariffTable.tsx** que compone la tabla completa de tari
 | 1 | Tarifa A Tira 4 | Tira (×4 sellos) | `tarifaTA` | `bg-gray-100` | — |
 | 2 | Tira de 4 Tarifas | Tira (A+A2+B+C) | `tarifaT4` | `bg-[rgb(24,62,117)]` text-white | `highlighted`, texto 3xl |
 | — | *separador* | — | — | `border-gray-300` | `my-2` |
-| 3 | Tarifa A | Individual | `tarifaA` | `bg-[rgb(255,192,0)]` (dorado) | — |
+| 3 | Tarifa A | Individual | `tarifaA` | `bg-[rgb(234,190,63)]` (dorado) | — |
 | 4 | Tarifa A2 | Individual | `tarifaA2` | `bg-gray-100` | — |
 | 5 | Tarifa B | Individual | `tarifaB` | `bg-gray-100` | — |
 | 6 | Tarifa C | Individual | `tarifaC` | `bg-gray-100` | — |
@@ -475,7 +475,7 @@ export default function TariffTable(): JSX.Element {
         {/* Separator */}
         <div className="border-b border-gray-300 my-2" role="separator" />
         {/* Rows 3-6: Tarifas individuales */}
-        <TariffRow label="Tarifa A" price={tarifaA} ... className="bg-[rgb(255,192,0)]" />
+        <TariffRow label="Tarifa A" price={tarifaA} ... className="bg-[rgb(234,190,63)]" />
         <TariffRow label="Tarifa A2" price={tarifaA2} ... className="bg-gray-100" />
         <TariffRow label="Tarifa B" price={tarifaB} ... className="bg-gray-100" />
         <TariffRow label="Tarifa C" price={tarifaC} ... className="bg-gray-100" />

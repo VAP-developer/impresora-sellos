@@ -23,7 +23,7 @@ export default function NavComponent(): JSX.Element {
   return (
     <>
       <div className="w-full h-px bg-black" />
-      <nav className="h-[60px] bg-[rgb(255,192,0)] flex items-center px-4 shrink-0">
+      <nav className="h-[60px] bg-[rgb(234,190,63)] flex items-center px-4 shrink-0">
         {/* 1. Home */}
         <Link
           to="/home"

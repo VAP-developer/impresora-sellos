@@ -256,7 +256,7 @@ export default function RollosSection({
       <button
         type="button"
         id="rollos-section-heading"
-        className="w-full bg-[rgb(255,192,0)] p-2 rounded cursor-pointer flex items-center gap-2
+        className="w-full bg-[rgb(234,190,63)] p-2 rounded cursor-pointer flex items-center gap-2
                    text-left focus:outline-none focus:ring-2 focus:ring-yellow-500"
         onClick={() => setCollapsed(!collapsed)}
         aria-expanded={!collapsed}
@@ -413,8 +413,8 @@ export default function RollosSection({
         </div>
       </div>
 
-      {/* ─── INSTALAR ROLLOS ETIQUETAS ───────────────────────────────────── */}
-      <div className="bg-[rgb(51,102,153)] text-white p-2 rounded mt-4">
+      {/* ─── INSTALAR ROLLOS ETIQUETAS AZUL :51,102,153───────────────────────────────────── */}
+      <div className="bg-[rgb(172,48,44)] text-white p-2 rounded mt-4">
         <h3 className="text-base font-bold m-0">INSTALAR ROLLOS ETIQUETAS</h3>
       </div>
 

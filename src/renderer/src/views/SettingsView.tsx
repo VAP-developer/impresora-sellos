@@ -66,7 +66,7 @@ export default function SettingsView(): JSX.Element {
           <div>
             <button
               type="button"
-              className="w-full bg-[rgb(255,192,0)] p-2 rounded cursor-pointer flex items-center gap-2
+              className="w-full bg-[rgb(234,190,63)] p-2 rounded cursor-pointer flex items-center gap-2
                          text-left focus:outline-none focus:ring-2 focus:ring-yellow-500"
               onClick={() => setCodigoOpen(!codigoOpen)}
               aria-expanded={codigoOpen}
@@ -100,7 +100,7 @@ export default function SettingsView(): JSX.Element {
           <div>
             <button
               type="button"
-              className="w-full bg-[rgb(255,192,0)] p-2 rounded cursor-pointer flex items-center gap-2
+              className="w-full bg-[rgb(234,190,63)] p-2 rounded cursor-pointer flex items-center gap-2
                          text-left focus:outline-none focus:ring-2 focus:ring-yellow-500"
               onClick={() => setTariffOpen(!tariffOpen)}
               aria-expanded={tariffOpen}
@@ -134,7 +134,7 @@ export default function SettingsView(): JSX.Element {
           <div>
             <button
               type="button"
-              className="w-full bg-[rgb(255,192,0)] p-2 rounded cursor-pointer flex items-center gap-2
+              className="w-full bg-[rgb(234,190,63)] p-2 rounded cursor-pointer flex items-center gap-2
                          text-left focus:outline-none focus:ring-2 focus:ring-yellow-500"
               onClick={() => setCutOpen(!cutOpen)}
               aria-expanded={cutOpen}
@@ -168,7 +168,7 @@ export default function SettingsView(): JSX.Element {
           <div>
             <button
               type="button"
-              className="w-full bg-[rgb(255,192,0)] p-2 rounded cursor-pointer flex items-center gap-2
+              className="w-full bg-[rgb(234,190,63)] p-2 rounded cursor-pointer flex items-center gap-2
                          text-left focus:outline-none focus:ring-2 focus:ring-yellow-500"
               onClick={() => setLangOpen(!langOpen)}
               aria-expanded={langOpen}
@@ -202,7 +202,7 @@ export default function SettingsView(): JSX.Element {
           <div>
             <button
               type="button"
-              className="w-full bg-[rgb(255,192,0)] p-2 rounded cursor-pointer flex items-center gap-2
+              className="w-full bg-[rgb(234,190,63)] p-2 rounded cursor-pointer flex items-center gap-2
                          text-left focus:outline-none focus:ring-2 focus:ring-yellow-500"
               onClick={() => setKeyboardOpen(!keyboardOpen)}
               aria-expanded={keyboardOpen}
@@ -236,7 +236,7 @@ export default function SettingsView(): JSX.Element {
           <div>
             <button
               type="button"
-              className="w-full bg-[rgb(255,192,0)] p-2 rounded cursor-pointer flex items-center gap-2
+              className="w-full bg-[rgb(234,190,63)] p-2 rounded cursor-pointer flex items-center gap-2
                          text-left focus:outline-none focus:ring-2 focus:ring-yellow-500"
               onClick={() => setPrintRotOpen(!printRotOpen)}
               aria-expanded={printRotOpen}
@@ -270,7 +270,7 @@ export default function SettingsView(): JSX.Element {
           <div>
             <button
               type="button"
-              className="w-full bg-[rgb(255,192,0)] p-2 rounded cursor-pointer flex items-center gap-2
+              className="w-full bg-[rgb(234,190,63)] p-2 rounded cursor-pointer flex items-center gap-2
                          text-left focus:outline-none focus:ring-2 focus:ring-yellow-500"
               onClick={() => setLicenseOpen(!licenseOpen)}
               aria-expanded={licenseOpen}
@@ -304,7 +304,7 @@ export default function SettingsView(): JSX.Element {
           <div>
             <button
               type="button"
-              className="w-full bg-[rgb(255,192,0)] p-2 rounded cursor-pointer flex items-center gap-2
+              className="w-full bg-[rgb(234,190,63)] p-2 rounded cursor-pointer flex items-center gap-2
                          text-left focus:outline-none focus:ring-2 focus:ring-yellow-500"
               onClick={() => setStampDbOpen(!stampDbOpen)}
               aria-expanded={stampDbOpen}
@@ -338,7 +338,7 @@ export default function SettingsView(): JSX.Element {
           <div>
             <button
               type="button"
-              className="w-full bg-[rgb(255,192,0)] p-2 rounded cursor-pointer flex items-center gap-2
+              className="w-full bg-[rgb(234,190,63)] p-2 rounded cursor-pointer flex items-center gap-2
                          text-left focus:outline-none focus:ring-2 focus:ring-yellow-500"
               onClick={() => setFormatoEspOpen(!formatoEspOpen)}
               aria-expanded={formatoEspOpen}

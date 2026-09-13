@@ -58,11 +58,11 @@ export default function TariffTableContent({
     },
     [setQuantity]
   )
-
+// ─── fondo CABECERA ────────────────────────────────────────────────────────────────
   return (
     <div role="table" aria-label="Tabla de tarifas">
-      {/* ─── Header row ─── */}
-      <div className="grid grid-cols-[1.2fr_3fr_4fr_2fr_3fr_1.2fr] bg-[rgb(24,62,117)] border-b-2 border-blue-800">
+      {/* ─── Header row ─── CABECERA GRANATE: 172,48,44  AZUL:24,62,117  GRIS: 112,128,129  border-b-2 border-blue-800 */}
+      <div className="grid grid-cols-[1.2fr_3fr_4fr_2fr_3fr_1.2fr] bg-[rgb(112,128,129)] border-b-2 border-black">
         <div className="px-1 py-2 text-center text-xs font-bold text-white uppercase tracking-wide">
           Límite
         </div>
@@ -98,10 +98,10 @@ export default function TariffTableContent({
         const limitS1 = limits[row.limitFieldS1] ?? 0
         const limitS2 = limits[row.limitFieldS2] ?? 0
         const activePrice = showSecondary ? row.secondaryPrice : row.localPrice
-
-        const stripBg = row.isStrip ? 'bg-[rgb(255,203,48)] border-l-4 border-l-amber-500' : ''
+// ─── fondo TIRAS y TARIFAS ────────────────────────'border-b border-gray-200'────────────────────────────────────────
+        const stripBg = row.isStrip ? 'bg-[rgb(234,190,63)] border-l-4 border-l-amber-500' : ''
         const labelBg = row.label ? 'bg-[rgb(222,222,222)] border-l-4 border-l-amber-500' : ''
-        const rowBorder = idx < rows.length - 1 ? 'border-b border-gray-200' : ''
+        const rowBorder = idx < rows.length - 1 ? 'border-b-2 border-gray-100' : ''
 
         return (
           <div
@@ -112,7 +112,7 @@ export default function TariffTableContent({
           >
             {/* Límite Sello A */}
             <div
-              className="px-1 py-2 text-center text-sm font-bold text-[rgb(24,62,117)]"
+              className="px-1 py-2 text-center text-sm font-bold text-[rgba(224, 28, 178, 1)]"
               aria-label={`Límite ${row.label} Sello A: ${limitS1}`}
             >
               {limitS1}

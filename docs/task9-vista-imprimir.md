@@ -76,7 +76,7 @@ interface PerfilSectionProps {
 - **Select con 6 opciones** derivadas de `sello.nperfil1`..`sello.nperfil6`
 - **Fallback** a "Perfil N" si el nombre está vacío
 - **Validación**: solo acepta valores entre 1 y 6
-- **Header dorado** (`rgb(255,192,0)`) consistente con las otras secciones
+- **Header dorado** (`rgb(234,190,63)`) consistente con las otras secciones
 
 ### Mapeo con el legacy
 
