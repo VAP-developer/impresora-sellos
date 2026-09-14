@@ -3,6 +3,7 @@
  */
 
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface LicenseInfo {
   ok: boolean
@@ -14,10 +15,9 @@ interface LicenseInfo {
 }
 
 export function LicenseSection(): JSX.Element {
+  const { t } = useTranslation()
   const [status, setStatus] = useState<LicenseInfo | null>(null)
   const [machineId, setMachineId] = useState<string>('')
-  const [deactivating, setDeactivating] = useState(false)
-  const [deactivateResult, setDeactivateResult] = useState<string | null>(null)
 
   useEffect(() => {
     loadLicenseInfo()
@@ -32,30 +32,7 @@ export function LicenseSection(): JSX.Element {
       setStatus(licStatus)
       setMachineId(mId)
     } catch {
-      setStatus({ ok: false, error: 'Error al obtener estado de licencia' })
-    }
-  }
-
-  async function handleDeactivate(): Promise<void> {
-    if (!confirm('¿Estás seguro? Se liberará la licencia de este equipo y la app dejará de funcionar hasta que se reactive.')) {
-      return
-    }
-
-    setDeactivating(true)
-    setDeactivateResult(null)
-
-    try {
-      const result = await window.electronAPI.license.deactivate()
-      if (result.ok) {
-        setDeactivateResult('Equipo desactivado. Reinicia la app para aplicar.')
-        setStatus({ ok: false, error: 'Equipo desactivado' })
-      } else {
-        setDeactivateResult(result.error || 'Error al desactivar')
-      }
-    } catch {
-      setDeactivateResult('Error de conexión')
-    } finally {
-      setDeactivating(false)
+      setStatus({ ok: false, error: t('license.statusError') })
     }
   }
 
@@ -64,27 +41,27 @@ export function LicenseSection(): JSX.Element {
       {/* Info de la licencia */}
       <div className="grid grid-cols-2 gap-4 text-sm">
         <div>
-          <span className="font-semibold text-gray-700">Estado:</span>
+          <span className="font-semibold text-gray-700">{t('license.statusLabel')}</span>
           <span className={`ml-2 font-bold ${status?.ok ? 'text-green-600' : 'text-red-600'}`}>
-            {status?.ok ? 'Activa' : 'Inactiva'}
+            {status?.ok ? t('license.active') : t('license.inactive')}
           </span>
         </div>
         <div>
-          <span className="font-semibold text-gray-700">Tipo:</span>
+          <span className="font-semibold text-gray-700">{t('license.typeLabel')}</span>
           <span className="ml-2">
-            {status?.isAdmin ? 'Admin (sin límite)' : `Estándar`}
+            {status?.isAdmin ? t('license.typeAdmin') : t('license.typeStandard')}
           </span>
         </div>
         {!status?.isAdmin && (
           <div>
-            <span className="font-semibold text-gray-700">Dispositivos:</span>
+            <span className="font-semibold text-gray-700">{t('license.devicesLabel')}</span>
             <span className="ml-2">
               {status?.activeMachines ?? '?'} / {status?.maxMachines ?? '?'}
             </span>
           </div>
         )}
         <div>
-          <span className="font-semibold text-gray-700">ID de equipo:</span>
+          <span className="font-semibold text-gray-700">{t('license.machineIdLabel')}</span>
           <span className="ml-2 font-mono text-xs text-gray-500">
             {machineId ? machineId.substring(0, 16) + '...' : '—'}
           </span>

@@ -18,9 +18,11 @@
  */
 
 import { useCallback, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useConfigStore } from '@renderer/stores/config.store'
 import { useKioskoStore } from '@renderer/stores/kiosko.store'
 import { useImagesStore } from '@renderer/stores/images.store'
+import { useSettingsStore } from '@renderer/stores/settings.store'
 import { getCurrencySymbol, formatPrice } from '@renderer/lib/currencies'
 import * as ipc from '@renderer/lib/ipc-client'
 
@@ -46,6 +48,7 @@ export default function CartControls({
   onPrintError,
   onReset
 }: CartControlsProps): JSX.Element {
+  const { t } = useTranslation()
   const config = useConfigStore((state) => state.config)
   const quantities = useKioskoStore((state) => state.quantities)
   const lastSale = useKioskoStore((state) => state.lastSale)
@@ -67,6 +70,11 @@ export default function CartControls({
   const setPrintLogoPng = useImagesStore((state) => state.setPrintLogoPng)
   const useSecondaryPrice = useKioskoStore((state) => state.useSecondaryPrice)
   const activeTariffGroup = useKioskoStore((state) => state.activeTariffGroup)
+
+  // Formato de correo español (Settings). Determina la etiqueta del indicador:
+  //   desactivado -> "Formato SVVS"
+  //   activado     -> "Formato Actual"
+  const formatoCorreoEsp = useSettingsStore((state) => state.formatoCorreoEsp)
 
   const [printing, setPrinting] = useState(false)
 
@@ -108,8 +116,6 @@ export default function CartControls({
     if (!ticket) return 0
     return getRemainingTickets(ticket)
   }, [ticket, quantities, getRemainingTickets])
-
-  const usedTickets = useMemo(() => getUsedTickets(), [quantities, getUsedTickets])
 
   // Active print mode / profile name
   const profileName = useMemo(() => {
@@ -172,7 +178,7 @@ export default function CartControls({
 
         // Check if the sale failed
         if (saleResult && !saleResult.success) {
-          window.alert(saleResult.error || 'Error al procesar la venta')
+          window.alert(saleResult.error || t('kiosko.cart.saleError'))
           return
         }
 
@@ -183,7 +189,7 @@ export default function CartControls({
         onSuccess?.()
       } catch (err) {
         console.error('[CartControls] Error during print:', err)
-        window.alert('Error al procesar la impresión')
+        window.alert(t('kiosko.cart.printError'))
       } finally {
         setPrinting(false)
       }
@@ -227,7 +233,7 @@ export default function CartControls({
 
     // 1. Ask for confirmation
     const confirmed = window.confirm(
-      '¿Error de IMPRESIÓN? ¡Se procederá a ANULAR la VENTA ANTERIOR!'
+      t('kiosko.cart.confirmCancel')
     )
     if (!confirmed) {
       return
@@ -235,7 +241,7 @@ export default function CartControls({
 
     // 2. Check if there is a previous sale to revert
     if (lastSale.sellos1 <= 0 && lastSale.sellos2 <= 0) {
-      window.alert('¡¡NINGUNA venta encontrada!!')
+      window.alert(t('kiosko.cart.noSaleFound'))
       return
     }
 
@@ -262,7 +268,7 @@ export default function CartControls({
       onPrintError?.()
     } catch (err) {
       console.error('[CartControls] Error during print error reversal:', err)
-      window.alert('Error al anular la venta')
+      window.alert(t('kiosko.cart.cancelError'))
     } finally {
       setPrinting(false)
     }
@@ -272,7 +278,7 @@ export default function CartControls({
     <div
       className="flex flex-col items-center p-4"
       role="region"
-      aria-label="Controles de cesta"
+      aria-label={t('kiosko.cart.region')}
     >
       {/* Top row: Red cart | Budget/Total/Mode | Blue cart */}
       <div className="flex items-start justify-center">
@@ -284,7 +290,7 @@ export default function CartControls({
                        hover:opacity-80 transition-opacity
                        focus:outline-none focus:ring-2 focus:ring-red-500 rounded
                        disabled:opacity-50 disabled:cursor-not-allowed"
-            aria-label="Venta Oficina - código especial"
+            aria-label={t('kiosko.cart.officeSaleAria')}
             disabled={printing}
             onClick={handlePrintFilatelia}
           >
@@ -314,33 +320,33 @@ export default function CartControls({
           {printLogoPng ? (
             <>
               {/* Remaining budget */}
-              <p className="text-center text-gray-500 text-sm font-bold" aria-label="Presupuesto restante">
+              <p className="text-center text-gray-500 text-sm font-bold" aria-label={t('kiosko.cart.budgetRemaining')}>
                 {formatPrice(budgetRemaining, currencySymbol, symbolBefore)}
               </p>
 
               {/* Basket total */}
               <h2
                 className="text-center text-3xl font-bold"
-                aria-label="Total de la cesta"
+                aria-label={t('kiosko.cart.basketTotalAria')}
                 aria-live="polite"
               >
-                Cesta {formatPrice(total, currencySymbol, symbolBefore)}
+                {t('kiosko.cart.basket')} {formatPrice(total, currencySymbol, symbolBefore)}
               </h2>
             </>
           ) : (
             /* No-logo mode: show "Oficina" indicator instead of cart/total */
             <h2
               className="text-center text-2xl font-bold text-red-700"
-              aria-label="Modo Oficina activo"
+              aria-label={t('kiosko.cart.officeModeAria')}
               aria-live="polite"
             >
-              OFICINA
+              {t('kiosko.cart.office')}
             </h2>
           )}
 
           {/* Active profile/mode */}
           {profileName && (
-            <p className="text-center text-red-700 text-lg font-bold" aria-label="Modo de impresión activo">
+            <p className="text-center text-red-700 text-lg font-bold" aria-label={t('kiosko.cart.printModeAria')}>
               {profileName}
             </p>
           )}
@@ -355,7 +361,7 @@ export default function CartControls({
                        hover:opacity-80 transition-opacity
                        focus:outline-none focus:ring-2 focus:ring-[rgb(24,62,117)] rounded
                        disabled:opacity-50 disabled:cursor-not-allowed"
-            aria-label="Imprimir normal - confirmar venta"
+            aria-label={t('kiosko.cart.printNormalAria')}
             disabled={printing}
             onClick={handlePrintNormal}
           >
@@ -383,21 +389,26 @@ export default function CartControls({
               checked={printLogoPng}
               onChange={(e) => setPrintLogoPng(e.target.checked)}
               className="w-4 h-4 cursor-pointer"
-              aria-label="Imprimir logo PNG a la derecha"
+              aria-label={t('kiosko.cart.printLogoAria')}
             />
-            <span className="text-gray-700 font-medium">FERIA/LOGO</span>
+            <span className="text-gray-700 font-medium">{t('kiosko.cart.feriaLogo')}</span>
           </label>
         </div>
       </div>
 
-      {/* Reset button: centered below the basket */}
+      {/* Tickets info: below the basket (sin "utilizados") */}
+      <p className="mt-2 text-sm text-[rgb(24,62,117)] text-center">
+        {t('kiosko.cart.tickets')} <span className="font-bold">{remainingTickets}</span>
+      </p>
+
+      {/* Reset button: rectangular con esquinas muy redondeadas */}
       <button
         type="button"
-        className="mt-3 px-4 py-1.5 bg-gray-200 hover:bg-gray-300 rounded
-                   flex items-center justify-center gap-1 cursor-pointer
+        className="mt-3 px-5 py-2 bg-gray-200 hover:bg-gray-300 rounded-2xl
+                   flex items-center justify-center gap-2 cursor-pointer
                    transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400
-                   text-sm font-medium text-red-600"
-        aria-label="Reset - limpiar cantidades"
+                   text-sm text-gray-800"
+        aria-label={t('kiosko.cart.resetAria')}
         onClick={() => {
           reset()
           onReset?.()
@@ -407,8 +418,8 @@ export default function CartControls({
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="currentColor"
-          strokeWidth={2}
+          stroke="rgb(200,30,30)"
+          strokeWidth={2.5}
           strokeLinecap="round"
           strokeLinejoin="round"
           className="w-4 h-4"
@@ -417,13 +428,12 @@ export default function CartControls({
           <line x1="18" y1="6" x2="6" y2="18" />
           <line x1="6" y1="6" x2="18" y2="18" />
         </svg>
-        Reset
+        <span className="font-bold">{t('kiosko.cart.resetBasket')}</span>
       </button>
 
-      {/* Tickets info: below the reset button */}
-      <p className="mt-1 text-xs text-[rgb(24,62,117)] text-center">
-        Tickets: <span className="font-bold">{remainingTickets}</span>
-        <span className="text-gray-500"> (Utilizados: {usedTickets})</span>
+      {/* Indicador de formato de impresión activo */}
+      <p className="mt-3 text-sm font-semibold text-gray-700 text-center" aria-live="polite">
+        {formatoCorreoEsp ? t('kiosko.cart.formatPG') : t('kiosko.cart.formatSVVS')}
       </p>
     </div>
   )

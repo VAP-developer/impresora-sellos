@@ -13,6 +13,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation, Trans } from 'react-i18next'
 import type { EventoRow, EventoInput, TariffGroup } from '@renderer/lib/ipc-client'
 import {
   getEventoYears,
@@ -75,6 +76,7 @@ function getCurrencySymbol(code: string): string {
 export default function EventoEditor({
   onEventosChanged
 }: EventoEditorProps): JSX.Element {
+  const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
   const { config } = useConfigStore()
 
@@ -332,7 +334,7 @@ export default function EventoEditor({
   const handleSave = async (): Promise<void> => {
     // Validate tariff group selection
     if (!selectedTariffGroupId) {
-      setTariffGroupError('Debe seleccionar un grupo de tarifas')
+      setTariffGroupError(t('events.editor.tariffGroupRequired'))
       return
     }
 
@@ -351,10 +353,10 @@ export default function EventoEditor({
 
       if (mode === 'creating') {
         await createEvento(formWithGroup)
-        setMessage({ type: 'success', text: 'Evento creado correctamente' })
+        setMessage({ type: 'success', text: t('events.editor.created') })
       } else if (mode === 'editing' && editingId !== null) {
         await updateEvento(editingId, formWithGroup)
-        setMessage({ type: 'success', text: 'Evento actualizado correctamente' })
+        setMessage({ type: 'success', text: t('events.editor.updated') })
       }
       setMode('idle')
       setEditingId(null)
@@ -362,7 +364,7 @@ export default function EventoEditor({
       await loadEventos()
       onEventosChanged?.()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Error al guardar'
+      const msg = err instanceof Error ? err.message : t('events.editor.saveErrorDefault')
       setMessage({ type: 'error', text: msg })
     } finally {
       setSaving(false)
@@ -371,20 +373,20 @@ export default function EventoEditor({
 
   const handleDelete = async (): Promise<void> => {
     if (editingId === null) return
-    if (!confirm('¿Está seguro de que desea eliminar este evento?')) return
+    if (!confirm(t('events.editor.confirmDelete'))) return
 
     setSaving(true)
     setMessage(null)
     try {
       await deleteEvento(editingId)
-      setMessage({ type: 'success', text: 'Evento eliminado' })
+      setMessage({ type: 'success', text: t('events.editor.deleted') })
       setMode('idle')
       setEditingId(null)
       await loadYears()
       await loadEventos()
       onEventosChanged?.()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Error al eliminar'
+      const msg = err instanceof Error ? err.message : t('events.editor.deleteErrorDefault')
       setMessage({ type: 'error', text: msg })
     } finally {
       setSaving(false)
@@ -414,7 +416,7 @@ export default function EventoEditor({
           id="evento-editor-heading"
           className="text-black text-lg font-bold cursor-pointer"
         >
-          EDITAR EVENTOS
+          {t('events.editor.title')}
         </label>
       </div>
 
@@ -429,7 +431,7 @@ export default function EventoEditor({
           <div className="flex items-end gap-4 mb-4 flex-wrap">
             <div>
               <label htmlFor="editor-year-select" className="block text-sm font-bold text-gray-700 mb-1">
-                Año
+                {t('events.editor.year')}
               </label>
               <select
                 id="editor-year-select"
@@ -445,7 +447,7 @@ export default function EventoEditor({
             <div className="flex items-end gap-2">
               <div>
                 <label htmlFor="editor-new-year" className="block text-sm text-gray-600 mb-1">
-                  Añadir año
+                  {t('events.editor.addYear')}
                 </label>
                 <input
                   id="editor-new-year"
@@ -474,19 +476,19 @@ export default function EventoEditor({
             <div className="mb-4">
               <div className="flex items-center gap-4 mb-2">
                 <h4 className="font-bold text-gray-700">
-                  Eventos de {selectedYear} ({eventosForYear.length})
+                  {t('events.editor.eventsOfYear', { year: selectedYear, count: eventosForYear.length })}
                 </h4>
                 <button
                   type="button"
                   onClick={handleStartCreate}
                   className="bg-green-600 hover:bg-green-700 text-white font-bold py-1 px-3 rounded text-sm"
                 >
-                  + Crear nuevo
+                  {t('events.editor.createNew')}
                 </button>
               </div>
 
               {eventosForYear.length === 0 ? (
-                <p className="text-gray-400 italic">No hay eventos para este año.</p>
+                <p className="text-gray-400 italic">{t('events.editor.noEventsForYear')}</p>
               ) : (
                 <div className="grid gap-2">
                   {eventosForYear.map((ev) => (
@@ -496,7 +498,7 @@ export default function EventoEditor({
                       onClick={() => handleSelectEvento(ev)}
                       className="text-left w-full border border-gray-200 rounded p-3 hover:bg-blue-50 hover:border-blue-300 transition-colors"
                     >
-                      <span className="font-bold text-blue-700">{ev.nevento || '(sin nombre)'}</span>
+                      <span className="font-bold text-blue-700">{ev.nevento || t('events.editor.unnamed')}</span>
                       {(ev.codigo_feria_1 || ev.codigo_feria_2) && (
                         <span className="ml-2 text-xs font-mono bg-gray-100 px-1 rounded">{ev.codigo_feria_1}-{formatMes(config?.codigo.mes ?? 0)}{ev.codigo_feria_2}</span>
                       )}
@@ -521,7 +523,7 @@ export default function EventoEditor({
           {(mode === 'creating' || mode === 'editing') && (
             <div className="border border-gray-300 rounded p-4 bg-gray-50">
               <h4 className="font-bold text-lg mb-4">
-                {mode === 'creating' ? 'Crear nuevo evento' : 'Editar evento'}
+                {mode === 'creating' ? t('events.editor.createTitle') : t('events.editor.editTitle')}
               </h4>
 
               <div className="flex gap-6">
@@ -532,7 +534,7 @@ export default function EventoEditor({
                     <div className="flex gap-3">
                       <div className="flex-1">
                         <label htmlFor="ev-codigo-feria-1" className="block text-sm text-gray-600">
-                          Código Feria (max 4 chars)
+                          {t('events.editor.codigoFeria')}
                         </label>
                         <input
                           id="ev-codigo-feria-1"
@@ -546,7 +548,7 @@ export default function EventoEditor({
                       </div>
                       <div className="flex-1">
                         <label htmlFor="ev-codigo-feria-2" className="block text-sm text-gray-600">
-                          Código País (max 2 chars)
+                          {t('events.editor.codigoPais')}
                         </label>
                         <input
                           id="ev-codigo-feria-2"
@@ -563,16 +565,18 @@ export default function EventoEditor({
                     {/* Vista previa del código con mes */}
                     {(form.codigo_feria_1 || form.codigo_feria_2) && (
                       <div className="text-xs text-gray-500">
-                        <span>Vista previa (en sello): </span>
+                        <span>{t('events.editor.preview')}</span>
                         <span className="font-mono font-bold">{form.codigo_feria_1}-{formatMes(config?.codigo.mes ?? 0)}{form.codigo_feria_2}</span>
-                        <span className="ml-2 text-gray-400">Ej: PM26-<em>m</em>ES → la <em>m</em> es el mes de pestaña Máquina</span>
+                        <span className="ml-2 text-gray-400">
+                          <Trans i18nKey="events.editor.previewExample" components={{ em: <em /> }} />
+                        </span>
                       </div>
                     )}
 
                     {/* Nombre evento */}
                     <div>
                       <label htmlFor="ev-nevento" className="block text-sm text-gray-600">
-                        Nombre del evento
+                        {t('events.editor.eventName')}
                       </label>
                       <input
                         id="ev-nevento"
@@ -580,14 +584,14 @@ export default function EventoEditor({
                         value={form.nevento}
                         onChange={(e) => handleFieldChange('nevento', e.target.value)}
                         className="w-full border border-gray-300 rounded p-2 text-red-600 font-bold"
-                        placeholder="Ej: Feria Madrid 2026"
+                        placeholder={t('events.editor.eventNamePlaceholder')}
                       />
                     </div>
 
                     {/* Feria ticket */}
                     <div>
                       <label htmlFor="ev-nferia" className="block text-sm text-gray-600">
-                        Feria (para ticket)
+                        {t('events.editor.feriaTicket')}
                       </label>
                       <input
                         id="ev-nferia"
@@ -595,14 +599,14 @@ export default function EventoEditor({
                         value={form.nferia}
                         onChange={(e) => handleFieldChange('nferia', e.target.value)}
                         className="w-full border border-gray-300 rounded p-2"
-                        placeholder="Ej: L Feria Nacional del Sello"
+                        placeholder={t('events.editor.feriaTicketPlaceholder')}
                       />
                     </div>
 
                     {/* Lugar ticket */}
                     <div>
                       <label htmlFor="ev-nlugar" className="block text-sm text-gray-600">
-                        Lugar (para ticket)
+                        {t('events.editor.lugarTicket')}
                       </label>
                       <input
                         id="ev-nlugar"
@@ -610,14 +614,14 @@ export default function EventoEditor({
                         value={form.nlugar}
                         onChange={(e) => handleFieldChange('nlugar', e.target.value)}
                         className="w-full border border-gray-300 rounded p-2"
-                        placeholder="Ej: Plaza Mayor - Madrid"
+                        placeholder={t('events.editor.lugarTicketPlaceholder')}
                       />
                     </div>
 
                     {/* Fecha etiqueta */}
                     <div>
                       <label htmlFor="ev-fecha" className="block text-sm text-gray-600">
-                        Fechas (para etiqueta)
+                        {t('events.editor.datesLabel')}
                       </label>
                       <input
                         id="ev-fecha"
@@ -625,14 +629,14 @@ export default function EventoEditor({
                         value={form.fecha}
                         onChange={(e) => handleFieldChange('fecha', e.target.value)}
                         className="w-full border border-gray-300 rounded p-2"
-                        placeholder="Ej: 21-24 abril 2026"
+                        placeholder={t('events.editor.datesPlaceholder')}
                       />
                     </div>
 
                     {/* Localidad etiqueta */}
                     <div>
                       <label htmlFor="ev-localidad" className="block text-sm text-gray-600">
-                        Localidad (para etiqueta)
+                        {t('events.editor.localityLabel')}
                       </label>
                       <input
                         id="ev-localidad"
@@ -640,14 +644,14 @@ export default function EventoEditor({
                         value={form.localidad}
                         onChange={(e) => handleFieldChange('localidad', e.target.value)}
                         className="w-full border border-gray-300 rounded p-2"
-                        placeholder="Ej: Madrid"
+                        placeholder={t('events.editor.localityPlaceholder')}
                       />
                     </div>
 
                     {/* Tariff group selector */}
                     <div>
                       <label htmlFor="ev-tariff-group" className="block text-sm text-gray-600">
-                        Grupo de tarifas <span className="text-red-500">*</span>
+                        {t('events.editor.tariffGroup')} <span className="text-red-500">*</span>
                       </label>
                       <select
                         id="ev-tariff-group"
@@ -656,10 +660,10 @@ export default function EventoEditor({
                         className={`w-full border rounded p-2 ${
                           tariffGroupError ? 'border-red-500' : 'border-gray-300'
                         }`}
-                        aria-label="Seleccionar grupo de tarifas"
+                        aria-label={t('events.editor.selectTariffGroupAria')}
                         aria-required="true"
                       >
-                        <option value="">-- Seleccionar grupo de tarifas --</option>
+                        <option value="">{t('events.editor.selectTariffGroup')}</option>
                         {tariffGroups.map((group) => (
                           <option key={group.id} value={group.id}>
                             {formatTariffGroupLabel(group)}
@@ -675,7 +679,7 @@ export default function EventoEditor({
                     <div className="flex gap-4 flex-wrap">
                       <div className="flex-1 min-w-[150px]">
                         <label htmlFor="ev-motivoi" className="block text-sm text-gray-600">
-                          Motivo izquierda
+                          {t('events.editor.motivoLeft')}
                         </label>
                         <input
                           id="ev-motivoi"
@@ -686,13 +690,13 @@ export default function EventoEditor({
                         />
                         <div className="w-full h-[100px] border border-gray-200 rounded overflow-hidden bg-white">
                           {motivoiUrl ? (
-                            <img src={motivoiUrl} alt="Motivo izquierda" className="w-full h-full object-cover" />
+                            <img src={motivoiUrl} alt={t('events.editor.motivoLeft')} className="w-full h-full object-cover" />
                           ) : (
-                            <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">Sin imagen</div>
+                            <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">{t('events.editor.noImage')}</div>
                           )}
                         </div>
                         <label htmlFor="ev-layout-modelo1" className="block text-xs text-gray-500 mt-2">
-                          Plantilla
+                          {t('events.editor.template')}
                         </label>
                         <select
                           id="ev-layout-modelo1"
@@ -700,16 +704,16 @@ export default function EventoEditor({
                           onChange={(e) => handleFieldChange('layout_modelo1', e.target.value)}
                           className="w-full border border-gray-300 rounded p-1 text-sm"
                         >
-                          <option value="derecha">Imagen derecha</option>
-                          <option value="izquierda">Imagen izquierda</option>
-                          <option value="inferior">Imagen inferior</option>
-                          <option value="superior">Imagen superior</option>
+                          <option value="derecha">{t('events.editor.layoutRight')}</option>
+                          <option value="izquierda">{t('events.editor.layoutLeft')}</option>
+                          <option value="inferior">{t('events.editor.layoutBottom')}</option>
+                          <option value="superior">{t('events.editor.layoutTop')}</option>
                         </select>
                       </div>
 
                       <div className="flex-1 min-w-[150px]">
                         <label htmlFor="ev-motivod" className="block text-sm text-gray-600">
-                          Motivo derecha
+                          {t('events.editor.motivoRight')}
                         </label>
                         <input
                           id="ev-motivod"
@@ -720,13 +724,13 @@ export default function EventoEditor({
                         />
                         <div className="w-full h-[100px] border border-gray-200 rounded overflow-hidden bg-white">
                           {motivodUrl ? (
-                            <img src={motivodUrl} alt="Motivo derecha" className="w-full h-full object-cover" />
+                            <img src={motivodUrl} alt={t('events.editor.motivoRight')} className="w-full h-full object-cover" />
                           ) : (
-                            <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">Sin imagen</div>
+                            <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">{t('events.editor.noImage')}</div>
                           )}
                         </div>
                         <label htmlFor="ev-layout-modelo2" className="block text-xs text-gray-500 mt-2">
-                          Plantilla
+                          {t('events.editor.template')}
                         </label>
                         <select
                           id="ev-layout-modelo2"
@@ -734,10 +738,10 @@ export default function EventoEditor({
                           onChange={(e) => handleFieldChange('layout_modelo2', e.target.value)}
                           className="w-full border border-gray-300 rounded p-1 text-sm"
                         >
-                          <option value="derecha">Imagen derecha</option>
-                          <option value="izquierda">Imagen izquierda</option>
-                          <option value="inferior">Imagen inferior</option>
-                          <option value="superior">Imagen superior</option>
+                          <option value="derecha">{t('events.editor.layoutRight')}</option>
+                          <option value="izquierda">{t('events.editor.layoutLeft')}</option>
+                          <option value="inferior">{t('events.editor.layoutBottom')}</option>
+                          <option value="superior">{t('events.editor.layoutTop')}</option>
                         </select>
                       </div>
                     </div>
@@ -746,11 +750,11 @@ export default function EventoEditor({
 
                 {/* Right column: Tariff selection */}
                 <div className="flex-1 min-w-[300px] border-l border-gray-300 pl-6">
-                  <h5 className="font-bold text-gray-700 mb-3">Selección de Tarifas</h5>
+                  <h5 className="font-bold text-gray-700 mb-3">{t('events.editor.tariffSelection')}</h5>
                   
                   {!selectedTariffGroup && (
                     <p className="text-gray-400 italic text-sm">
-                      Selecciona un grupo de tarifas para ver las opciones disponibles
+                      {t('events.editor.selectGroupToSee')}
                     </p>
                   )}
 
@@ -764,21 +768,21 @@ export default function EventoEditor({
                       <div className="mb-4">
                         <div className="flex items-center gap-2 mb-2 flex-wrap">
                           <h6 className="font-semibold text-sm text-gray-700">
-                            Tarifas Individuales
+                            {t('events.editor.individualTariffs')}
                           </h6>
                           <button
                             type="button"
                             onClick={handleSelectAllTariffs}
                             className="text-xs text-blue-600 hover:underline"
                           >
-                            Seleccionar todas
+                            {t('events.editor.selectAll')}
                           </button>
                           <button
                             type="button"
                             onClick={handleClearTariffs}
                             className="text-xs text-gray-500 hover:underline"
                           >
-                            Ninguna
+                            {t('events.editor.none')}
                           </button>
                         </div>
                         <div className="space-y-1 max-h-[300px] overflow-y-auto">
@@ -811,8 +815,7 @@ export default function EventoEditor({
                           ))}
                         </div>
                         <p className="text-xs text-gray-500 mt-1">
-                          Seleccionadas: {selectedTariffIds.length} de{' '}
-                          {selectedTariffGroup.tariffs.length}
+                          {t('events.editor.selectedCount', { selected: selectedTariffIds.length, total: selectedTariffGroup.tariffs.length })}
                         </p>
                       </div>
 
@@ -820,20 +823,20 @@ export default function EventoEditor({
                       {selectedTariffGroup.strips.length > 0 && (
                         <div>
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
-                            <h6 className="font-semibold text-sm text-gray-700">Tiras</h6>
+                            <h6 className="font-semibold text-sm text-gray-700">{t('events.editor.strips')}</h6>
                             <button
                               type="button"
                               onClick={handleSelectAllStrips}
                               className="text-xs text-blue-600 hover:underline"
                             >
-                              Seleccionar todas
+                              {t('events.editor.selectAll')}
                             </button>
                             <button
                               type="button"
                               onClick={handleClearStrips}
                               className="text-xs text-gray-500 hover:underline"
                             >
-                              Ninguna
+                              {t('events.editor.none')}
                             </button>
                           </div>
                           <div className="space-y-1 max-h-[300px] overflow-y-auto">
@@ -861,8 +864,7 @@ export default function EventoEditor({
                             ))}
                           </div>
                           <p className="text-xs text-gray-500 mt-1">
-                            Seleccionadas: {selectedStripIds.length} de{' '}
-                            {selectedTariffGroup.strips.length}
+                            {t('events.editor.selectedCount', { selected: selectedStripIds.length, total: selectedTariffGroup.strips.length })}
                           </p>
                         </div>
                       )}
@@ -879,7 +881,7 @@ export default function EventoEditor({
                   disabled={saving || !form.nevento.trim()}
                   className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-bold py-2 px-4 rounded"
                 >
-                  {saving ? 'Guardando...' : mode === 'creating' ? 'Crear evento' : 'Guardar cambios'}
+                  {saving ? t('events.saving') : mode === 'creating' ? t('events.editor.createEvent') : t('events.editor.saveChanges')}
                 </button>
                 {mode === 'editing' && (
                   <button
@@ -888,7 +890,7 @@ export default function EventoEditor({
                     disabled={saving}
                     className="bg-red-600 hover:bg-red-700 disabled:bg-red-300 text-white font-bold py-2 px-4 rounded"
                   >
-                    Eliminar
+                    {t('events.editor.delete')}
                   </button>
                 )}
                 <button
@@ -897,7 +899,7 @@ export default function EventoEditor({
                   disabled={saving}
                   className="bg-gray-300 hover:bg-gray-400 text-black font-bold py-2 px-4 rounded"
                 >
-                  Cancelar
+                  {t('events.editor.cancel')}
                 </button>
               </div>
             </div>

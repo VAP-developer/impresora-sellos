@@ -6,9 +6,11 @@
  * to support special printers that print labels upside down.
  */
 
+import { useTranslation } from 'react-i18next'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 
 export function PrintRotationSection(): JSX.Element {
+  const { t } = useTranslation()
   const { printRotation180, setPrintRotation } = useSettingsStore()
 
   async function handleToggle(): Promise<void> {
@@ -35,7 +37,7 @@ export function PrintRotationSection(): JSX.Element {
           htmlFor="print-rotation-checkbox"
           className="text-sm font-medium text-gray-700 cursor-pointer select-none"
         >
-          Activar rotación 180°
+          {t('printRotation.enable')}
         </label>
       </div>
 
@@ -43,8 +45,7 @@ export function PrintRotationSection(): JSX.Element {
         id="print-rotation-description"
         className="text-xs text-gray-500 ml-8"
       >
-        Rota la impresión del sello (texto y logo) 180° para impresoras que imprimen las etiquetas
-        al revés.
+        {t('printRotation.description')}
       </p>
     </div>
   )

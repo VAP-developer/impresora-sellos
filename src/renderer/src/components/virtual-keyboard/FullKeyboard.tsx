@@ -92,7 +92,7 @@ export function FullKeyboard({ language }: FullKeyboardProps): React.JSX.Element
   return (
     <div
       data-virtual-keyboard="true"
-      className="fixed bottom-0 left-0 right-0 z-50 h-[280px] bg-gray-100 border-t border-gray-300 shadow-lg p-2"
+      className="fixed bottom-0 left-0 right-0 z-50 h-[340px] bg-gray-100 border-t border-gray-300 shadow-lg p-2"
       role="group"
       aria-label={t('keyboard.fullKeyboard')}
     >
@@ -123,18 +123,21 @@ export function FullKeyboard({ language }: FullKeyboardProps): React.JSX.Element
                 <button
                   key={keyId}
                   className={cn(
-                    'min-h-[40px] min-w-[40px] rounded-md font-semibold text-sm',
-                    'border border-gray-300 shadow-sm',
+                    // Teclas grandes con relieve tipo botón físico (misma
+                    // mejora de accesibilidad que el teclado del Kiosko),
+                    // adaptadas al teclado QWERTY completo.
+                    'min-h-[52px] min-w-[40px] rounded-lg font-bold text-2xl',
+                    'border border-gray-400',
                     'select-none cursor-pointer',
-                    'transition-all duration-100',
+                    'transition-all duration-75',
                     'flex items-center justify-center',
-                    isPressed && 'scale-95 bg-blue-200',
-                    !isPressed &&
-                      (keyDef.type === 'action'
+                    isPressed
+                      ? 'translate-y-[3px] shadow-none bg-blue-200 border-blue-400'
+                      : keyDef.type === 'action'
                         ? keyDef.key === 'shift' && shiftActive
-                          ? 'bg-blue-300 hover:bg-blue-400 text-blue-900'
-                          : 'bg-gray-300 hover:bg-gray-400 text-gray-700'
-                        : 'bg-white hover:bg-gray-50 text-gray-900')
+                          ? 'bg-gradient-to-b from-blue-200 to-blue-400 text-blue-900 shadow-[0_4px_0_0_rgb(59,130,246)]'
+                          : 'bg-gradient-to-b from-gray-200 to-gray-400 text-gray-800 shadow-[0_4px_0_0_rgb(120,120,120)] hover:from-gray-300 hover:to-gray-400'
+                        : 'bg-gradient-to-b from-white to-gray-300 text-gray-900 shadow-[0_4px_0_0_rgb(160,160,160)] hover:from-gray-50 hover:to-gray-300'
                   )}
                   style={{ flex: keyDef.width ? `${keyDef.width}` : '1' }}
                   onMouseDown={(e) => {

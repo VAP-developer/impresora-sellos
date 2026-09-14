@@ -11,6 +11,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { TicketConfig } from '@renderer/types/config'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -34,6 +35,7 @@ export default function TirasSection({
   nombreModelo2,
   onChange
 }: TirasSectionProps): JSX.Element {
+  const { t } = useTranslation()
   const [collapsed, setCollapsed] = useState(true)
 
   // Local form state derived from props
@@ -127,7 +129,7 @@ export default function TirasSection({
           aria-hidden="true"
         />
         <h3 className="text-base font-bold m-0">
-          TIRAS ESPECIALES
+          {t('machine.tiras.title')}
         </h3>
       </button>
 
@@ -137,20 +139,20 @@ export default function TirasSection({
           id="tiras-section-content"
           className="border border-gray-200 rounded-b p-4 bg-white"
           role="region"
-          aria-label="Campos de configuración de tiras especiales"
+          aria-label={t('machine.tiras.region')}
         >
           <div className="flex gap-8">
             {/* ─── Left column: Prices ──────────────────────────────────────── */}
             <div className="flex-1 flex flex-col gap-2">
               <div className="bg-gray-100 p-2 rounded shadow-sm">
                 <h4 className="text-sm font-bold m-0">
-                  (NO dejar en blanco) IMPORTE € DE VENTA para:
+                  {t('machine.tiras.priceHeader')}
                 </h4>
               </div>
 
               <div className="flex flex-col gap-1">
                 <label htmlFor="tiras-t1especial" className="text-xs text-gray-600">
-                  1 TIRA ESPECIAL (0 = ANULA LA TIRA)
+                  {t('machine.tiras.strip1')}
                 </label>
                 <input
                   id="tiras-t1especial"
@@ -165,7 +167,7 @@ export default function TirasSection({
 
               <div className="flex flex-col gap-1">
                 <label htmlFor="tiras-t2especial" className="text-xs text-gray-600">
-                  2 TIRAS ESPECIALES (0 = ANULA LA TIRA)
+                  {t('machine.tiras.strip2')}
                 </label>
                 <input
                   id="tiras-t2especial"
@@ -180,7 +182,7 @@ export default function TirasSection({
 
               <div className="flex flex-col gap-1">
                 <label htmlFor="tiras-t3especial" className="text-xs text-gray-600">
-                  3 TIRAS ESPECIALES (0 = ANULA LA TIRA)
+                  {t('machine.tiras.strip3')}
                 </label>
                 <input
                   id="tiras-t3especial"
@@ -197,12 +199,12 @@ export default function TirasSection({
             {/* ─── Right column: Enable/Disable per model ──────────────────── */}
             <div className="flex-1 flex flex-col gap-2">
               <div className="bg-gray-100 p-2 rounded shadow-sm">
-                <h4 className="text-sm font-bold m-0">IMPRIMIR TIRA ESPECIAL S/N</h4>
+                <h4 className="text-sm font-bold m-0">{t('machine.tiras.printStrip')}</h4>
               </div>
 
               <div className="flex flex-col gap-1">
                 <label htmlFor="tiras-temod1" className="text-xs text-gray-600">
-                  {nombreModelo1 || 'Modelo 1'}
+                  {nombreModelo1 || t('machine.tiras.model1')}
                 </label>
                 <input
                   id="tiras-temod1"
@@ -214,13 +216,13 @@ export default function TirasSection({
                   aria-describedby="tiras-temod1-desc"
                 />
                 <span id="tiras-temod1-desc" className="sr-only">
-                  Introduce S para activar o N para desactivar tiras especiales en modelo 1
+                  {t('machine.tiras.temod1Desc')}
                 </span>
               </div>
 
               <div className="flex flex-col gap-1">
                 <label htmlFor="tiras-temod2" className="text-xs text-gray-600">
-                  {nombreModelo2 || 'Modelo 2'}
+                  {nombreModelo2 || t('machine.tiras.model2')}
                 </label>
                 <input
                   id="tiras-temod2"
@@ -232,7 +234,7 @@ export default function TirasSection({
                   aria-describedby="tiras-temod2-desc"
                 />
                 <span id="tiras-temod2-desc" className="sr-only">
-                  Introduce S para activar o N para desactivar tiras especiales en modelo 2
+                  {t('machine.tiras.temod2Desc')}
                 </span>
               </div>
             </div>

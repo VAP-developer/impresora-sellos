@@ -6,10 +6,12 @@
  */
 
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import PrinterControls from './PrinterControls'
 import PrinterSelector from '@renderer/components/kiosko/PrinterSelector'
 
 export default function PrinterSection(): JSX.Element {
+  const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
 
   return (
@@ -30,7 +32,7 @@ export default function PrinterSection(): JSX.Element {
           id="printer-section-heading"
           className="text-black text-lg font-bold cursor-pointer"
         >
-          IMPRESORAS
+          {t('settings.sectionPrinters')}
         </label>
       </div>
 

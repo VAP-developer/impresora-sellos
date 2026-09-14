@@ -31,11 +31,11 @@ export default function InformesView(): JSX.Element {
       }
     } catch (err) {
       console.error('[InformesView] Error exporting CSV:', err)
-      setExportError('Error al exportar. Inténtelo de nuevo.')
+      setExportError(t('reports.exportError'))
     } finally {
       setExporting(false)
     }
-  }, [])
+  }, [t])
 
   return (
     <div className="flex flex-col items-center justify-center min-h-full px-4 py-8 gap-8">
@@ -44,13 +44,13 @@ export default function InformesView(): JSX.Element {
       {/* Export CSV button */}
       <button
         className="flex flex-col justify-center items-center cursor-pointer bg-white border-2 border-gray-300 p-8 rounded-lg hover:bg-gray-50 hover:border-[#212F5D] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-        aria-label="Exportar informe CSV"
+        aria-label={t('reports.exportCsvAria')}
         onClick={handleExportCSV}
         disabled={exporting}
       >
         <ExportIcon />
         <span className="text-lg text-gray-700 mt-4 font-bold">
-          {exporting ? 'EXPORTANDO...' : 'EXPORTAR CSV'}
+          {exporting ? t('reports.exporting') : t('reports.exportCsv')}
         </span>
       </button>
 
@@ -62,7 +62,7 @@ export default function InformesView(): JSX.Element {
       )}
 
       <p className="text-gray-600 text-center max-w-md">
-        Exporta todos los registros de órdenes en formato CSV para su análisis en hojas de cálculo.
+        {t('reports.description')}
       </p>
     </div>
   )

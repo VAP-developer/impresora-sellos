@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { TicketConfig } from '@renderer/types/config'
 import type { OrderLine } from '@renderer/types/order'
 import { getImageByName } from '@renderer/lib/ipc-client'
@@ -71,6 +72,7 @@ export default function RollosSection({
   onChange,
   onInsertOrder
 }: RollosSectionProps): JSX.Element {
+  const { t } = useTranslation()
   // ─── Local state ──────────────────────────────────────────────────────────
 
   // Ticket counter
@@ -137,7 +139,6 @@ export default function RollosSection({
 
   const isRollo1Installed = rollo1 !== -1
   const isRollo2Installed = rollo2 !== -1
-  const isBlocked = isRollo1Installed || isRollo2Installed
 
   // ─── Propagation helpers ──────────────────────────────────────────────────
 
@@ -270,7 +271,7 @@ export default function RollosSection({
           tabIndex={-1}
           aria-hidden="true"
         />
-        <h3 className="text-base font-bold m-0">ROLLOS ETIQUETAS EN MÁQUINA</h3>
+        <h3 className="text-base font-bold m-0">{t('machine.rollos.title')}</h3>
       </button>
 
       {!collapsed && (
@@ -278,11 +279,11 @@ export default function RollosSection({
       {/* ─── Tickets counter ──────────────────────────────────────────────── */}
       <div className="flex flex-col items-center">
         <div className="bg-gray-100 p-2 rounded shadow-sm">
-          <h4 className="text-sm font-bold m-0">Máximo Nº de Tickets</h4>
+          <h4 className="text-sm font-bold m-0">{t('machine.rollos.maxTickets')}</h4>
         </div>
         <div className="flex flex-col gap-1 mt-2">
           <label htmlFor="rollos-limiteTickets" className="text-xs text-gray-600">
-            Cantidad por Rollo
+            {t('machine.rollos.quantityPerRoll')}
           </label>
           <input
             id="rollos-limiteTickets"
@@ -295,7 +296,7 @@ export default function RollosSection({
         </div>
         <div className="bg-[rgb(51,102,153)] rounded p-4 mt-2 flex flex-col items-center">
           <label htmlFor="rollos-tickets" className="text-xs text-white">
-            Rollo Tickets
+            {t('machine.rollos.ticketRoll')}
           </label>
           <input
             id="rollos-tickets"
@@ -309,19 +310,19 @@ export default function RollosSection({
             className="mt-2 bg-white text-black px-3 py-1 rounded text-sm hover:bg-gray-100"
             onClick={handleResetTickets}
           >
-            Reset
+            {t('machine.rollos.updateQuantity')}
           </button>
         </div>
       </div>
 
-      <div className="flex justify-center gap-8 mt-4">
+      <div className="flex justify-between gap-8 mt-4">
         {/* ── Rollo 1 ─────────────────────────────────────────────────────── */}
-        <div className="flex flex-col items-center">
+        <div className="flex flex-1 flex-col items-center">
           {isRollo1Installed && (
             <div>
               <div className="bg-gray-100 p-2 rounded shadow-sm mt-2">
                 <h4 className="text-sm font-bold m-0">
-                  Motivo {nombreModelo1 || 'Modelo 1'}
+                  {t('machine.rollos.reason', { model: nombreModelo1 || t('machine.rollos.model1') })}
                 </h4>
               </div>
               {/* Visual reference image */}
@@ -329,18 +330,18 @@ export default function RollosSection({
                 {imageUrl1 ? (
                   <img
                     src={imageUrl1}
-                    alt={nombreModelo1 || 'Modelo 1'}
+                    alt={nombreModelo1 || t('machine.rollos.model1')}
                     className="w-full h-full object-cover"
                   />
                 ) : (
                   <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                    <span className="text-gray-500 text-xs">{nombreModelo1 || 'Sin imagen'}</span>
+                    <span className="text-gray-500 text-xs">{nombreModelo1 || t('machine.rollos.noImage')}</span>
                   </div>
                 )}
               </div>
               <div className="flex flex-col gap-1 mt-1">
                 <label htmlFor="rollos-rollo1" className="text-xs text-gray-600">
-                  Existencias
+                  {t('machine.rollos.stock')}
                 </label>
                 <input
                   id="rollos-rollo1"
@@ -356,7 +357,7 @@ export default function RollosSection({
                            hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-red-500"
                 onClick={handleQuitarRollo1}
               >
-                CONFIRMAR ROLLO QUITADO
+                {t('machine.rollos.confirmRemoved')}
               </button>
             </div>
           )}
@@ -366,12 +367,12 @@ export default function RollosSection({
         <div className="w-8" />
 
         {/* ── Rollo 2 ─────────────────────────────────────────────────────── */}
-        <div className="flex flex-col items-center">
+        <div className="flex flex-1 flex-col items-center">
           {isRollo2Installed && (
             <div>
               <div className="bg-gray-100 p-2 rounded shadow-sm mt-2">
                 <h4 className="text-sm font-bold m-0">
-                  Motivo {nombreModelo2 || 'Modelo 2'}
+                  {t('machine.rollos.reason', { model: nombreModelo2 || t('machine.rollos.model2') })}
                 </h4>
               </div>
               {/* Visual reference image */}
@@ -379,18 +380,18 @@ export default function RollosSection({
                 {imageUrl2 ? (
                   <img
                     src={imageUrl2}
-                    alt={nombreModelo2 || 'Modelo 2'}
+                    alt={nombreModelo2 || t('machine.rollos.model2')}
                     className="w-full h-full object-cover"
                   />
                 ) : (
                   <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                    <span className="text-gray-500 text-xs">{nombreModelo2 || 'Sin imagen'}</span>
+                    <span className="text-gray-500 text-xs">{nombreModelo2 || t('machine.rollos.noImage')}</span>
                   </div>
                 )}
               </div>
               <div className="flex flex-col gap-1 mt-1">
                 <label htmlFor="rollos-rollo2" className="text-xs text-gray-600">
-                  Existencias
+                  {t('machine.rollos.stock')}
                 </label>
                 <input
                   id="rollos-rollo2"
@@ -406,7 +407,7 @@ export default function RollosSection({
                            hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-red-500"
                 onClick={handleQuitarRollo2}
               >
-                CONFIRMAR ROLLO QUITADO
+                {t('machine.rollos.confirmRemoved')}
               </button>
             </div>
           )}
@@ -415,16 +416,17 @@ export default function RollosSection({
 
       {/* ─── INSTALAR ROLLOS ETIQUETAS AZUL :51,102,153───────────────────────────────────── */}
       <div className="bg-[rgb(172,48,44)] text-white p-2 rounded mt-4">
-        <h3 className="text-base font-bold m-0">INSTALAR ROLLOS ETIQUETAS</h3>
+        <h3 className="text-base font-bold m-0">{t('machine.rollos.installTitle')}</h3>
       </div>
 
-      <div className="flex justify-center gap-8 mt-4">
+      <div className="flex justify-between gap-8 mt-4">
         {/* ── Install Rollo 1 ─────────────────────────────────────────────── */}
+        <div className="flex flex-1 flex-col items-center">
         {!isRollo1Installed && (
           <div className="flex flex-col items-center">
             <div className="bg-gray-100 p-2 rounded shadow-sm">
               <h4 className="text-sm font-bold m-0">
-                Colocar rollo {nombreModelo1 || 'Modelo 1'}
+                {t('machine.rollos.placeRoll', { model: nombreModelo1 || t('machine.rollos.model1') })}
               </h4>
             </div>
             {/* Visual reference image */}
@@ -432,18 +434,18 @@ export default function RollosSection({
               {imageUrl1 ? (
                 <img
                   src={imageUrl1}
-                  alt={nombreModelo1 || 'Modelo 1'}
+                  alt={nombreModelo1 || t('machine.rollos.model1')}
                   className="w-full h-full object-cover"
                 />
               ) : (
                 <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                  <span className="text-gray-500 text-xs">{nombreModelo1 || 'Sin imagen'}</span>
+                  <span className="text-gray-500 text-xs">{nombreModelo1 || t('machine.rollos.noImage')}</span>
                 </div>
               )}
             </div>
             <div className="flex flex-col gap-1 mt-2">
               <label htmlFor="rollos-cantidad1" className="text-xs text-gray-600">
-                Etiquetas en rollo
+                {t('machine.rollos.labelsInRoll')}
               </label>
               <input
                 id="rollos-cantidad1"
@@ -456,7 +458,7 @@ export default function RollosSection({
             </div>
             <div className="flex flex-col gap-1 mt-1">
               <label htmlFor="rollos-desechadas1" className="text-xs text-gray-600">
-                Desechadas en la instalación
+                {t('machine.rollos.discarded')}
               </label>
               <input
                 id="rollos-desechadas1"
@@ -473,19 +475,21 @@ export default function RollosSection({
                          hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500"
               onClick={handleColocarRollo1}
             >
-              CONFIRMAR COLOCACIÓN ROLLO
+              {t('machine.rollos.confirmPlaced')}
             </button>
           </div>
         )}
+        </div>
 
         <div className="w-8" />
 
         {/* ── Install Rollo 2 ─────────────────────────────────────────────── */}
+        <div className="flex flex-1 flex-col items-center">
         {!isRollo2Installed && (
           <div className="flex flex-col items-center">
             <div className="bg-gray-100 p-2 rounded shadow-sm">
               <h4 className="text-sm font-bold m-0">
-                Colocar rollo {nombreModelo2 || 'Modelo 2'}
+                {t('machine.rollos.placeRoll', { model: nombreModelo2 || t('machine.rollos.model2') })}
               </h4>
             </div>
             {/* Visual reference image */}
@@ -493,18 +497,18 @@ export default function RollosSection({
               {imageUrl2 ? (
                 <img
                   src={imageUrl2}
-                  alt={nombreModelo2 || 'Modelo 2'}
+                  alt={nombreModelo2 || t('machine.rollos.model2')}
                   className="w-full h-full object-cover"
                 />
               ) : (
                 <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                  <span className="text-gray-500 text-xs">{nombreModelo2 || 'Sin imagen'}</span>
+                  <span className="text-gray-500 text-xs">{nombreModelo2 || t('machine.rollos.noImage')}</span>
                 </div>
               )}
             </div>
             <div className="flex flex-col gap-1 mt-2">
               <label htmlFor="rollos-cantidad2" className="text-xs text-gray-600">
-                Etiquetas en rollo
+                {t('machine.rollos.labelsInRoll')}
               </label>
               <input
                 id="rollos-cantidad2"
@@ -517,7 +521,7 @@ export default function RollosSection({
             </div>
             <div className="flex flex-col gap-1 mt-1">
               <label htmlFor="rollos-desechadas2" className="text-xs text-gray-600">
-                Desechadas en la instalación
+                {t('machine.rollos.discarded')}
               </label>
               <input
                 id="rollos-desechadas2"
@@ -534,10 +538,11 @@ export default function RollosSection({
                          hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500"
               onClick={handleColocarRollo2}
             >
-              CONFIRMAR COLOCACIÓN ROLLO
+              {t('machine.rollos.confirmPlaced')}
             </button>
           </div>
         )}
+        </div>
       </div>
 
       </div>

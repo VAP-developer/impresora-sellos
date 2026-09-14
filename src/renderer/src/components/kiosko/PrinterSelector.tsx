@@ -9,6 +9,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { usePrinterStore, type PrinterTarget } from '@renderer/stores/printer.store'
 
 // ─── Status indicator colors ──────────────────────────────────────────────────
@@ -21,14 +22,6 @@ const STATUS_COLORS: Record<string, string> = {
   paused: 'bg-blue-400'
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  ready: 'Lista',
-  busy: 'En uso',
-  error: 'Error',
-  disconnected: 'Desconectada',
-  paused: 'Pausada'
-}
-
 // ─── Single printer target row ────────────────────────────────────────────────
 
 interface PrinterTargetRowProps {
@@ -37,6 +30,7 @@ interface PrinterTargetRowProps {
 }
 
 function PrinterTargetRow({ target, label }: PrinterTargetRowProps): JSX.Element {
+  const { t } = useTranslation()
   const printers = usePrinterStore((s) => s.printers)
   const discovered = usePrinterStore((s) => s.discovered)
   const assignments = usePrinterStore((s) => s.assignments)
@@ -67,8 +61,8 @@ function PrinterTargetRow({ target, label }: PrinterTargetRowProps): JSX.Element
       {/* Status indicator dot */}
       <span
         className={`w-3 h-3 rounded-full shrink-0 ${STATUS_COLORS[status] ?? 'bg-gray-400'}`}
-        title={STATUS_LABELS[status] ?? status}
-        aria-label={`Estado: ${STATUS_LABELS[status] ?? status}`}
+        title={t(`printers.status.${status}`, status)}
+        aria-label={t('printers.statusAria', { status: t(`printers.status.${status}`, status) })}
       />
 
       {/* Target label */}
@@ -83,7 +77,7 @@ function PrinterTargetRow({ target, label }: PrinterTargetRowProps): JSX.Element
         value={currentUri}
         onChange={handleChange}
         disabled={loading}
-        aria-label={`Seleccionar impresora para ${label}`}
+        aria-label={t('printers.selectForAria', { label })}
       >
         {/* Show current assignment even if not in discovered list */}
         {!currentInList && currentUri && (
@@ -92,7 +86,7 @@ function PrinterTargetRow({ target, label }: PrinterTargetRowProps): JSX.Element
           </option>
         )}
         {!currentUri && (
-          <option value="">Sin asignar</option>
+          <option value="">{t('printers.unassigned')}</option>
         )}
         {options.map((printer) => (
           <option key={printer.uri} value={printer.uri}>
@@ -104,12 +98,12 @@ function PrinterTargetRow({ target, label }: PrinterTargetRowProps): JSX.Element
       {/* Busy indicator badge */}
       {status === 'busy' && (
         <span className="text-[10px] bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded font-medium animate-pulse">
-          EN USO
+          {t('printers.inUse')}
         </span>
       )}
       {status === 'error' && (
         <span className="text-[10px] bg-red-100 text-red-800 px-1.5 py-0.5 rounded font-medium">
-          ERROR
+          {t('printers.error')}
         </span>
       )}
     </div>
@@ -119,6 +113,7 @@ function PrinterTargetRow({ target, label }: PrinterTargetRowProps): JSX.Element
 // ─── Main PrinterSelector component ──────────────────────────────────────────
 
 export default function PrinterSelector(): JSX.Element {
+  const { t } = useTranslation()
   const discover = usePrinterStore((s) => s.discover)
   const fetchStatus = usePrinterStore((s) => s.fetchStatus)
   const fetchAssignments = usePrinterStore((s) => s.fetchAssignments)
@@ -184,7 +179,7 @@ export default function PrinterSelector(): JSX.Element {
           <rect x="6" y="14" width="12" height="8" />
         </svg>
         <span className="text-xs font-bold text-gray-700 flex-1">
-          Seleccionar Impresoras
+          {t('printers.selectPrinters')}
         </span>
         {/* Chevron */}
         <svg
@@ -202,11 +197,11 @@ export default function PrinterSelector(): JSX.Element {
 
       {/* Expandable panel */}
       {expanded && (
-        <div id="printer-selector-panel" className="mt-2 space-y-1" role="region" aria-label="Selector de impresoras">
+        <div id="printer-selector-panel" className="mt-2 space-y-1" role="region" aria-label={t('printers.selectorRegion')}>
           {/* Target rows */}
-          <PrinterTargetRow target="printer1" label="Sellos Mod.1" />
-          <PrinterTargetRow target="printer2" label="Sellos Mod.2" />
-          <PrinterTargetRow target="ticket" label="Tickets" />
+          <PrinterTargetRow target="printer1" label={t('printers.targetPrinter1')} />
+          <PrinterTargetRow target="printer2" label={t('printers.targetPrinter2')} />
+          <PrinterTargetRow target="ticket" label={t('printers.targetTicket')} />
 
           {/* Discover button */}
           <div className="flex justify-center pt-1">
@@ -218,7 +213,7 @@ export default function PrinterSelector(): JSX.Element {
                          disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={handleDiscover}
               disabled={discovering}
-              aria-label="Buscar impresoras disponibles"
+              aria-label={t('printers.searchAria')}
             >
               {discovering ? (
                 <>
@@ -226,7 +221,7 @@ export default function PrinterSelector(): JSX.Element {
                     <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25" />
                     <path d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="opacity-75" />
                   </svg>
-                  Buscando...
+                  {t('printers.searching')}
                 </>
               ) : (
                 <>
@@ -234,7 +229,7 @@ export default function PrinterSelector(): JSX.Element {
                     <circle cx="11" cy="11" r="8" />
                     <line x1="21" y1="21" x2="16.65" y2="16.65" />
                   </svg>
-                  Buscar impresoras
+                  {t('printers.searchPrinters')}
                 </>
               )}
             </button>
@@ -243,7 +238,7 @@ export default function PrinterSelector(): JSX.Element {
           {/* Count of discovered printers */}
           {discovered.length > 0 && (
             <p className="text-[10px] text-gray-500 text-center">
-              {discovered.length} impresora{discovered.length !== 1 ? 's' : ''} encontrada{discovered.length !== 1 ? 's' : ''}
+              {t('printers.found', { count: discovered.length })}
             </p>
           )}
         </div>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useConfigStore } from '@renderer/stores/config.store'
 import type { PreciosConfig, SelloConfig } from '@renderer/types/config'
 import type { EventoRow } from '@renderer/lib/ipc-client'
@@ -8,6 +9,7 @@ import EventoEditor from '@renderer/components/imprimir/EventoEditor'
 import { useKioskoStore } from '@renderer/stores/kiosko.store'
 
 export default function ImprimirView(): JSX.Element {
+  const { t } = useTranslation()
   const config = useConfigStore((s) => s.config)
   const updateImprimir = useConfigStore((s) => s.updateImprimir)
   const updateMaquina = useConfigStore((s) => s.updateMaquina)
@@ -158,18 +160,18 @@ export default function ImprimirView(): JSX.Element {
         resetKiosko()
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error al guardar configuración'
+      const message = err instanceof Error ? err.message : t('events.saveError')
       setSaveError(message)
       console.error('Error al guardar configuración:', err)
     } finally {
       setSaving(false)
     }
-  }, [config, selectedPerfil, selectedEvento, localProfileNames, updateImprimir, updateMaquina, resetKiosko])
+  }, [config, selectedPerfil, selectedEvento, localProfileNames, updateImprimir, updateMaquina, resetKiosko, t])
 
   if (!config) {
     return (
       <div className="flex items-center justify-center h-full p-8">
-        <p className="text-muted-foreground">Cargando configuración...</p>
+        <p className="text-muted-foreground">{t('events.loading')}</p>
       </div>
     )
   }
@@ -178,9 +180,9 @@ export default function ImprimirView(): JSX.Element {
     <div className="p-4 bg-gray-100 min-h-screen">
       {/* Header - same format as MaquinaView */}
       <div className="flex flex-col items-center px-4 py-2">
-        <h1 className="text-black text-[25px] font-bold text-center m-0">Eventos</h1>
+        <h1 className="text-black text-[25px] font-bold text-center m-0">{t('events.title')}</h1>
         <p className="text-gray-500 text-[25px] font-bold text-center m-0">
-          Creación de eventos
+          {t('events.subtitle')}
         </p>
         <button
           onClick={handleSave}
@@ -188,7 +190,7 @@ export default function ImprimirView(): JSX.Element {
           className="mt-2 bg-gray-400 text-white px-4 py-2 rounded font-semibold hover:bg-gray-500
                      focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50"
         >
-          {saving ? 'Guardando...' : 'Guardar'}
+          {saving ? t('events.saving') : t('events.save')}
         </button>
       </div>
 

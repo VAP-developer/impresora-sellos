@@ -10,7 +10,8 @@
  * Falls back to static TariffTableSplit when no dynamic group is active.
  */
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useConfigStore } from '@renderer/stores/config.store'
 import { useKioskoStore } from '@renderer/stores/kiosko.store'
 import { getEventoById, getTariffGroupById } from '@renderer/lib/ipc-client'
@@ -20,8 +21,10 @@ import DynamicTariffTable from '@renderer/components/kiosko/DynamicTariffTable'
 import CartControls from '@renderer/components/kiosko/CartControls'
 import { useVirtualKeyboard } from '@renderer/components/virtual-keyboard/VirtualKeyboardContext'
 import { NumericKeypad } from '@renderer/components/virtual-keyboard/NumericKeypad'
+import logoSvvs from '@renderer/assets/logo-gibraltar.svg'
 
 export default function KioskoView(): JSX.Element {
+  const { t } = useTranslation()
   const config = useConfigStore((state) => state.config)
   const activeTariffGroup = useKioskoStore((state) => state.activeTariffGroup)
   const setActiveTariffGroup = useKioskoStore((state) => state.setActiveTariffGroup)
@@ -45,6 +48,37 @@ export default function KioskoView(): JSX.Element {
 
   const rollo1Installed = (ticket?.rollo1 ?? 0) !== -1
   const rollo2Installed = (ticket?.rollo2 ?? 0) !== -1
+
+  // El teclado numérico anclado no debe superar nunca la altura real del
+  // contenido de la tabla de tarifas. Medimos la altura de la tabla con un
+  // ResizeObserver y la usamos como tope (max-height) para la columna del
+  // teclado. Si sobra espacio, queda en blanco debajo del teclado.
+  const tableRef = useRef<HTMLDivElement | null>(null)
+  const [tableHeight, setTableHeight] = useState<number | null>(null)
+
+  useEffect(() => {
+    const el = tableRef.current
+    if (!el) return
+
+    const measure = (): void => {
+      // Medimos la altura del CONTENIDO real de la tabla (el primer hijo de la
+      // columna), no la columna en sí: la columna tiene h-full y siempre ocupa
+      // todo el alto disponible, mientras que su hijo (la tarjeta blanca de la
+      // tabla) mide solo lo que necesita su contenido.
+      const content = el.firstElementChild as HTMLElement | null
+      const h = content ? content.getBoundingClientRect().height : el.scrollHeight
+      setTableHeight(h)
+    }
+
+    measure()
+
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    const child = el.firstElementChild
+    if (child) observer.observe(child)
+
+    return () => observer.disconnect()
+  }, [activeTariffGroup])
 
   // En la vista Kiosko el teclado numérico se ancla: ocupa un espacio fijo en
   // la mitad derecha y permanece siempre visible (no aparece/desaparece al
@@ -106,25 +140,57 @@ export default function KioskoView(): JSX.Element {
   return (
     <div className="flex flex-col h-full min-h-0 p-2 gap-2">
       {/* Top: Roll1 counter | Sello A | Cart Controls | Sello B | Roll2 counter */}
-      <div className="flex items-center justify-center gap-4 bg-white rounded px-8 py-3 shrink-0">
-        {/* Roll 1 remaining - left of Sello A */}
-        <div className="flex flex-col items-center justify-center min-w-[50px]">
-          <span className="text-xs text-gray-500 font-medium">Rollo</span>
-          <span className={`text-2xl font-bold ${rollo1Installed ? 'text-[rgb(24,62,117)]' : 'text-gray-400'}`}>
-            {rollo1Installed ? remainingRollo1 : 0}
-          </span>
+      <div className="flex items-stretch gap-2 bg-white rounded py-3 shrink-0">
+        {/*
+          Left 75% (encima de la tabla). Usamos el MISMO grid de columnas que
+          TariffTableContent (1.2fr 3fr 4fr 3fr 1.2fr 2fr) para que el centro de
+          cada elemento quede alineado con el centro de su columna en la tabla:
+            col1 Límite    -> Rollo 1
+            col2 Cantidad  -> Sello A
+            col3 Modalidad -> Logo
+            col4 Cantidad  -> Sello B
+            col5 Límite    -> Rollo 2
+            col6 Precio    -> (vacío)
+        */}
+        <div className="w-[75%] min-w-0 grid grid-cols-[1.2fr_3fr_4fr_3fr_1.2fr_2fr] items-center">
+          {/* Col 1 (Límite): Rollo 1 */}
+          <div className="flex flex-col items-center justify-center">
+            <span className="text-xs text-gray-500 font-medium">{t('kiosko.roll')}</span>
+            <span className={`text-2xl font-bold ${rollo1Installed ? 'text-[rgb(24,62,117)]' : 'text-gray-400'}`}>
+              {rollo1Installed ? remainingRollo1 : 0}
+            </span>
+          </div>
+
+          {/* Col 2 (Cantidad): Sello A */}
+          <div className="flex justify-center">
+            <StampModelSingle model="A" />
+          </div>
+
+          {/* Col 3 (Modalidad): Logo SvvS */}
+          <div className="flex justify-center">
+            <img src={logoSvvs} alt={t('kiosko.logoAlt')} className="h-[7.5rem] w-auto object-contain" />
+          </div>
+
+          {/* Col 4 (Cantidad): Sello B */}
+          <div className="flex justify-center">
+            <StampModelSingle model="B" />
+          </div>
+
+          {/* Col 5 (Límite): Rollo 2 */}
+          <div className="flex flex-col items-center justify-center">
+            <span className="text-xs text-gray-500 font-medium">{t('kiosko.roll')}</span>
+            <span className={`text-2xl font-bold ${rollo2Installed ? 'text-[rgb(24,62,117)]' : 'text-gray-400'}`}>
+              {rollo2Installed ? remainingRollo2 : 0}
+            </span>
+          </div>
+
+          {/* Col 6 (Precio): vacío para mantener la alineación */}
+          <div aria-hidden="true" />
         </div>
 
-        <StampModelSingle model="A" />
-        <CartControls />
-        <StampModelSingle model="B" />
-
-        {/* Roll 2 remaining - right of Sello B */}
-        <div className="flex flex-col items-center justify-center min-w-[50px]">
-          <span className="text-xs text-gray-500 font-medium">Rollo</span>
-          <span className={`text-2xl font-bold ${rollo2Installed ? 'text-[rgb(24,62,117)]' : 'text-gray-400'}`}>
-            {rollo2Installed ? remainingRollo2 : 0}
-          </span>
+        {/* Right 25% (encima del teclado): cesta con botones y precios */}
+        <div className="w-[25%] min-w-0 flex items-center justify-center">
+          <CartControls />
         </div>
       </div>
 
@@ -134,13 +200,21 @@ export default function KioskoView(): JSX.Element {
         (pinned mode), so it never overlaps the table and is always available.
       */}
       <div className="flex items-stretch gap-2 flex-1 min-h-0">
-        {/* Left 65%: tariff table (scrolls internally if it doesn't fit) */}
-        <div className="w-[65%] min-w-0 h-full overflow-auto">
+        {/* Left 75%: tariff table (scrolls internally if it doesn't fit) */}
+        <div ref={tableRef} className="w-[75%] min-w-0 h-full overflow-auto">
           {activeTariffGroup ? <DynamicTariffTable /> : <TariffTableSplit />}
         </div>
 
-        {/* Right 35%: always-visible numeric keyboard, fills its area */}
-        <div className="w-[35%] min-w-0 h-full min-h-0" data-keyboard-slot="true">
+        {/*
+          Right 25%: numeric keyboard. Se alinea arriba y su altura se limita a
+          la altura real de la tabla (tableHeight), de modo que el teclado nunca
+          sea más alto que la tabla. El espacio sobrante queda en blanco abajo.
+        */}
+        <div
+          className="w-[25%] min-w-0 self-start min-h-0 max-h-full"
+          data-keyboard-slot="true"
+          style={{ height: tableHeight != null ? tableHeight : '100%' }}
+        >
           {keyboardEnabled && <NumericKeypad pinned />}
         </div>
       </div>

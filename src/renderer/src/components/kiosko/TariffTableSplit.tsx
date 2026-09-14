@@ -9,6 +9,7 @@
  */
 
 import { useMemo, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useConfigStore } from '@renderer/stores/config.store'
 import { useKioskoStore } from '@renderer/stores/kiosko.store'
 import type { KioskoQuantities, KioskoLimits } from '@renderer/lib/tariff-calc'
@@ -30,6 +31,7 @@ interface TariffRowDef {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function TariffTableSplit(): JSX.Element {
+  const { t } = useTranslation()
   const config = useConfigStore((state) => state.config)
   const rawQuantities = useKioskoStore((state) => state.quantities)
   const setQuantity = useKioskoStore((state) => state.setQuantity)
@@ -64,7 +66,7 @@ export default function TariffTableSplit(): JSX.Element {
   const rows: TariffRowDef[] = useMemo(() => [
     // ─── Tiras (strips) ───
     {
-      label: 'Tira A×4',
+      label: t('kiosko.table.stripA4'),
       localPrice: tarifaTA,
       secondaryPrice: tarifaTA, // strips don't have secondary in static mode
       qtyFieldS1: 'tarifaAT1',
@@ -74,7 +76,7 @@ export default function TariffTableSplit(): JSX.Element {
       isStrip: true
     },
     {
-      label: 'Tira 4 Tar.',
+      label: t('kiosko.table.strip4Tar'),
       localPrice: tarifaT4,
       secondaryPrice: tarifaT4,
       qtyFieldS1: 'tarifa4T1',
@@ -85,7 +87,7 @@ export default function TariffTableSplit(): JSX.Element {
     },
     // ─── Individual tariffs ───
     {
-      label: 'Tarifa A',
+      label: t('kiosko.table.tarifaA'),
       localPrice: tarifaA,
       secondaryPrice: tarifaA,
       qtyFieldS1: 'tarifaAS1',
@@ -95,7 +97,7 @@ export default function TariffTableSplit(): JSX.Element {
       isStrip: false
     },
     {
-      label: 'Tarifa A2',
+      label: t('kiosko.table.tarifaA2'),
       localPrice: tarifaA2,
       secondaryPrice: tarifaA2,
       qtyFieldS1: 'tarifaA2S1',
@@ -105,7 +107,7 @@ export default function TariffTableSplit(): JSX.Element {
       isStrip: false
     },
     {
-      label: 'Tarifa B',
+      label: t('kiosko.table.tarifaB'),
       localPrice: tarifaB,
       secondaryPrice: tarifaB,
       qtyFieldS1: 'tarifaBS1',
@@ -115,7 +117,7 @@ export default function TariffTableSplit(): JSX.Element {
       isStrip: false
     },
     {
-      label: 'Tarifa C',
+      label: t('kiosko.table.tarifaC'),
       localPrice: tarifaC,
       secondaryPrice: tarifaC,
       qtyFieldS1: 'tarifaCS1',
@@ -124,7 +126,7 @@ export default function TariffTableSplit(): JSX.Element {
       limitFieldS2: 'limiteCS2',
       isStrip: false
     }
-  ], [tarifaTA, tarifaT4, tarifaA, tarifaA2, tarifaB, tarifaC])
+  ], [tarifaTA, tarifaT4, tarifaA, tarifaA2, tarifaB, tarifaC, t])
 
   const togglePrice = useCallback(() => {
     setUseSecondaryPrice(!showSecondary)

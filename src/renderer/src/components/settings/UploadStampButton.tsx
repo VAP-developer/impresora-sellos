@@ -6,11 +6,12 @@
  * - Exactly 2 files: one "*-fondo.jpg" and one "*-sello.png".
  * - Year between 2020 and 2100.
  * - The name field defines the stamp name in the database.
- * - If the name already exists for that year, the user is warned and may
- *   choose to overwrite.
+ * - If the name already exists for that year, the upload is blocked and the
+ *   user is told to delete the existing stamp first before making changes.
  */
 
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface UploadStampButtonProps {
   disabled?: boolean
@@ -29,6 +30,7 @@ export function UploadStampButton({
   disabled,
   onUploadComplete
 }: UploadStampButtonProps): JSX.Element {
+  const { t } = useTranslation()
   const [year, setYear] = useState('')
   const [stampName, setStampName] = useState('')
   const [fondoPath, setFondoPath] = useState<string | null>(null)
@@ -56,12 +58,12 @@ export function UploadStampButton({
 
   function validateBeforeUpload(): string | null {
     const trimmedName = stampName.trim()
-    if (!/^\d{4}$/.test(year)) return 'El año debe ser un número de 4 dígitos'
+    if (!/^\d{4}$/.test(year)) return t('stampDb.upload.errYear4')
     const y = Number(year)
-    if (y < MIN_YEAR || y > MAX_YEAR) return `El año debe estar entre ${MIN_YEAR} y ${MAX_YEAR}`
-    if (!trimmedName) return 'Escriba el nombre del sello'
-    if (/[\\/]/.test(trimmedName)) return 'El nombre no puede contener / ni \\'
-    if (!fondoPath || !logoPath) return 'Debe seleccionar los 2 archivos (-fondo.jpg y -sello.png)'
+    if (y < MIN_YEAR || y > MAX_YEAR) return t('stampDb.upload.errYearRange', { min: MIN_YEAR, max: MAX_YEAR })
+    if (!trimmedName) return t('stampDb.upload.errName')
+    if (/[\\/]/.test(trimmedName)) return t('stampDb.upload.errNameChars')
+    if (!fondoPath || !logoPath) return t('stampDb.upload.errFiles')
     return null
   }
 
@@ -76,17 +78,17 @@ export function UploadStampButton({
 
     const trimmedName = stampName.trim()
 
-    // Duplicate check: warn and let the user decide whether to overwrite.
+    // Duplicate check: overwriting an existing stamp is not allowed because it
+    // can leave the local DB and the cloud in an inconsistent state. Instead we
+    // block the upload and tell the user to delete the existing stamp first.
     try {
       const exists = await window.electronAPI.stamps.existsInYear({ year, stampName: trimmedName })
       if (exists) {
-        const overwrite = window.confirm(
-          `Ya existe un sello llamado "${trimmedName}" en el año ${year}.\n\n¿Desea sobrescribirlo?`
-        )
-        if (!overwrite) {
-          setFeedback({ type: 'error', message: 'Subida cancelada. Cambie el nombre del sello.' })
-          return
-        }
+        setFeedback({
+          type: 'error',
+          message: t('stampDb.upload.duplicate', { name: trimmedName, year })
+        })
+        return
       }
     } catch {
       // If the check fails, continue; the server remains the source of truth.
@@ -106,7 +108,7 @@ export function UploadStampButton({
       if (res.ok) {
         setFeedback({
           type: 'success',
-          message: `\u2713 Sello "${trimmedName}" (${year}) subido correctamente`
+          message: t('stampDb.upload.success', { name: trimmedName, year })
         })
         // Reset selection but keep year for convenience
         setStampName('')
@@ -114,12 +116,12 @@ export function UploadStampButton({
         setLogoPath(null)
         onUploadComplete?.()
       } else if (res.blocked || res.error === 'AUTH_FAILED') {
-        setFeedback({ type: 'error', message: 'Aplicación bloqueada. Contacte con soporte.' })
+        setFeedback({ type: 'error', message: t('stampDb.upload.blocked') })
       } else {
-        setFeedback({ type: 'error', message: res.error || 'Error desconocido durante la subida.' })
+        setFeedback({ type: 'error', message: res.error || t('stampDb.upload.unknownError') })
       }
     } catch {
-      setFeedback({ type: 'error', message: 'Error de conexión. Compruebe su acceso a internet.' })
+      setFeedback({ type: 'error', message: t('stampDb.upload.connError') })
     } finally {
       setUploading(false)
     }
@@ -129,29 +131,29 @@ export function UploadStampButton({
 
   return (
     <div className="space-y-3 rounded-lg border border-gray-200 p-3">
-      <p className="text-sm font-semibold text-gray-700">Subir un sello nuevo</p>
+      <p className="text-sm font-semibold text-gray-700">{t('stampDb.upload.title')}</p>
 
       <div className="grid grid-cols-2 gap-3">
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-gray-600">Año</span>
+          <span className="text-gray-600">{t('stampDb.upload.year')}</span>
           <input
             type="number"
             min={MIN_YEAR}
             max={MAX_YEAR}
             value={year}
             onChange={(e) => setYear(e.target.value)}
-            placeholder="2026"
+            placeholder={t('stampDb.upload.yearPlaceholder')}
             disabled={isDisabled}
             className="rounded border border-gray-300 px-2 py-1 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
           />
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-gray-600">Nombre del sello</span>
+          <span className="text-gray-600">{t('stampDb.upload.name')}</span>
           <input
             type="text"
             value={stampName}
             onChange={(e) => setStampName(e.target.value)}
-            placeholder="Ej. Boston 2026"
+            placeholder={t('stampDb.upload.namePlaceholder')}
             disabled={isDisabled}
             className="rounded border border-gray-300 px-2 py-1 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
           />
@@ -167,12 +169,12 @@ export function UploadStampButton({
             isDisabled ? 'cursor-not-allowed opacity-50' : ''
           }`}
         >
-          Seleccionar archivos
+          {t('stampDb.upload.pickFiles')}
         </button>
         <span className="text-xs text-gray-500">
           {fondoPath && logoPath
             ? `${fileName(fondoPath)} + ${fileName(logoPath)}`
-            : 'Ningún archivo seleccionado'}
+            : t('stampDb.upload.noFiles')}
         </span>
       </div>
 
@@ -206,7 +208,7 @@ export function UploadStampButton({
             />
           </svg>
         ) : null}
-        {uploading ? 'Subiendo...' : 'Subir sello'}
+        {uploading ? t('stampDb.upload.uploading') : t('stampDb.upload.upload')}
       </button>
 
       {feedback && (

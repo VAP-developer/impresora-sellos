@@ -11,6 +11,7 @@
  */
 
 import { useMemo, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useKioskoStore, buildQuantityKey } from '@renderer/stores/kiosko.store'
 import { useConfigStore } from '@renderer/stores/config.store'
 import { calcDynamicLimits } from '@renderer/lib/tariff-calc'
@@ -36,6 +37,7 @@ interface TariffRowDef {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function DynamicTariffTable(): JSX.Element {
+  const { t } = useTranslation()
   const activeTariffGroup = useKioskoStore((state) => state.activeTariffGroup)
   const activeEvento = useKioskoStore((state) => state.activeEvento)
   const quantities = useKioskoStore((state) => state.quantities)
@@ -171,7 +173,7 @@ export default function DynamicTariffTable(): JSX.Element {
   if (!activeTariffGroup) {
     return (
       <div className="flex items-center justify-center py-8 text-gray-500 text-sm" role="alert">
-        El evento no tiene tarifas configuradas
+        {t('kiosko.table.noTariffs')}
       </div>
     )
   }

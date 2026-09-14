@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useOnlineStatus } from '@renderer/lib/useOnlineStatus'
 import { SyncButton } from './SyncButton'
 import { StampList } from './StampList'
@@ -19,6 +20,7 @@ interface StampStatus {
 }
 
 export function StampDatabaseSection(): JSX.Element {
+  const { t, i18n } = useTranslation()
   const [status, setStatus] = useState<StampStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -47,7 +49,7 @@ export function StampDatabaseSection(): JSX.Element {
 
   function formatDate(dateStr: string): string {
     const date = new Date(dateStr)
-    return date.toLocaleString('es-ES', {
+    return date.toLocaleString(i18n.language === 'en' ? 'en-GB' : 'es-ES', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
@@ -58,13 +60,13 @@ export function StampDatabaseSection(): JSX.Element {
 
   if (loading) {
     return (
-      <div className="text-sm text-gray-500">Cargando estado...</div>
+      <div className="text-sm text-gray-500">{t('stampDb.loading')}</div>
     )
   }
 
   if (!status) {
     return (
-      <div className="text-sm text-red-600">Error al obtener el estado de la base de datos.</div>
+      <div className="text-sm text-red-600">{t('stampDb.statusError')}</div>
     )
   }
 
@@ -74,18 +76,18 @@ export function StampDatabaseSection(): JSX.Element {
     <div className="space-y-4">
       {isEmpty ? (
         <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded p-3">
-          No hay sellos sincronizados. Pulse &apos;Sincronizar con la nube&apos; para descargar la base de datos.
+          {t('stampDb.empty')}
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
-            <span className="font-semibold text-gray-700">Total sellos:</span>
+            <span className="font-semibold text-gray-700">{t('stampDb.totalStamps')}</span>
             <span className="ml-2 font-bold text-gray-900">{status.totalStamps}</span>
           </div>
           <div>
-            <span className="font-semibold text-gray-700">Última sincronización:</span>
+            <span className="font-semibold text-gray-700">{t('stampDb.lastSync')}</span>
             <span className="ml-2">
-              {status.lastSyncAt ? formatDate(status.lastSyncAt) : 'Nunca'}
+              {status.lastSyncAt ? formatDate(status.lastSyncAt) : t('stampDb.never')}
             </span>
           </div>
         </div>
@@ -95,19 +97,19 @@ export function StampDatabaseSection(): JSX.Element {
 
       <SyncButton
         disabled={!isOnline}
-        offlineReason={!isOnline ? 'Se requiere conexión a internet' : undefined}
+        offlineReason={!isOnline ? t('stampDb.offlineReason') : undefined}
         onSyncComplete={refresh}
       />
 
       {/* Normas de subida (visibles para el usuario) */}
       <div className="rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-        <p className="mb-1 font-semibold">Normas para subir un sello</p>
+        <p className="mb-1 font-semibold">{t('stampDb.rulesTitle')}</p>
         <ul className="list-disc space-y-0.5 pl-5">
-          <li>Debe subir exactamente 2 archivos: uno terminado en <code>-fondo.jpg</code> y otro en <code>-sello.png</code>.</li>
-          <li>Si no se cumplen estos sufijos, no se podrá subir ningún archivo.</li>
-          <li>El año debe estar entre 2020 y 2100.</li>
-          <li>El nombre que escriba será el que se use en la base de datos. Si ya existe en ese año, se le avisará para que decida si sobrescribirlo.</li>
-          <li>Cada archivo debe ocupar entre 3 KB y 2 MB.</li>
+          <li>{t('stampDb.rule1Pre')}<code>-fondo.jpg</code>{t('stampDb.rule1Mid')}<code>-sello.png</code>{t('stampDb.rule1Post')}</li>
+          <li>{t('stampDb.rule2')}</li>
+          <li>{t('stampDb.rule3')}</li>
+          <li>{t('stampDb.rule4')}</li>
+          <li>{t('stampDb.rule5')}</li>
         </ul>
       </div>
 

@@ -14,6 +14,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { CodigoConfig } from '@renderer/types/config'
 
 // ─── Month char mapping (1-indexed) ──────────────────────────────────────────
@@ -32,11 +33,6 @@ const MONTH_CHARS: Record<number, string> = {
   11: 'N',
   12: 'D'
 }
-
-const MONTH_NAMES = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
-]
 
 function getCurrentMonth1Based(): number {
   return new Date().getMonth() + 1 // 1-12
@@ -58,6 +54,7 @@ export interface CodigoSectionProps {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function CodigoSection({ codigo, onChange }: CodigoSectionProps): JSX.Element {
+  const { t } = useTranslation()
   const [collapsed, setCollapsed] = useState(true)
 
   // Local form state
@@ -117,7 +114,7 @@ export default function CodigoSection({ codigo, onChange }: CodigoSectionProps):
   // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <section aria-labelledby="codigo-section-heading">
+    <section aria-labelledby="codigo-section-heading" className="mt-4">
       {/* Collapsible header */}
       <button
         type="button"
@@ -137,7 +134,7 @@ export default function CodigoSection({ codigo, onChange }: CodigoSectionProps):
           aria-hidden="true"
         />
         <h3 className="text-base font-bold m-0">
-          CÓDIGO ETIQUETA: Mes - Cliente
+          {t('machine.codigo.title')}
         </h3>
       </button>
 
@@ -147,13 +144,13 @@ export default function CodigoSection({ codigo, onChange }: CodigoSectionProps):
           id="codigo-section-content"
           className="border border-gray-200 rounded-b p-4 bg-white"
           role="region"
-          aria-label="Campos de código de etiqueta"
+          aria-label={t('machine.codigo.region')}
         >
           <div className="flex flex-wrap items-start gap-6">
             {/* Mes */}
             <div className="flex flex-col">
               <label htmlFor="codigo-mes" className="text-xs text-gray-600">
-                Mes {isAuto ? '(automático)' : '(manual)'}
+                {isAuto ? t('machine.codigo.monthAuto') : t('machine.codigo.monthManual')}
               </label>
               <div className="flex items-center gap-2">
                 {isAuto ? (
@@ -174,7 +171,7 @@ export default function CodigoSection({ codigo, onChange }: CodigoSectionProps):
                   >
                     {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
                       <option key={m} value={String(m)}>
-                        {MONTH_CHARS[m]} - {MONTH_NAMES[m - 1]}
+                        {MONTH_CHARS[m]} - {t(`machine.codigo.months.${m}`)}
                       </option>
                     ))}
                   </select>
@@ -184,9 +181,9 @@ export default function CodigoSection({ codigo, onChange }: CodigoSectionProps):
                   className="bg-gray-200 text-xs px-2 py-1 rounded hover:bg-gray-300
                              focus:outline-none focus:ring-2 focus:ring-gray-400"
                   onClick={handleToggleMesAuto}
-                  aria-label={isAuto ? 'Cambiar a mes manual' : 'Volver a mes automático'}
+                  aria-label={isAuto ? t('machine.codigo.switchToManual') : t('machine.codigo.switchToAuto')}
                 >
-                  {isAuto ? 'Manual' : 'Auto'}
+                  {isAuto ? t('machine.codigo.manual') : t('machine.codigo.auto')}
                 </button>
               </div>
             </div>
@@ -194,7 +191,7 @@ export default function CodigoSection({ codigo, onChange }: CodigoSectionProps):
             {/* ID Cliente */}
             <div className="flex flex-col">
               <label htmlFor="codigo-cliente" className="text-xs text-gray-600">
-                ID Cliente
+                {t('machine.codigo.clientId')}
               </label>
               <input
                 id="codigo-cliente"
@@ -205,7 +202,7 @@ export default function CodigoSection({ codigo, onChange }: CodigoSectionProps):
                 aria-describedby="codigo-cliente-desc"
               />
               <span id="codigo-cliente-desc" className="sr-only">
-                Identificador incremental de sesión (0-9999)
+                {t('machine.codigo.clientIdDesc')}
               </span>
             </div>
           </div>

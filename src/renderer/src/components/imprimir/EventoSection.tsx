@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { TicketConfig } from '@renderer/types/config'
 import type { EventoRow } from '@renderer/lib/ipc-client'
 import {
@@ -35,6 +36,7 @@ export default function EventoSection({
   selectedEvento,
   onEventoChange
 }: EventoSectionProps): JSX.Element {
+  const { t } = useTranslation()
   const bloqueado = ticket.bloqueado === 'BLOQUEADO'
 
   const [expanded, setExpanded] = useState(true)
@@ -141,9 +143,9 @@ export default function EventoSection({
       <section className="mb-6">
         <div className="bg-[rgb(234,190,63)] p-2 mb-2 rounded shadow flex items-center gap-2">
           <input type="checkbox" checked={true} readOnly className="cursor-pointer" />
-          <span className="text-black text-lg font-bold">EVENTO</span>
+          <span className="text-black text-lg font-bold">{t('events.section.event')}</span>
         </div>
-        <p className="text-center text-gray-500 p-4">Cargando eventos...</p>
+        <p className="text-center text-gray-500 p-4">{t('events.section.loadingEvents')}</p>
       </section>
     )
   }
@@ -166,7 +168,7 @@ export default function EventoSection({
           id="evento-section-heading"
           className="text-black text-lg font-bold cursor-pointer"
         >
-          EVENTO: {bloqueado ? 'BLOQUEADO' : 'ACTUAL'}
+          {bloqueado ? t('events.section.headerLocked') : t('events.section.headerCurrent')}
         </label>
       </div>
 
@@ -180,7 +182,7 @@ export default function EventoSection({
               htmlFor="evento-year-selector"
               className="block text-red-600 font-bold mb-1"
             >
-              AÑO
+              {t('events.section.year')}
             </label>
             <select
               id="evento-year-selector"
@@ -190,10 +192,10 @@ export default function EventoSection({
               className={`w-[120px] text-red-600 text-lg border border-gray-300 rounded p-2
                 focus:outline-none focus:ring-2 focus:ring-blue-500
                 ${bloqueado ? 'opacity-60 cursor-not-allowed' : ''}`}
-              aria-label="Seleccionar año del evento"
+              aria-label={t('events.section.selectYearAria')}
             >
               {years.length === 0 && (
-                <option value="">Sin eventos</option>
+                <option value="">{t('events.section.noEvents')}</option>
               )}
               {years.map((y) => (
                 <option key={y} value={y}>
@@ -209,7 +211,7 @@ export default function EventoSection({
               htmlFor="evento-selector"
               className="block text-red-600 font-bold mb-1"
             >
-              EVENTO
+              {t('events.section.event')}
             </label>
             <select
               id="evento-selector"
@@ -219,12 +221,12 @@ export default function EventoSection({
               className={`w-[300px] text-red-600 text-lg border border-gray-300 rounded p-2
                 focus:outline-none focus:ring-2 focus:ring-blue-500
                 ${bloqueado ? 'opacity-60 cursor-not-allowed' : ''}`}
-              aria-label="Seleccionar evento activo"
+              aria-label={t('events.section.selectEventAria')}
             >
-              <option value="">-- Seleccionar evento --</option>
+              <option value="">{t('events.section.selectEvent')}</option>
               {eventosForYear.map((ev) => (
                 <option key={ev.id} value={ev.id}>
-                  {ev.nevento || `Evento #${ev.id}`}
+                  {ev.nevento || t('events.section.eventNumber', { id: ev.id })}
                 </option>
               ))}
             </select>
@@ -241,7 +243,7 @@ export default function EventoSection({
             </p>
             {selectedEvento.codigo && (
               <p className="text-gray-600 text-sm">
-                Código: <span className="font-mono font-bold">{selectedEvento.codigo}</span>
+                {t('events.section.code')} <span className="font-mono font-bold">{selectedEvento.codigo}</span>
               </p>
             )}
 
@@ -250,18 +252,18 @@ export default function EventoSection({
               {/* Model 1 (left / printer 1) */}
               <div className="flex flex-col items-center">
                 <p className="text-black text-xl font-bold text-center">
-                  {selectedEvento.motivoi || 'Modelo 1'}
+                  {selectedEvento.motivoi || t('events.section.model1')}
                 </p>
                 <div className="relative w-[350px] h-[160px] border border-gray-200 rounded overflow-hidden bg-gray-50">
                   {modelo1Url ? (
                     <img
                       src={modelo1Url}
-                      alt={selectedEvento.motivoi || 'Modelo izquierdo'}
+                      alt={selectedEvento.motivoi || t('events.section.leftModel')}
                       className="w-full h-full object-cover"
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-gray-400">
-                      Sin imagen
+                      {t('events.section.noImage')}
                     </div>
                   )}
                   <p className="absolute bottom-[10%] left-0 text-black text-lg font-bold p-4">
@@ -275,18 +277,18 @@ export default function EventoSection({
               {/* Model 2 (right / printer 2) */}
               <div className="flex flex-col items-center">
                 <p className="text-black text-xl font-bold text-center">
-                  {selectedEvento.motivod || 'Modelo 2JJ'}
+                  {selectedEvento.motivod || t('events.section.model2')}
                 </p>
                 <div className="relative w-[350px] h-[160px] border border-gray-200 rounded overflow-hidden bg-gray-50">
                   {modelo2Url ? (
                     <img
                       src={modelo2Url}
-                      alt={selectedEvento.motivod || 'Modelo derecho'}
+                      alt={selectedEvento.motivod || t('events.section.rightModel')}
                       className="w-full h-full object-cover"
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-gray-400">
-                      Sin imagen
+                      {t('events.section.noImage')}
                     </div>
                   )}
                   <p className="absolute bottom-[10%] left-0 text-black text-lg font-bold p-4">
@@ -301,11 +303,11 @@ export default function EventoSection({
         )}
 
         {!selectedEvento && years.length > 0 && (
-          <p className="text-gray-400 text-lg italic">Seleccione un evento para ver la previsualización</p>
+          <p className="text-gray-400 text-lg italic">{t('events.section.selectToPreview')}</p>
         )}
 
         {years.length === 0 && (
-          <p className="text-gray-400 text-lg italic">No hay eventos creados. Use la sección "Editar Eventos" para crear uno.</p>
+          <p className="text-gray-400 text-lg italic">{t('events.section.noEventsCreated')}</p>
         )}
       </div>
       )}

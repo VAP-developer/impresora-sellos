@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Tooltip,
   TooltipTrigger,
@@ -25,6 +26,7 @@ interface SyncResult {
 }
 
 export function SyncButton({ disabled, offlineReason, onSyncComplete }: SyncButtonProps): JSX.Element {
+  const { t } = useTranslation()
   const [syncing, setSyncing] = useState(false)
   const [result, setResult] = useState<SyncResult | null>(null)
   const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -53,24 +55,24 @@ export function SyncButton({ disabled, offlineReason, onSyncComplete }: SyncButt
       if (res.ok) {
         setResult({
           type: 'success',
-          message: `\u2713 Sincronización completada: ${res.added} añadidos, ${res.removed} eliminados (${res.total} total)`
+          message: t('stampDb.sync.success', { added: res.added, removed: res.removed, total: res.total })
         })
         onSyncComplete?.()
       } else if (res.blocked) {
         setResult({
           type: 'error',
-          message: 'Aplicación bloqueada. Contacte con soporte.'
+          message: t('stampDb.sync.blocked')
         })
       } else {
         setResult({
           type: 'error',
-          message: res.error || 'Error desconocido durante la sincronización.'
+          message: res.error || t('stampDb.sync.unknownError')
         })
       }
     } catch {
       setResult({
         type: 'error',
-        message: 'Error de conexión. Compruebe su acceso a internet.'
+        message: t('stampDb.sync.connError')
       })
     } finally {
       setSyncing(false)
@@ -128,7 +130,7 @@ export function SyncButton({ disabled, offlineReason, onSyncComplete }: SyncButt
           />
         </svg>
       )}
-      {syncing ? 'Sincronizando...' : 'Sincronizar con la nube'}
+      {syncing ? t('stampDb.sync.syncing') : t('stampDb.sync.sync')}
     </button>
   )
 

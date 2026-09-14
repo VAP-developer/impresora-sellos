@@ -23,7 +23,6 @@ import CodigoSection from '@renderer/components/maquina/CodigoSection'
 import TicketSection from '@renderer/components/maquina/TicketSection'
 import RollosSection from '@renderer/components/maquina/RollosSection'
 import TirasSection from '@renderer/components/maquina/TirasSection'
-import ImageConfig from '@renderer/components/images/ImageConfig'
 
 export default function MaquinaView(): JSX.Element {
   const { t } = useTranslation()
@@ -126,12 +125,12 @@ export default function MaquinaView(): JSX.Element {
       setCodigoChanges({})
       setSaveSuccess(true)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error al guardar la configuración'
+      const message = err instanceof Error ? err.message : t('machine.saveErrorDefault')
       setSaveError(message)
     } finally {
       setSaving(false)
     }
-  }, [ticketChanges, codigoChanges, updateMaquina])
+  }, [ticketChanges, codigoChanges, updateMaquina, t])
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -141,7 +140,7 @@ export default function MaquinaView(): JSX.Element {
       <div className="flex flex-col items-center px-4 py-2">
         <h1 className="text-black text-[25px] font-bold text-center m-0">{t('views.machine')}</h1>
         <p className="text-gray-500 text-[25px] font-bold text-center m-0">
-          Configuración tickets y rollos
+          {t('machine.subtitle')}
         </p>
         <button
           type="button"
@@ -149,9 +148,9 @@ export default function MaquinaView(): JSX.Element {
                      focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50"
           onClick={handleGuardar}
           disabled={saving || loading || !config}
-          aria-label="Guardar configuración de máquina"
+          aria-label={t('machine.saveAria')}
         >
-          {saving ? 'Guardando...' : 'Guardar'}
+          {saving ? t('machine.saving') : t('machine.save')}
         </button>
       </div>
 
@@ -162,7 +161,7 @@ export default function MaquinaView(): JSX.Element {
           role="status"
           aria-live="polite"
         >
-          Configuración guardada correctamente
+          {t('machine.saveSuccess')}
         </div>
       )}
       {saveError && (
@@ -178,35 +177,19 @@ export default function MaquinaView(): JSX.Element {
           className="mx-4 mb-2 p-2 bg-red-100 text-red-800 rounded text-center"
           role="alert"
         >
-          Error al cargar: {storeError}
+          {t('machine.loadError', { error: storeError })}
         </div>
       )}
 
       {/* Main form area */}
       {(loading || !config) ? (
         <div className="flex items-center justify-center h-64">
-          <p className="text-muted-foreground">Cargando configuración...</p>
+          <p className="text-muted-foreground">{t('machine.loading')}</p>
         </div>
       ) : (
       <div className="flex justify-center mt-4">
         <div className="w-full max-w-7xl px-4">
-          {/* Section 1: CÓDIGO ETIQUETA */}
-          {mergedCodigo && (
-            <CodigoSection codigo={mergedCodigo} onChange={handleCodigoChange} />
-          )}
-
-          {/* Section 2: TICKET */}
-          {mergedTicket && (
-            <TicketSection
-              ticket={mergedTicket}
-              activeProfileName={activeProfileName}
-              feriaDisplay={feriaDisplay}
-              lugarDisplay={lugarDisplay}
-              onChange={handleTicketChange}
-            />
-          )}
-
-          {/* Section 3: ROLLOS */}
+          {/* Section 1: ROLLOS EN MÁQUINAS */}
           {mergedTicket && (
             <RollosSection
               ticket={mergedTicket}
@@ -214,6 +197,22 @@ export default function MaquinaView(): JSX.Element {
               nombreModelo2={nombreModelo2}
               onChange={handleTicketChange}
               onInsertOrder={handleInsertOrder}
+            />
+          )}
+
+          {/* Section 2: CÓDIGO ETIQUETAS */}
+          {mergedCodigo && (
+            <CodigoSection codigo={mergedCodigo} onChange={handleCodigoChange} />
+          )}
+
+          {/* Section 3: FORMATO TICKETS */}
+          {mergedTicket && (
+            <TicketSection
+              ticket={mergedTicket}
+              activeProfileName={activeProfileName}
+              feriaDisplay={feriaDisplay}
+              lugarDisplay={lugarDisplay}
+              onChange={handleTicketChange}
             />
           )}
 
@@ -226,9 +225,6 @@ export default function MaquinaView(): JSX.Element {
               onChange={handleTicketChange}
             />
           )}
-
-          {/* Section 5: IMÁGENES FERIA */}
-          <ImageConfig />
         </div>
       </div>
       )}

@@ -6,9 +6,11 @@
  */
 
 import { useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { usePrinterStore } from '@renderer/stores/printer.store'
 
 export default function PrinterControls(): JSX.Element {
+  const { t } = useTranslation()
   const pause = usePrinterStore((state) => state.pause)
   const resume = usePrinterStore((state) => state.resume)
   const loading = usePrinterStore((state) => state.loading)
@@ -40,7 +42,7 @@ export default function PrinterControls(): JSX.Element {
                    text-white rounded font-medium cursor-pointer
                    transition-colors focus:outline-none focus:ring-2 focus:ring-red-400
                    disabled:opacity-50 disabled:cursor-not-allowed"
-        aria-label="Pausar impresora"
+        aria-label={t('printers.pauseAria')}
         disabled={loading}
         onClick={handlePause}
       >
@@ -54,7 +56,7 @@ export default function PrinterControls(): JSX.Element {
           <rect x="6" y="4" width="4" height="16" />
           <rect x="14" y="4" width="4" height="16" />
         </svg>
-        Pausar
+        {t('printers.pause')}
       </button>
       <button
         type="button"
@@ -62,7 +64,7 @@ export default function PrinterControls(): JSX.Element {
                    text-white rounded font-medium cursor-pointer
                    transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400
                    disabled:opacity-50 disabled:cursor-not-allowed"
-        aria-label="Reanudar impresora"
+        aria-label={t('printers.resumeAria')}
         disabled={loading || !anyPaused}
         onClick={handleResume}
       >
@@ -75,7 +77,7 @@ export default function PrinterControls(): JSX.Element {
         >
           <polygon points="5,3 19,12 5,21" />
         </svg>
-        Reanudar
+        {t('printers.resume')}
       </button>
     </div>
   )

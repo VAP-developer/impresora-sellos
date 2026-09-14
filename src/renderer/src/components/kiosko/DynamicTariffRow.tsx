@@ -8,6 +8,7 @@
  */
 
 import { useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useKioskoStore, buildQuantityKey } from '@renderer/stores/kiosko.store'
 import type { Tariff } from '@renderer/lib/ipc-client'
 import type { DynamicLimits, DynamicQuantities } from '@renderer/lib/tariff-calc'
@@ -27,6 +28,7 @@ export default function DynamicTariffRow({
   quantities,
   limits
 }: DynamicTariffRowProps): JSX.Element {
+  const { t } = useTranslation()
   const setQuantity = useKioskoStore((state) => state.setQuantity)
 
   const tariffId = tariff.id!
@@ -47,7 +49,7 @@ export default function DynamicTariffRow({
     <div
       className="flex items-center text-center py-1.5 px-1 bg-gray-50"
       role="row"
-      aria-label={`${tariff.name} - ${tariff.price.toFixed(2)} ${currency}`}
+      aria-label={t('kiosko.table.rowAria', { label: tariff.name, price: tariff.price.toFixed(2), currency })}
     >
       {/* Límite */}
       <div className="w-[20%] text-sm font-medium" aria-label={`Límite: ${limit}`}>
@@ -63,7 +65,7 @@ export default function DynamicTariffRow({
           value={qty}
           onChange={handleChange}
           className="no-spinner w-14 text-center border border-gray-300 text-black rounded py-0.5 text-base"
-          aria-label={`Cantidad ${tariff.name} Sello ${model === 1 ? 'A' : 'B'}`}
+          aria-label={t('kiosko.table.quantityAria', { label: tariff.name, model: model === 1 ? 'A' : 'B' })}
         />
       </div>
 
@@ -79,7 +81,7 @@ export default function DynamicTariffRow({
       {/* Subtotal */}
       <div
         className="w-[20%] text-xs font-medium"
-        aria-label={`Subtotal: ${subtotal.toFixed(2)} ${currency}`}
+        aria-label={t('kiosko.table.subtotalAria', { value: subtotal.toFixed(2), currency })}
       >
         {subtotal > 0 ? `${subtotal.toFixed(2)} ${currency}` : '—'}
       </div>

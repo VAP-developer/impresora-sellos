@@ -7,9 +7,11 @@
  *   - Tickets keep the same layout but their title is prefixed with "ESP".
  */
 
+import { useTranslation } from 'react-i18next'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 
 export function FormatoCorreoEspSection(): JSX.Element {
+  const { t } = useTranslation()
   const { formatoCorreoEsp, setFormatoCorreoEsp } = useSettingsStore()
 
   async function handleToggle(): Promise<void> {
@@ -36,7 +38,7 @@ export function FormatoCorreoEspSection(): JSX.Element {
           htmlFor="formato-correo-esp-checkbox"
           className="text-sm font-medium text-gray-700 cursor-pointer select-none"
         >
-          Activar Formato Correo ESP
+          {t('formatoEsp.enable')}
         </label>
       </div>
 
@@ -44,8 +46,7 @@ export function FormatoCorreoEspSection(): JSX.Element {
         id="formato-correo-esp-description"
         className="text-xs text-gray-500 ml-8"
       >
-        Cuando está activado, las etiquetas muestran únicamente el nombre de la tarifa y el ticket
-        conserva el mismo formato pero añade "ESP" al principio de su título.
+        {t('formatoEsp.description')}
       </p>
     </div>
   )

@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface StampRecord {
   id: number
@@ -50,6 +51,7 @@ function toFileUrl(path: string | null): string | null {
 }
 
 export function StampList(): JSX.Element {
+  const { t } = useTranslation()
   const [stamps, setStamps] = useState<StampRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedYears, setExpandedYears] = useState<Set<string>>(new Set())
@@ -91,7 +93,7 @@ export function StampList(): JSX.Element {
   if (loading) {
     return (
       <div className="py-4 text-center text-sm text-gray-500">
-        Cargando sellos...
+        {t('stampDb.list.loading')}
       </div>
     )
   }
@@ -99,7 +101,7 @@ export function StampList(): JSX.Element {
   if (stamps.length === 0) {
     return (
       <div className="py-4 text-center text-sm text-gray-500">
-        No hay sellos sincronizados. Pulsa &quot;Sincronizar con la nube&quot; para descargar el catálogo.
+        {t('stampDb.list.empty')}
       </div>
     )
   }
@@ -126,7 +128,7 @@ export function StampList(): JSX.Element {
                 {year}
               </span>
               <span className="flex items-center gap-2 text-sm text-gray-500">
-                <span>{yearStamps.length} sellos</span>
+                <span>{t('stampDb.list.stampsCount', { count: yearStamps.length })}</span>
                 <svg
                   className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
                   fill="none"
@@ -144,7 +146,7 @@ export function StampList(): JSX.Element {
                 id={`stamp-year-${year}`}
                 className="divide-y divide-gray-100"
                 role="region"
-                aria-label={`Sellos del año ${year}`}
+                aria-label={t('stampDb.list.yearRegion', { year })}
               >
                 {yearStamps.map((stamp) => (
                   <StampEntry key={stamp.stampId} stamp={stamp} />
@@ -160,6 +162,7 @@ export function StampList(): JSX.Element {
 
 /** A single stamp entry showing name + thumbnails */
 function StampEntry({ stamp }: { stamp: StampRecord }): JSX.Element {
+  const { t } = useTranslation()
   const fondoUrl = toFileUrl(stamp.fondoPath)
   const logoUrl = toFileUrl(stamp.logoPath)
 
@@ -170,7 +173,7 @@ function StampEntry({ stamp }: { stamp: StampRecord }): JSX.Element {
         {fondoUrl ? (
           <img
             src={fondoUrl}
-            alt={`Fondo de ${stamp.stampName}`}
+            alt={t('stampDb.list.fondoAlt', { name: stamp.stampName })}
             className="w-full h-full object-cover"
             onError={(e) => {
               ;(e.target as HTMLImageElement).style.display = 'none'
@@ -178,7 +181,7 @@ function StampEntry({ stamp }: { stamp: StampRecord }): JSX.Element {
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-gray-400 text-[10px]">
-            Sin fondo
+            {t('stampDb.list.noFondo')}
           </div>
         )}
       </div>
@@ -188,7 +191,7 @@ function StampEntry({ stamp }: { stamp: StampRecord }): JSX.Element {
         {logoUrl ? (
           <img
             src={logoUrl}
-            alt={`Logo de ${stamp.stampName}`}
+            alt={t('stampDb.list.logoAlt', { name: stamp.stampName })}
             className="w-full h-full object-contain"
             onError={(e) => {
               ;(e.target as HTMLImageElement).style.display = 'none'
@@ -196,7 +199,7 @@ function StampEntry({ stamp }: { stamp: StampRecord }): JSX.Element {
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-gray-400 text-[10px]">
-            Sin logo
+            {t('stampDb.list.noLogo')}
           </div>
         )}
       </div>
@@ -209,7 +212,7 @@ function StampEntry({ stamp }: { stamp: StampRecord }): JSX.Element {
       {/* Status badge if incomplete */}
       {stamp.status === 'incomplete' && (
         <span className="ml-auto text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">
-          Incompleto
+          {t('stampDb.list.incomplete')}
         </span>
       )}
     </div>

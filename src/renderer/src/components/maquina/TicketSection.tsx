@@ -13,6 +13,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { TicketConfig } from '@renderer/types/config'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -39,6 +40,7 @@ export default function TicketSection({
   lugarDisplay,
   onChange
 }: TicketSectionProps): JSX.Element {
+  const { t } = useTranslation()
   const [collapsed, setCollapsed] = useState(true)
 
   // Local form state derived from props
@@ -86,8 +88,6 @@ export default function TicketSection({
   }, [ticket])
 
   // Derive display title based on active profile (same logic as legacy)
-  const displayTitulo =
-    activeProfileName === 'FERIA' ? eltitulo : activeProfileName
   const displayTituloCopia =
     activeProfileName === 'FERIA'
       ? ticket.tituloCopia || `COPIA ${eltitulo}`
@@ -219,8 +219,7 @@ export default function TicketSection({
           aria-hidden="true"
         />
         <h3 className="text-base font-bold m-0">
-          TICKET: {displayTitulo} - COPIA TICKET: {imprimeCopiaTicket} - MASTER TICKET:{' '}
-          {imprimeMasterTicket}
+          {t('machine.ticket.title')}
         </h3>
       </button>
 
@@ -230,14 +229,14 @@ export default function TicketSection({
           id="ticket-section-content"
           className="border border-gray-200 rounded-b p-4 bg-white"
           role="region"
-          aria-label="Campos de configuración de ticket"
+          aria-label={t('machine.ticket.region')}
         >
           <div className="flex gap-8">
             {/* ─── Left column ─────────────────────────────────────────────── */}
             <div className="flex-1 flex flex-col gap-2">
               {/* Cabecera Ticket */}
               <div className="bg-gray-100 p-2 rounded shadow-sm">
-                <h4 className="text-sm font-bold m-0">Cabecera Ticket</h4>
+                <h4 className="text-sm font-bold m-0">{t('machine.ticket.header')}</h4>
               </div>
               <p className="text-xl font-bold text-center">
                 {feriaDisplay}
@@ -247,11 +246,11 @@ export default function TicketSection({
 
               {/* Empresa */}
               <div className="bg-gray-100 p-2 rounded shadow-sm">
-                <h4 className="text-sm font-bold m-0">Empresa</h4>
+                <h4 className="text-sm font-bold m-0">{t('machine.ticket.company')}</h4>
               </div>
               <div className="flex flex-col gap-1">
                 <label htmlFor="ticket-empresa" className="text-xs text-gray-600">
-                  Empresa
+                  {t('machine.ticket.company')}
                 </label>
                 <input
                   id="ticket-empresa"
@@ -263,7 +262,7 @@ export default function TicketSection({
               </div>
               <div className="flex flex-col gap-1">
                 <label htmlFor="ticket-cif" className="text-xs text-gray-600">
-                  CIF
+                  {t('machine.ticket.cif')}
                 </label>
                 <input
                   id="ticket-cif"
@@ -275,7 +274,7 @@ export default function TicketSection({
               </div>
               <div className="flex flex-col gap-1">
                 <label htmlFor="ticket-cp" className="text-xs text-gray-600">
-                  CP Población
+                  {t('machine.ticket.cpTown')}
                 </label>
                 <input
                   id="ticket-cp"
@@ -288,11 +287,11 @@ export default function TicketSection({
 
               {/* Pié del Ticket */}
               <div className="bg-gray-100 p-2 rounded shadow-sm mt-2">
-                <h4 className="text-sm font-bold m-0">Pié del Ticket</h4>
+                <h4 className="text-sm font-bold m-0">{t('machine.ticket.footer')}</h4>
               </div>
               <div className="flex flex-col gap-1">
                 <label htmlFor="ticket-l1" className="text-xs text-gray-600">
-                  Detalle línea 1
+                  {t('machine.ticket.detailLine1')}
                 </label>
                 <input
                   id="ticket-l1"
@@ -304,7 +303,7 @@ export default function TicketSection({
               </div>
               <div className="flex flex-col gap-1">
                 <label htmlFor="ticket-l2" className="text-xs text-gray-600">
-                  Detalle línea 2
+                  {t('machine.ticket.detailLine2')}
                 </label>
                 <input
                   id="ticket-l2"
@@ -316,7 +315,7 @@ export default function TicketSection({
               </div>
               <div className="flex flex-col gap-1">
                 <label htmlFor="ticket-l3" className="text-xs text-gray-600">
-                  Detalle línea 3
+                  {t('machine.ticket.detailLine3')}
                 </label>
                 <input
                   id="ticket-l3"
@@ -332,11 +331,11 @@ export default function TicketSection({
             <div className="flex-1 flex flex-col gap-2">
               {/* Tipo de Documento */}
               <div className="bg-gray-100 p-2 rounded shadow-sm">
-                <h4 className="text-sm font-bold m-0">Tipo de Documento</h4>
+                <h4 className="text-sm font-bold m-0">{t('machine.ticket.docType')}</h4>
               </div>
               <div className="flex flex-col gap-1">
                 <label htmlFor="ticket-eltitulo" className="text-xs text-gray-600">
-                  Título ticket (Sólo Perfil FERIA)
+                  {t('machine.ticket.ticketTitle')}
                 </label>
                 <input
                   id="ticket-eltitulo"
@@ -348,7 +347,7 @@ export default function TicketSection({
               </div>
               <div className="flex flex-col gap-1">
                 <label htmlFor="ticket-tituloCopia" className="text-xs text-gray-600">
-                  Título ticket copia (Perfil Activo)
+                  {t('machine.ticket.copyTitle')}
                 </label>
                 <input
                   id="ticket-tituloCopia"
@@ -361,7 +360,7 @@ export default function TicketSection({
               </div>
               <div className="flex flex-col gap-1">
                 <label htmlFor="ticket-limiteImporte" className="text-xs text-gray-600">
-                  Límite importe sólo FERIA
+                  {t('machine.ticket.limitFeria')}
                 </label>
                 <input
                   id="ticket-limiteImporte"
@@ -373,7 +372,7 @@ export default function TicketSection({
               </div>
               <div className="flex flex-col gap-1">
                 <label htmlFor="ticket-nuevoLimiteImporte" className="text-xs text-gray-600">
-                  NUEVO Límite importe EXCEPTO FERIA
+                  {t('machine.ticket.newLimitExceptFeria')}
                 </label>
                 <input
                   id="ticket-nuevoLimiteImporte"
@@ -386,11 +385,11 @@ export default function TicketSection({
 
               {/* Modo Fecha Ticket */}
               <div className="bg-gray-100 p-2 rounded shadow-sm mt-2">
-                <h4 className="text-sm font-bold m-0">Modo Fecha Ticket</h4>
+                <h4 className="text-sm font-bold m-0">{t('machine.ticket.dateMode')}</h4>
               </div>
               <div className="flex flex-col gap-1">
                 <label htmlFor="ticket-modoFecha" className="text-xs text-gray-600">
-                  Fecha
+                  {t('machine.ticket.date')}
                 </label>
                 <select
                   id="ticket-modoFecha"
@@ -400,14 +399,14 @@ export default function TicketSection({
                   }
                   className="border-b border-gray-400 outline-none"
                 >
-                  <option value="1">Automático</option>
-                  <option value="2">Manual</option>
+                  <option value="1">{t('machine.ticket.automatic')}</option>
+                  <option value="2">{t('machine.ticket.manual')}</option>
                 </select>
               </div>
               {modoFecha === 'manual' && (
                 <div className="flex flex-col gap-1">
                   <label htmlFor="ticket-fechaManual" className="text-xs text-gray-600">
-                    Fecha
+                    {t('machine.ticket.date')}
                   </label>
                   <input
                     id="ticket-fechaManual"
@@ -421,7 +420,7 @@ export default function TicketSection({
               )}
               <div className="flex flex-col gap-1">
                 <label htmlFor="ticket-modoHora" className="text-xs text-gray-600">
-                  Hora
+                  {t('machine.ticket.time')}
                 </label>
                 <select
                   id="ticket-modoHora"
@@ -431,14 +430,14 @@ export default function TicketSection({
                   }
                   className="border-b border-gray-400 outline-none"
                 >
-                  <option value="1">Automático</option>
-                  <option value="2">Manual</option>
+                  <option value="1">{t('machine.ticket.automatic')}</option>
+                  <option value="2">{t('machine.ticket.manual')}</option>
                 </select>
               </div>
               {modoHora === 'manual' && (
                 <div className="flex flex-col gap-1">
                   <label htmlFor="ticket-horaManual" className="text-xs text-gray-600">
-                    Hora
+                    {t('machine.ticket.time')}
                   </label>
                   <input
                     id="ticket-horaManual"
@@ -453,11 +452,11 @@ export default function TicketSection({
 
               {/* COPIA Ticket para CAJA */}
               <div className="bg-gray-100 p-2 rounded shadow-sm mt-2">
-                <h4 className="text-sm font-bold m-0">COPIA Ticket para CAJA</h4>
+                <h4 className="text-sm font-bold m-0">{t('machine.ticket.copyForCash')}</h4>
               </div>
               <div className="flex flex-col gap-1">
                 <label htmlFor="ticket-imprimeCopia" className="text-xs text-gray-600">
-                  IMPRIMIR COPIA TICKET S/N
+                  {t('machine.ticket.printCopy')}
                 </label>
                 <input
                   id="ticket-imprimeCopia"
@@ -472,12 +471,12 @@ export default function TicketSection({
               {/* MASTER TICKET */}
               <div className="bg-red-600 text-white p-2 rounded shadow-sm mt-2">
                 <h4 className="text-sm font-bold m-0">
-                  IMPRIME SIEMPRE TICKET MASTER SET: VENDER 5 TIRAS DE 4 TARIFAS CADA VEZ
+                  {t('machine.ticket.masterTicket')}
                 </h4>
               </div>
               <div className="flex flex-col gap-1">
                 <label htmlFor="ticket-imprimeMaster" className="text-xs text-gray-600">
-                  IMPRIMIR TICKET MASTER SET S/N
+                  {t('machine.ticket.printMaster')}
                 </label>
                 <input
                   id="ticket-imprimeMaster"

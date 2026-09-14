@@ -43,8 +43,8 @@ export default function HomeView(): JSX.Element {
           onClick={() => navigate('/informes')}
           icon={<ReportsIcon />}
           title={t('nav.reports')}
-          description="Reportes y exportación de datos"
-          ariaLabel="Ir a Informes"
+          description={t('nav.reportsDesc')}
+          ariaLabel={t('nav.reports')}
         />
 
         {/* Settings */}
@@ -52,8 +52,8 @@ export default function HomeView(): JSX.Element {
           onClick={() => navigate('/settings')}
           icon={<SettingsIcon />}
           title={t('nav.settings')}
-          description="Configuración general y tarifas"
-          ariaLabel="Ir a Configuración"
+          description={t('nav.settingsDesc')}
+          ariaLabel={t('nav.settings')}
         />
 
         {/* Máquina */}
@@ -61,8 +61,8 @@ export default function HomeView(): JSX.Element {
           onClick={() => navigate('/maquina')}
           icon={<MaquinaIcon />}
           title={t('nav.machine')}
-          description="Código etiqueta, ticket y rollos"
-          ariaLabel="Ir a Máquina"
+          description={t('nav.machineDesc')}
+          ariaLabel={t('nav.machine')}
         />
 
         {/* Eventos (Imprimir) */}
@@ -70,8 +70,8 @@ export default function HomeView(): JSX.Element {
           onClick={() => navigate('/imprimir')}
           icon={<PrintIcon />}
           title={t('nav.print')}
-          description="Gestión de eventos y configuración de impresión"
-          ariaLabel="Ir a Eventos"
+          description={t('nav.printDesc')}
+          ariaLabel={t('nav.print')}
         />
 
             
@@ -88,8 +88,8 @@ export default function HomeView(): JSX.Element {
           onClick={() => navigate('/kiosko')}
           icon={<KioskoIcon />}
           title={t('nav.kiosko')}
-          description="Punto de venta automático"
-          ariaLabel="Ir a Kiosko"
+          description={t('nav.kioskoDesc')}
+          ariaLabel={t('nav.kiosko')}
         />
       </div>
     </div>
@@ -99,7 +99,7 @@ export default function HomeView(): JSX.Element {
 /* ─── Navigation Card Component ──────────────────────────────────────────── */
 
 interface NavigationCardProps {
-  onClick: () => void
+  onClick?: () => void
   icon: JSX.Element
   title: string
   description: string

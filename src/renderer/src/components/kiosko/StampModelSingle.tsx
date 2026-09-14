@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useConfigStore } from '@renderer/stores/config.store'
 import * as ipc from '@renderer/lib/ipc-client'
 
@@ -41,6 +42,7 @@ function formatCodigoLines(codigo: string): { line1: string; line2: string } {
 }
 
 export default function StampModelSingle({ model }: StampModelSingleProps): JSX.Element {
+  const { t } = useTranslation()
   const config = useConfigStore((state) => state.config)
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -90,7 +92,7 @@ export default function StampModelSingle({ model }: StampModelSingleProps): JSX.
     <div className="flex flex-col items-center">
       {/* Dynamic title: model name from DB */}
       <p className="text-sm font-bold text-gray-700 mb-1 truncate max-w-[280px]">
-        {modelName || (model === 'A' ? 'Sello A' : 'Sello B')}
+        {modelName || (model === 'A' ? t('kiosko.stamp.modelA') : t('kiosko.stamp.modelB'))}
       </p>
 
       {/* Stamp preview with overlaid text (replicating real stamp layout) */}
@@ -98,7 +100,7 @@ export default function StampModelSingle({ model }: StampModelSingleProps): JSX.
         {/* Background layer */}
         {loading ? (
           <div className="w-full h-full bg-gray-200 animate-pulse flex items-center justify-center">
-            <span className="text-gray-400 text-sm">Cargando...</span>
+            <span className="text-gray-400 text-sm">{t('kiosko.stamp.loading')}</span>
           </div>
         ) : imageUrl ? (
           <img
@@ -108,7 +110,7 @@ export default function StampModelSingle({ model }: StampModelSingleProps): JSX.
           />
         ) : (
           <div className="w-full h-full bg-gray-300 flex items-center justify-center border border-gray-400">
-            <span className="text-gray-600 text-sm font-medium">{modelName || 'Sin modelo'}</span>
+            <span className="text-gray-600 text-sm font-medium">{modelName || t('kiosko.stamp.noModel')}</span>
           </div>
         )}
 

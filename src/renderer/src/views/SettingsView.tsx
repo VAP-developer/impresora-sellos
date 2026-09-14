@@ -49,10 +49,10 @@ export default function SettingsView(): JSX.Element {
       {/* Header */}
       <div className="flex flex-col items-center px-4 py-2">
         <h1 className="text-black text-[25px] font-bold text-center m-0">
-          Configuración
+          {t('settings.generalTitle')}
         </h1>
         <p className="text-gray-500 text-[25px] font-bold text-center m-0">
-          Configuración general
+          {t('settings.generalSubtitle')}
         </p>
       </div>
 
@@ -81,7 +81,7 @@ export default function SettingsView(): JSX.Element {
                 aria-hidden="true"
               />
               <h3 className="text-lg font-bold m-0">
-                CÓDIGO ESPECIAL (OFICINA)
+                {t('settings.sectionCodigoEspecial')}
               </h3>
             </button>
             {codigoOpen && (
@@ -89,7 +89,7 @@ export default function SettingsView(): JSX.Element {
                 id="settings-codigo-especial-content"
                 className="border border-gray-200 rounded-b p-4 bg-white"
                 role="region"
-                aria-label="Código Especial"
+                aria-label={t('settings.sectionCodigoEspecial')}
               >
                 <CodigoEspecialSection />
               </div>
@@ -251,7 +251,7 @@ export default function SettingsView(): JSX.Element {
                 aria-hidden="true"
               />
               <h3 className="text-lg font-bold m-0">
-                ROTACIÓN DE IMPRESIÓN
+                {t('settings.sectionPrintRotation')}
               </h3>
             </button>
             {printRotOpen && (
@@ -259,7 +259,7 @@ export default function SettingsView(): JSX.Element {
                 id="settings-print-rotation-content"
                 className="border border-gray-200 rounded-b p-4 bg-white"
                 role="region"
-                aria-label="Rotación de impresión"
+                aria-label={t('settings.sectionPrintRotation')}
               >
                 <PrintRotationSection />
               </div>
@@ -285,7 +285,7 @@ export default function SettingsView(): JSX.Element {
                 aria-hidden="true"
               />
               <h3 className="text-lg font-bold m-0">
-                LICENCIA
+                {t('settings.sectionLicense')}
               </h3>
             </button>
             {licenseOpen && (
@@ -293,7 +293,7 @@ export default function SettingsView(): JSX.Element {
                 id="settings-license-content"
                 className="border border-gray-200 rounded-b p-4 bg-white"
                 role="region"
-                aria-label="Licencia"
+                aria-label={t('settings.sectionLicense')}
               >
                 <LicenseSection />
               </div>
@@ -319,7 +319,7 @@ export default function SettingsView(): JSX.Element {
                 aria-hidden="true"
               />
               <h3 className="text-lg font-bold m-0">
-                BASE DE DATOS SELLOS
+                {t('settings.sectionStampDatabase')}
               </h3>
             </button>
             {stampDbOpen && (
@@ -327,7 +327,7 @@ export default function SettingsView(): JSX.Element {
                 id="settings-stamp-db-content"
                 className="border border-gray-200 rounded-b p-4 bg-white"
                 role="region"
-                aria-label="Base de datos sellos"
+                aria-label={t('settings.sectionStampDatabase')}
               >
                 <StampDatabaseSection />
               </div>
@@ -353,7 +353,7 @@ export default function SettingsView(): JSX.Element {
                 aria-hidden="true"
               />
               <h3 className="text-lg font-bold m-0">
-                FORMATO CORREO ESP
+                {t('settings.sectionFormatoCorreoEsp')}
               </h3>
             </button>
             {formatoEspOpen && (
@@ -361,7 +361,7 @@ export default function SettingsView(): JSX.Element {
                 id="settings-formato-correo-esp-content"
                 className="border border-gray-200 rounded-b p-4 bg-white"
                 role="region"
-                aria-label="Formato Correo ESP"
+                aria-label={t('settings.sectionFormatoCorreoEsp')}
               >
                 <FormatoCorreoEspSection />
               </div>
