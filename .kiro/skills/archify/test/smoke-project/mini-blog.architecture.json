@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Mini Blog",
+    "output": "mini-blog.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    { "id": "users", "type": "external", "label": "Readers", "sublabel": "Browser", "pos": [60, 220], "size": [130, 64] },
+    { "id": "web", "type": "frontend", "label": "Web App", "sublabel": "Next.js", "pos": [300, 220], "size": [140, 64] },
+    { "id": "api", "type": "backend", "label": "API", "sublabel": "Express :3000", "pos": [540, 220], "size": [140, 64] },
+    { "id": "db", "type": "database", "label": "PostgreSQL", "sublabel": "posts :5432", "pos": [780, 220], "size": [150, 64] }
+  ],
+  "connections": [
+    { "id": "users-to-web", "from": "users", "to": "web", "label": "HTTPS", "variant": "emphasis" },
+    { "id": "web-to-api", "from": "web", "to": "api", "label": "REST" },
+    { "id": "api-to-db", "from": "api", "to": "db", "label": "SQL" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Frontend", "items": ["Next.js renders posts", "Talks to the API over REST"] },
+    { "dot": "emerald", "title": "Backend", "items": ["Express API serves post data", "Reads and writes PostgreSQL"] }
+  ]
+}

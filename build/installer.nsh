@@ -20,10 +20,15 @@
   ; This is needed for network printer communication
   nsExec::ExecToLog 'netsh advfirewall firewall add rule name="Stamp Sales IPP" dir=out action=allow protocol=tcp remoteport=631 program="$INSTDIR\Stamp Sales.exe"'
 
-  ; Add auto-start registry entry so the app launches on Windows login.
-  ; Uses HKCU (current user) so no admin elevation is needed for this part.
-  ; The --hidden flag signals the app that it was auto-launched.
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "StampSales" '"$INSTDIR\Stamp Sales.exe" --hidden'
+  ; NOTE: Auto-start on Windows login is intentionally NOT enabled by the
+  ; installer. The app must NOT launch automatically by default. Users can opt
+  ; in from the app's own settings (which uses app.setLoginItemSettings to
+  ; write/remove the HKCU\...\Run\StampSales registry key at runtime).
+  ;
+  ; Remove any legacy auto-start entry left behind by previous installer
+  ; versions that used to force auto-launch on install. This guarantees the
+  ; default state is "does not start automatically" for existing machines too.
+  DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "StampSales"
 !macroend
 
 !macro customUnInstall

@@ -135,7 +135,7 @@ Copiar `dist/StampSales-Setup-1.0.0.exe` a la máquina Windows (USB, red, etc.)
    - Crea acceso directo en Escritorio
    - Crea entrada en Menú Inicio
    - Configura regla de firewall para IPP (puerto 631)
-   - Registra auto-arranque en `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+   - **No** registra auto-arranque: la app no se inicia automáticamente con Windows por defecto. El usuario puede activarlo desde la configuración de la aplicación.
 6. Click en "Finalizar" (la app se ejecuta automáticamente)
 
 ### 3.3 Verificación de instalación limpia en Windows
